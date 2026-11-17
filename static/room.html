@@ -8,6 +8,7 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <meta name="theme-color" content="#0B0C10">
   <link rel="stylesheet" href="/common.css">
+  <script src="/theme.js"></script>
   <style>
 
     /* ---------- layout ---------- */
@@ -88,10 +89,11 @@
     .voice-icon { display: inline-flex; margin-left: 6px; vertical-align: -2px; color: var(--muted); }
     .voice-icon.off { color: var(--danger); }
     .voice-icon svg { width: 14px; height: 14px; }
-    svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 10px; background: var(--raised); color: var(--text); }
     .icon-btn svg, .icon-btn-lg svg { width: 18px; height: 18px; }
     .icon-btn-lg { width: 44px; padding: 0; }
+    #notify-btn[aria-pressed="true"] { background: rgb(59 217 138 / .14); color: var(--online); } /* on is good, not the red "pressed" look */
+    .ptt-note { font-size: 12px; }
+    .icon-btn.talking, .icon-btn-lg.talking { background: rgb(59 217 138 / .18); color: var(--online); box-shadow: 0 0 0 2px var(--online); } /* push-to-talk held */
     .icon-btn[aria-pressed="true"], .icon-btn-lg[aria-pressed="true"] { background: var(--danger-bg); color: var(--danger); }
     .voice-join { background: rgb(59 217 138 / .14); color: var(--online); font-weight: 600; }
     .voice-leave { background: var(--danger-bg); color: var(--danger); font-weight: 600; }
@@ -119,6 +121,23 @@
       #tiles.compact .tile-text { flex: 1 1 auto; align-items: flex-start; }
     }
 
+    #react-btn { font-size: 20px; line-height: 1; }
+    .react-pop { position: fixed; z-index: 9; display: grid; grid-template-columns: repeat(6, 40px); gap: 4px; padding: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+    .react-choice { width: 40px; height: 40px; border-radius: 10px; background: transparent; font-size: 22px; line-height: 1; }
+    .react-choice:hover, .react-choice:focus-visible { background: var(--raised); }
+    #react-layer { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
+    .float-react { position: absolute; left: var(--x); bottom: 110px; display: flex; flex-direction: column; align-items: center; gap: 2px; animation: react-float 2.6s ease-out forwards; }
+    .float-emoji { font-size: 38px; line-height: 1; }
+    .float-name { max-width: 110px; padding: 1px 8px; border-radius: 999px; background: var(--raised); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @keyframes react-float {
+      0% { opacity: 0; transform: translate(0, 0) scale(.6); }
+      12% { opacity: 1; transform: translate(0, -20px) scale(1.1); }
+      100% { opacity: 0; transform: translate(var(--drift), -42vh) scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .float-react { animation: react-fade 2.6s ease-out forwards; }
+      @keyframes react-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+    }
     .controls { flex: none; height: 72px; display: flex; align-items: center; justify-content: center; gap: 10px; }
     .mode { display: inline-flex; height: 44px; padding: 4px; gap: 4px; border-radius: 12px; background: var(--raised); }
     .mode-btn { padding: 0 14px; border-radius: 9px; background: transparent; color: var(--muted); }
@@ -208,6 +227,7 @@
         <span class="topbar-end">
           <span class="pill reconnecting" id="reconnecting" role="status" hidden>Reconectando…</span>
           <span class="pill" id="live" hidden>● Ao vivo</span>
+          <button class="icon-btn" id="notify-btn" hidden></button>
         </span>
       </header>
 
@@ -236,12 +256,16 @@
         <button class="btn icon-btn-lg" id="deafen" hidden></button>
         <button class="btn icon-btn-lg voice-leave" id="voice-leave" title="Sair da voz" aria-label="Sair da voz" hidden></button>
         <button class="btn icon-btn-lg" id="voice-settings-btn" title="Configurações de voz" aria-label="Configurações de voz"></button>
+        <button class="btn icon-btn-lg" id="react-btn" title="Reagir" aria-label="Reagir" aria-haspopup="true" aria-expanded="false">😊</button>
         <button class="btn" id="invite">Convidar</button>
         <button class="btn" id="chat-toggle">Chat<span class="badge" id="chat-badge" hidden></span></button>
         <button class="btn danger" id="leave">Sair</button>
       </footer>
     </main>
   </div>
+
+  <div class="react-pop card" id="react-pop" role="group" aria-label="Reações" hidden></div>
+  <div id="react-layer" aria-hidden="true"></div>
 
   <dialog id="voice-settings" aria-labelledby="vs-title">
     <form method="dialog" class="dialog-body">
@@ -255,6 +279,8 @@
         <div class="meter" aria-hidden="true"><div class="meter-fill" id="vs-meter"></div></div>
       </div>
       <label class="switch-row">Supressão de ruído<input type="checkbox" role="switch" id="vs-ns"></label>
+      <label class="switch-row">Apertar para falar<input type="checkbox" role="switch" id="vs-ptt"></label>
+      <div class="field" id="vs-ptt-row" hidden><span class="muted">Tecla para falar</span><button type="button" class="btn small" id="vs-ptt-key"></button><span class="muted ptt-note">Funciona com esta aba em foco. Jogos em primeiro plano não repassam teclas ao navegador.</span></div>
       <label class="field"><span class="muted">Volume das vozes</span><input type="range" id="vs-volume" min="0" max="1" step="0.05"></label>
       <button class="btn small primary">Pronto</button>
     </form>

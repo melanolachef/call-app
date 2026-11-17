@@ -95,6 +95,7 @@ document.body.insertAdjacentHTML('beforeend', `
           <input id="nick-input" maxlength="32" autocomplete="nickname" required>
         </label>
         <button class="btn small primary" id="profile-submit">Salvar</button>
+        <button type="button" class="btn small" id="open-appearance">Personalizar aparência</button>
       </div>
     </form>
   </dialog>
@@ -163,6 +164,134 @@ function toast(text, ms = 2500) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (node.hidden = true), ms);
 }
+
+// ---------- aparência ----------
+
+// Accent, theme and background: only on this screen, saved in this browser.
+// Changes apply live behind the dialog; theme.js (in <head>) applies them on
+// every page load. Nothing here runs per frame.
+const ACCENTS = [['Roxo', '#7C5CFF'], ['Azul', '#3B82F6'], ['Ciano', '#06B6D4'], ['Verde', '#22C55E'], ['Rosa', '#EC4899'], ['Laranja', '#F97316']];
+const THEME_CHOICES = [['escuro', 'Escuro'], ['amoled', 'AMOLED'], ['meia-noite', 'Meia-noite']];
+const BG_CHOICES = [['none', 'Nenhum'], ['aurora', 'Aurora'], ['por-do-sol', 'Pôr do sol'], ['oceano', 'Oceano'], ['image', 'Sua imagem']];
+const MAX_BG_IMAGE = 1_800_000; // characters of data URL (localStorage holds ~5 MB)
+
+document.body.insertAdjacentHTML('beforeend', `
+  <dialog id="appearance" aria-labelledby="ap-title">
+    <form method="dialog" class="dialog-body">
+      <div class="heading">
+        <h2 id="ap-title">Aparência</h2>
+        <span class="muted">Só na sua tela, salva neste navegador.</span>
+      </div>
+      <fieldset class="ap-section"><legend>Cor de destaque</legend><div class="swatches" id="ap-accents"></div></fieldset>
+      <fieldset class="ap-section"><legend>Tema</legend><div class="choices" id="ap-themes"></div></fieldset>
+      <fieldset class="ap-section"><legend>Fundo</legend><div class="bg-grid" id="ap-backgrounds"></div></fieldset>
+      <input type="file" id="ap-image" accept="image/*" hidden>
+      <div class="actions">
+        <button type="button" class="btn small" id="ap-reset">Restaurar padrão</button>
+        <button class="btn small primary">Pronto</button>
+      </div>
+    </form>
+  </dialog>
+`);
+
+function saveAppearance(patch) {
+  const next = { ...loadAppearance(), ...patch };
+  save('appearance', JSON.stringify(next));
+  applyAppearance(next);
+  renderAppearance();
+}
+
+function renderAppearance() {
+  const current = loadAppearance();
+  const isPreset = ACCENTS.some(([, hex]) => hex.toLowerCase() === current.accent.toLowerCase());
+  $('ap-accents').replaceChildren(...ACCENTS.map(([name, hex]) => {
+    const button = el('button', 'swatch');
+    button.type = 'button';
+    button.style.background = hex;
+    button.title = name;
+    button.setAttribute('aria-label', name);
+    button.setAttribute('aria-pressed', String(hex.toLowerCase() === current.accent.toLowerCase()));
+    button.onclick = () => saveAppearance({ accent: hex });
+    return button;
+  }), (() => {
+    const label = el('label', 'swatch swatch-custom');
+    label.title = 'Outra cor';
+    label.setAttribute('aria-pressed', String(!isPreset));
+    if (!isPreset) label.style.background = current.accent;
+    const input = el('input');
+    input.type = 'color';
+    input.value = current.accent;
+    input.setAttribute('aria-label', 'Escolher outra cor');
+    input.oninput = () => saveAppearance({ accent: input.value });
+    label.append(input);
+    return label;
+  })());
+  $('ap-themes').replaceChildren(...THEME_CHOICES.map(([id, name]) => {
+    const button = el('button', 'choice', name);
+    button.type = 'button';
+    button.setAttribute('aria-pressed', String(current.theme === id));
+    button.onclick = () => saveAppearance({ theme: id });
+    return button;
+  }));
+  $('ap-backgrounds').replaceChildren(...BG_CHOICES.map(([id, name]) => {
+    const button = el('button', 'bg-tile', name);
+    button.type = 'button';
+    button.setAttribute('aria-pressed', String(current.background === id));
+    if (BACKGROUNDS[id]) button.style.backgroundImage = BACKGROUNDS[id];
+    if (id === 'image') {
+      const saved = load('appearance-image');
+      if (saved) button.style.backgroundImage = `url("${saved}")`;
+      button.textContent = saved ? 'Sua imagem' : 'Enviar imagem';
+    }
+    button.onclick = () => {
+      if (id === 'image' && (!load('appearance-image') || current.background === 'image')) $('ap-image').click();
+      else saveAppearance({ background: id });
+    };
+    return button;
+  }));
+}
+
+// Shrinks the picked picture to at most 1920x1080 JPEG so it fits in storage.
+async function backgroundFromFile(file) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1920 / bitmap.width, 1080 / bitmap.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  for (const quality of [0.8, 0.65, 0.5]) {
+    const url = canvas.toDataURL('image/jpeg', quality);
+    if (url.length <= MAX_BG_IMAGE) return url;
+  }
+  throw new Error('imagem grande demais');
+}
+
+$('ap-image').onchange = async () => {
+  const file = $('ap-image').files[0];
+  $('ap-image').value = '';
+  if (!file) return;
+  try {
+    const url = await backgroundFromFile(file);
+    localStorage.setItem('appearance-image', url); // may throw if storage is full
+    saveAppearance({ background: 'image' });
+  } catch {
+    toast('Não deu para usar essa imagem como fundo. Tente uma menor.');
+  }
+};
+
+$('ap-reset').onclick = () => {
+  save('appearance', '');
+  save('appearance-image', '');
+  applyAppearance();
+  renderAppearance();
+};
+
+function openAppearance() {
+  renderAppearance();
+  $('appearance').showModal();
+}
+$('open-appearance').onclick = openAppearance;
 
 // ---------- salas ----------
 

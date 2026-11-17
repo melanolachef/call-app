@@ -8,7 +8,7 @@ license = "MIT"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time"] }
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 [profile.release]
@@ -17,5 +17,5 @@ strip = true
 # Only used by `cargo test` (not compiled into the server binary).
 [dev-dependencies]
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
-tokio = { version = "1", features = ["io-util"] }
+tokio = { version = "1", features = ["io-util", "test-util"] }
 tokio-tungstenite = "0.29"

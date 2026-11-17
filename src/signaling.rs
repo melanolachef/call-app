@@ -1,5 +1,7 @@
 //! WebSocket endpoint: puts each connection in a room and relays its messages.
 
+use std::time::Duration;
+
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -16,6 +18,9 @@ use crate::rooms::{valid_room_id, Join, Rooms};
 
 /// Large enough for any SDP offer/answer, small enough to bound memory.
 const MAX_MESSAGE_SIZE: usize = 64 * 1024;
+/// Proxies (Fly.io's included) drop WebSockets that stay silent; a quiet room
+/// sends nothing for minutes. A ping keeps it alive (browsers answer on their own).
+const PING_EVERY: Duration = Duration::from_secs(25);
 
 /// The only message a client sends: "deliver `data` to participant `to`".
 /// `data` (offer, answer, ICE candidate, sharing on/off) is relayed untouched.
@@ -65,6 +70,8 @@ async fn run(
     let welcome = json!({ "type": "welcome", "id": id, "peers": others, "max": rooms.max_peers() });
     socket.send(text(&welcome)).await?;
 
+    let mut ping = tokio::time::interval(PING_EVERY);
+    ping.tick().await; // the first tick is immediate
     loop {
         tokio::select! {
             incoming = socket.recv() => match incoming {
@@ -79,6 +86,7 @@ async fn run(
                 Some(Ok(_)) => {} // binary/ping/pong
             },
             Some(msg) = rx.recv() => socket.send(Message::Text(msg.into())).await?,
+            _ = ping.tick() => socket.send(Message::Ping(Default::default())).await?,
         }
     }
 }

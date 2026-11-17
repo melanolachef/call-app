@@ -16,6 +16,7 @@ function renderProfile() {
   $('edit').textContent = nick ? 'Editar' : 'Escolher nick';
 }
 
+$('appearance-btn').onclick = openAppearance;
 $('edit').onclick = () => openProfileDialog({
   title: nick ? 'Editar perfil' : 'Como seus amigos vão te ver?',
   submitLabel: 'Salvar',
