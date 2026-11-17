@@ -150,6 +150,8 @@ async function handleSignal(peer, data) {
   } else if ('chat' in data) {
     const text = cleanChat(data.chat);
     if (text) addMessage({ authorId: peer.id, name: displayName(peer), photo: peer.photo, text });
+  } else if ('reaction' in data) {
+    handleReaction(peer, data);
   } else if ('voice' in data) {
     const state = data.voice ?? {};
     const was = peer.voiceIn;
