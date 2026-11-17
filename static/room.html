@@ -17,7 +17,7 @@
     .side { width: 280px; flex: none; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
     .room { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     .room h1 { margin: 0; font-size: 16px; font-weight: 600; }
-    #people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow-y: auto; }
+    #people { list-style: none; margin: 0; padding: 4px; display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow-y: auto; }
     .hud { flex: none; padding: 12px; }
     .hud-summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; }
     .hud-summary::-webkit-details-marker { display: none; }
@@ -81,7 +81,32 @@
 
     #tiles { min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
     .tile { flex: 1; min-height: 120px; padding: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; }
-    .tile.self { border: 2px solid var(--online); }
+    .tile.self { box-shadow: inset 0 0 0 1px var(--border-strong); }
+    /* Voice: who is talking gets a green ring (the design's "falando"). */
+    .avatar.speaking { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--online); }
+    .tile.speaking { border-color: var(--online); box-shadow: inset 0 0 0 1px var(--online); }
+    .voice-icon { display: inline-flex; margin-left: 6px; vertical-align: -2px; color: var(--muted); }
+    .voice-icon.off { color: var(--danger); }
+    .voice-icon svg { width: 14px; height: 14px; }
+    svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 10px; background: var(--raised); color: var(--text); }
+    .icon-btn svg, .icon-btn-lg svg { width: 18px; height: 18px; }
+    .icon-btn-lg { width: 44px; padding: 0; }
+    .icon-btn[aria-pressed="true"], .icon-btn-lg[aria-pressed="true"] { background: var(--danger-bg); color: var(--danger); }
+    .voice-join { background: rgb(59 217 138 / .14); color: var(--online); font-weight: 600; }
+    .voice-leave { background: var(--danger-bg); color: var(--danger); font-weight: 600; }
+    .me-voice { display: flex; gap: 6px; }
+    .me .end { margin-left: auto; }
+    .me-text span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    input[type="range"] { accent-color: var(--accent); }
+    .select { height: 36px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--border-strong); background: var(--raised); color: var(--text); font: inherit; }
+    .meter { height: 6px; border-radius: 3px; background: var(--border-strong); overflow: hidden; }
+    .meter-fill { width: 0; height: 100%; background: var(--online); transition: width .08s linear; }
+    .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    input[role="switch"] { appearance: none; flex: none; width: 36px; height: 20px; margin: 0; border-radius: 10px; background: var(--border-strong); position: relative; cursor: pointer; }
+    input[role="switch"]::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+    input[role="switch"]:checked { background: var(--accent); }
+    input[role="switch"]:checked::after { left: 18px; }
     .tile .avatar { width: 64px; height: 64px; font-size: 18px; }
     .tile strong { font-weight: 600; max-width: 100%; }
     .tile .status { font-size: 12px; }
@@ -113,7 +138,9 @@
       .tile { flex: 1 0 96px; min-height: 0; height: 96px; gap: 4px; }
       .tile .avatar { width: 40px; height: 40px; font-size: 13px; }
       .tile strong { font-size: 12px; font-weight: 400; }
-      .controls { height: 88px; padding: 12px; border-radius: 20px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+      .controls { height: 88px; padding: 12px; border-radius: 20px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
+      #deafen, #voice-settings-btn, body.in-voice #invite { display: none !important; } /* phones: fewer buttons */
+      .icon-btn-lg { width: auto; }
       #chat-toggle { display: inline-flex; }
       /* Mobile: the chat opens full screen over the call. */
       body.chat-open .side { display: flex; position: fixed; inset: 0; z-index: 5; width: auto; padding: 12px; background: var(--bg); }
@@ -165,7 +192,11 @@
           <strong class="ellipsis" id="me-nick"></strong>
           <span id="me-status"></span>
         </div>
-        <button class="btn small end" id="edit">Editar</button>
+        <div class="me-voice end" id="me-voice" hidden>
+          <button class="icon-btn" id="me-mic"></button>
+          <button class="icon-btn" id="me-deafen"></button>
+        </div>
+        <button class="icon-btn" id="edit" title="Editar perfil" aria-label="Editar perfil"></button>
       </section>
     </aside>
 
@@ -200,12 +231,34 @@
           <button class="mode-btn" id="mode-jogo" aria-pressed="true" title="Fluido e leve para o PC: até 720p a 30 FPS">Jogo</button>
           <button class="mode-btn" id="mode-texto" aria-pressed="false" title="Nítido para código e documentos: até 1080p a 15 FPS">Texto</button>
         </div>
+        <button class="btn voice-join" id="voice-join"><span class="long">Entrar na voz</span><span class="short">Voz</span></button>
+        <button class="btn icon-btn-lg" id="mic" hidden></button>
+        <button class="btn icon-btn-lg" id="deafen" hidden></button>
+        <button class="btn icon-btn-lg voice-leave" id="voice-leave" title="Sair da voz" aria-label="Sair da voz" hidden></button>
+        <button class="btn icon-btn-lg" id="voice-settings-btn" title="Configurações de voz" aria-label="Configurações de voz"></button>
         <button class="btn" id="invite">Convidar</button>
         <button class="btn" id="chat-toggle">Chat<span class="badge" id="chat-badge" hidden></span></button>
         <button class="btn danger" id="leave">Sair</button>
       </footer>
     </main>
   </div>
+
+  <dialog id="voice-settings" aria-labelledby="vs-title">
+    <form method="dialog" class="dialog-body">
+      <div class="heading">
+        <h2 id="vs-title">Voz</h2>
+        <span class="muted">Valem para este navegador.</span>
+      </div>
+      <label class="field"><span class="muted">Microfone</span><select class="select" id="vs-mic"></select></label>
+      <div class="field">
+        <span class="muted">Volume de entrada</span>
+        <div class="meter" aria-hidden="true"><div class="meter-fill" id="vs-meter"></div></div>
+      </div>
+      <label class="switch-row">Supressão de ruído<input type="checkbox" role="switch" id="vs-ns"></label>
+      <label class="field"><span class="muted">Volume das vozes</span><input type="range" id="vs-volume" min="0" max="1" step="0.05"></label>
+      <button class="btn small primary">Pronto</button>
+    </form>
+  </dialog>
 
   <dialog id="notice" aria-labelledby="notice-title">
     <div class="dialog-body">

@@ -215,7 +215,8 @@ function enqueue(peer, step) {
 function createPeer(id, initiator) {
   const pc = new RTCPeerConnection({ iceServers });
   const peer = {
-    id, nick: '', photo: '', pc, transceiver: null, audioTransceiver: null,
+    id, nick: '', photo: '', pc, transceiver: null, audioTransceiver: null, voiceTransceiver: null,
+    voiceIn: false, voiceMuted: false, voiceAudio: null, voiceAnalyser: null, speaking: false,
     sharing: false, hasAudio: false, iWatch: false, watchesMe: false,
     announced: initiator, // people already here when we joined don't get an "entrou" line
     hwH264: false,
@@ -248,7 +249,9 @@ function createPeer(id, initiator) {
     // ...and one "sendrecv" audio transceiver for the shared sound, same idea.
     const transceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
     const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
-    attachTransceiver(peer, transceiver, audioTransceiver);
+    // ...and a third one for the voice channel (microphone).
+    const voiceTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+    attachTransceiver(peer, transceiver, audioTransceiver, voiceTransceiver);
     enqueue(peer, async () => {
       // Their profile says what they encode well; give up waiting after 3s.
       await Promise.race([peer.profileKnown, new Promise((r) => setTimeout(r, 3000))]);
@@ -260,6 +263,7 @@ function createPeer(id, initiator) {
 
   send(id, profileMsg());
   if (localTrack) send(id, { sharing: true, audio: !!localAudio });
+  if (voice.joined) send(id, { voice: voiceState() });
   refresh();
   return peer;
 }
@@ -304,9 +308,19 @@ function preferCodecs(transceiver, peer) {
   }
 }
 
-function attachTransceiver(peer, transceiver, audioTransceiver) {
+function attachTransceiver(peer, transceiver, audioTransceiver, voiceTransceiver) {
   peer.transceiver = transceiver;
   peer.audioTransceiver = audioTransceiver ?? null;
+  peer.voiceTransceiver = voiceTransceiver ?? null;
+  if (voiceTransceiver) {
+    // Voices play through one hidden <audio> per person (Chrome also needs the
+    // element playing for Web Audio to see a remote stream).
+    peer.voiceAudio ??= document.body.appendChild(el('audio'));
+    peer.voiceAudio.autoplay = true;
+    peer.voiceAudio.srcObject = new MediaStream([voiceTransceiver.receiver.track]);
+    sendVoiceTo(peer);
+    applyVoiceOutput();
+  }
   // The receiver tracks exist from the start; they simply carry nothing until
   // the other side calls replaceTrack() with its screen (and its sound).
   const tracks = [transceiver.receiver.track];
@@ -318,19 +332,20 @@ function attachTransceiver(peer, transceiver, audioTransceiver) {
 async function handleSignal(peer, data) {
   const { pc } = peer;
   if (data.description) {
-    await pc.setRemoteDescription(withStereoOpus(data.description));
+    await pc.setRemoteDescription(tuneDescription(data.description));
     if (data.description.type === 'offer') {
       // Transceivers created from a remote offer default to "recvonly";
       // switch them to "sendrecv" so we can share our screen back later.
-      const byKind = (kind) => pc.getTransceivers().find((t) => t.receiver.track.kind === kind);
-      const transceiver = byKind('video');
-      const audioTransceiver = byKind('audio');
+      // In m-line order: video, then the screen's sound, then voice.
+      const transceiver = pc.getTransceivers().find((t) => t.receiver.track.kind === 'video');
+      const [audioTransceiver, voiceTransceiver] = pc.getTransceivers().filter((t) => t.receiver.track.kind === 'audio');
       transceiver.direction = 'sendrecv';
       if (audioTransceiver) audioTransceiver.direction = 'sendrecv';
+      if (voiceTransceiver) voiceTransceiver.direction = 'sendrecv';
       preferCodecs(transceiver, peer); // their profile arrived before the offer
       await pc.setLocalDescription(); // creates the answer implicitly
       send(peer.id, { description: pc.localDescription });
-      attachTransceiver(peer, transceiver, audioTransceiver);
+      attachTransceiver(peer, transceiver, audioTransceiver, voiceTransceiver);
     }
   } else if (data.candidate) {
     await pc.addIceCandidate(data.candidate);
@@ -344,6 +359,19 @@ async function handleSignal(peer, data) {
   } else if ('chat' in data) {
     const text = cleanChat(data.chat);
     if (text) addMessage({ authorId: peer.id, name: displayName(peer), photo: peer.photo, text });
+  } else if ('voice' in data) {
+    const state = data.voice ?? {};
+    const was = peer.voiceIn;
+    peer.voiceIn = !!state.in;
+    peer.voiceMuted = !!state.muted;
+    if (!peer.voiceIn) peer.speaking = false;
+    if (peer.voiceIn !== was && peer.announced) {
+      addSystem(`${displayName(peer)} ${peer.voiceIn ? 'entrou na' : 'saiu da'} voz`);
+      if (voice.joined) chime(peer.voiceIn);
+    }
+    sendVoiceTo(peer);
+    applyVoiceOutput();
+    refresh();
   } else if ('restart' in data) {
     if (myId > peer.id) restartIce(peer); // they asked us to redo the connection
   } else if ('watch' in data) {
@@ -354,10 +382,16 @@ async function handleSignal(peer, data) {
   }
 }
 
-// Chrome sends mono Opus unless the other side's description says it plays
-// stereo. Game and music audio deserve stereo and a higher bitrate, so we mark
-// that on every description we receive (it only affects what *we* send).
-function withStereoOpus(description) {
+// We adjust every description we receive (it only changes what *we* send):
+// - Chrome sends mono Opus unless the other side says it plays stereo. Game
+//   and music audio deserve stereo and a higher bitrate. Only the first Opus
+//   section is touched: that's the screen's sound; voice (the next one) keeps
+//   Chrome's mono speech defaults.
+// - Video starts from a low bandwidth guess, so the picture opened at 180p and
+//   took ~20s to sharpen. A 1.5 Mbps starting guess opens it sharp right away;
+//   if the real connection is worse, the estimate drops within seconds.
+const START_BITRATE_KBPS = 1500;
+function tuneDescription(description) {
   let sdp = description.sdp ?? '';
   const opus = [...sdp.matchAll(/a=rtpmap:(\d+) opus\/48000\/2/gi)].map((m) => m[1]);
   for (const pt of opus) {
@@ -365,6 +399,15 @@ function withStereoOpus(description) {
       const kept = params.split(';').filter((p) => p && !/^(stereo|sprop-stereo|maxaveragebitrate)=/.test(p));
       return `a=fmtp:${pt} ${[...kept, 'stereo=1', 'sprop-stereo=1', 'maxaveragebitrate=128000'].join(';')}`;
     });
+  }
+  const video = [...sdp.matchAll(/a=rtpmap:(\d+) (VP8|VP9|H264|AV1)\/90000/gi)].map((m) => m[1]);
+  for (const pt of new Set(video)) {
+    const fmtp = new RegExp(`a=fmtp:${pt} ([^\r\n]*)`, 'g');
+    if (fmtp.test(sdp)) {
+      sdp = sdp.replace(fmtp, (line, params) => (params.includes('x-google-start-bitrate') ? line : `${line};x-google-start-bitrate=${START_BITRATE_KBPS}`));
+    } else {
+      sdp = sdp.replace(new RegExp(`(a=rtpmap:${pt} [^\r\n]*)`, 'g'), `$1\r\na=fmtp:${pt} x-google-start-bitrate=${START_BITRATE_KBPS}`);
+    }
   }
   return { type: description.type, sdp };
 }
@@ -538,6 +581,7 @@ function removePeer(id) {
   peer.pc.close();
   if (document.pictureInPictureElement === peer.screen.video) document.exitPictureInPicture().catch(() => {});
   peer.screen.card.remove();
+  peer.voiceAudio?.remove();
   peers.delete(id);
   refresh();
 }
@@ -636,6 +680,7 @@ function stopShare() {
 
 function leaveRoom(title, text, action) {
   left = true;
+  leaveVoice();
   clearTimeout(reconnectTimer);
   stopShare();
   ws?.close();
@@ -646,6 +691,337 @@ function leaveRoom(title, text, action) {
   releaseLock?.();
   showNotice(title, text, action);
 }
+
+// ---------- voz ----------
+
+// A voice channel inside the room, optional like Discord's: only people who
+// joined it send and hear voice. Each pair has its own voice transceiver
+// (negotiated once with the others) that replaceTrack() fills or empties, so
+// joining, leaving and muting never renegotiate.
+const ICONS = {
+  mic: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  micOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M4 4l16 16"/></svg>',
+  headphones: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/></svg>',
+  headphonesOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/><path d="M3 3l18 18"/></svg>',
+  sliders: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>',
+  hangup: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.5c5-4.7 13-4.7 18 0l-2.3 2.6a1.2 1.2 0 0 1-1.6.2l-2.4-1.6a1.2 1.2 0 0 1-.5-1v-1.6a12 12 0 0 0-4.4 0v1.6a1.2 1.2 0 0 1-.5 1l-2.4 1.6a1.2 1.2 0 0 1-1.6-.2z"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>',
+};
+const SPEAKING_LEVEL = 0.02; // RMS above this counts as talking
+const SPEAKING_HOLD_MS = 300; // keeps the ring steady between words
+const voice = {
+  joined: false, muted: false, deafened: false,
+  track: null, ctx: null, analyser: null, speaking: false, lastLoud: 0,
+  deviceId: load('micId'),
+  noiseSuppression: load('noiseSuppression') !== 'off',
+  volume: Math.min(1, Math.max(0, Number(load('voiceVolume') || 1))),
+};
+
+// Voice wants the opposite of the screen's sound: echo cancellation, noise
+// suppression and automatic gain.
+function micConstraints() {
+  return {
+    deviceId: voice.deviceId ? { exact: voice.deviceId } : undefined,
+    echoCancellation: true,
+    noiseSuppression: voice.noiseSuppression,
+    autoGainControl: true,
+  };
+}
+
+async function openMic() {
+  try {
+    return (await navigator.mediaDevices.getUserMedia({ audio: micConstraints() })).getAudioTracks()[0];
+  } catch (err) {
+    if (voice.deviceId && err.name === 'OverconstrainedError') { // the saved mic is gone
+      voice.deviceId = '';
+      save('micId', '');
+      return openMic();
+    }
+    throw err;
+  }
+}
+
+function voiceState() {
+  return { in: voice.joined, muted: voice.muted || voice.deafened };
+}
+
+function broadcastVoice() {
+  peers.forEach((peer) => send(peer.id, { voice: voiceState() }));
+}
+
+// Voice only flows between two people who are both in the voice channel.
+function sendVoiceTo(peer) {
+  const sender = peer.voiceTransceiver?.sender;
+  if (!sender) return;
+  const track = voice.joined && peer.voiceIn ? voice.track : null;
+  if (sender.track !== track) sender.replaceTrack(track).catch((err) => console.warn(err));
+}
+
+function applyVoiceOutput() {
+  peers.forEach((peer) => {
+    if (!peer.voiceAudio) return;
+    peer.voiceAudio.muted = !voice.joined || voice.deafened || !peer.voiceIn;
+    peer.voiceAudio.volume = voice.volume;
+    if (!peer.voiceAudio.muted) peer.voiceAudio.play().catch(() => {});
+  });
+}
+
+function analyserFor(track) {
+  const analyser = voice.ctx.createAnalyser();
+  analyser.fftSize = 512;
+  voice.ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser);
+  return analyser;
+}
+
+function levelOf(analyser) {
+  const data = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(data);
+  let sum = 0;
+  for (const v of data) sum += v * v;
+  return Math.sqrt(sum / data.length);
+}
+
+async function joinVoice() {
+  if (voice.joined) return;
+  try {
+    voice.ctx ??= new AudioContext(); // created on this click, so it may play
+    await voice.ctx.resume();
+    voice.track = await openMic();
+  } catch {
+    toast('Não deu para usar o microfone. Libere o acesso no cadeado ao lado do endereço e tente de novo.', 7000);
+    return;
+  }
+  voice.track.contentHint = 'speech';
+  voice.analyser = analyserFor(voice.track);
+  voice.joined = true;
+  voice.muted = false;
+  voice.deafened = false;
+  document.body.classList.add('in-voice');
+  chime(true);
+  addSystem('Você entrou na voz.');
+  broadcastVoice();
+  peers.forEach(sendVoiceTo);
+  applyVoiceOutput();
+  refresh();
+}
+
+function leaveVoice() {
+  if (!voice.joined) return;
+  voice.joined = false;
+  voice.track?.stop();
+  voice.track = null;
+  voice.analyser = null;
+  voice.speaking = false;
+  document.body.classList.remove('in-voice');
+  chime(false);
+  broadcastVoice();
+  peers.forEach(sendVoiceTo);
+  applyVoiceOutput();
+  refresh();
+}
+
+// Muting keeps sending (silence, almost free) so unmuting is instant.
+function setMuted(muted) {
+  if (!voice.joined) return;
+  voice.muted = muted;
+  if (!muted) voice.deafened = false; // talking again means hearing again
+  voice.track.enabled = !(voice.muted || voice.deafened);
+  broadcastVoice();
+  applyVoiceOutput();
+  refresh();
+}
+
+function setDeafened(deafened) {
+  if (!voice.joined) return;
+  voice.deafened = deafened;
+  voice.track.enabled = !(voice.muted || voice.deafened);
+  broadcastVoice();
+  applyVoiceOutput();
+  refresh();
+}
+
+const toggleMic = () => setMuted(!(voice.muted || voice.deafened));
+$('voice-join').onclick = joinVoice;
+$('voice-leave').onclick = leaveVoice;
+$('mic').onclick = toggleMic;
+$('me-mic').onclick = toggleMic;
+$('deafen').onclick = () => setDeafened(!voice.deafened);
+$('me-deafen').onclick = () => setDeafened(!voice.deafened);
+document.addEventListener('keydown', (e) => { // Ctrl+Shift+M, like Discord
+  if (voice.joined && e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'm') {
+    e.preventDefault();
+    toggleMic();
+  }
+});
+
+// Speaking rings: a cheap level check 10 times a second, only while in voice.
+setInterval(() => {
+  if (!voice.joined || !voice.ctx) return;
+  const now = Date.now();
+  let changed = false;
+  const check = (who, analyser, active) => {
+    if (active && analyser && levelOf(analyser) > SPEAKING_LEVEL) who.lastLoud = now;
+    const speaking = active && now - (who.lastLoud ?? 0) < SPEAKING_HOLD_MS;
+    if (speaking !== !!who.speaking) {
+      who.speaking = speaking;
+      changed = true;
+    }
+  };
+  check(voice, voice.analyser, !voice.muted && !voice.deafened);
+  peers.forEach((peer) => {
+    if (peer.voiceIn && peer.voiceTransceiver && !peer.voiceAnalyser) {
+      peer.voiceAnalyser = analyserFor(peer.voiceTransceiver.receiver.track);
+    }
+    check(peer, peer.voiceAnalyser, peer.voiceIn && !peer.voiceMuted && !voice.deafened);
+  });
+  if (changed) updateSpeaking();
+}, 100);
+
+function markSpeaker(node, person) {
+  node.dataset.pid = String(person.id);
+  node.classList.toggle('speaking', !!person.speaking);
+}
+
+// Only toggles classes: no need to rebuild the lists for every syllable.
+function updateSpeaking() {
+  document.querySelectorAll('[data-pid]').forEach((node) => {
+    const id = Number(node.dataset.pid);
+    node.classList.toggle('speaking', id === myId ? voice.speaking : !!peers.get(id)?.speaking);
+  });
+}
+
+function voiceIcon(person) {
+  const icon = el('span', person.voiceMuted ? 'voice-icon off' : 'voice-icon');
+  icon.innerHTML = person.voiceMuted ? ICONS.micOff : ICONS.mic; // fixed markup, no user text
+  icon.title = person.voiceMuted ? 'Na voz, mudo' : 'Na voz';
+  return icon;
+}
+
+function renderVoiceUi() {
+  const silent = voice.muted || voice.deafened;
+  $('voice-join').hidden = voice.joined;
+  for (const id of ['mic', 'deafen', 'voice-leave']) $(id).hidden = !voice.joined;
+  $('me-voice').hidden = !voice.joined;
+  for (const id of ['mic', 'me-mic']) {
+    const button = $(id);
+    const label = silent ? 'Ligar microfone' : 'Silenciar microfone';
+    button.innerHTML = silent ? ICONS.micOff : ICONS.mic;
+    button.setAttribute('aria-pressed', String(silent));
+    button.setAttribute('aria-label', label);
+    button.title = `${label} (Ctrl+Shift+M)`;
+  }
+  for (const id of ['deafen', 'me-deafen']) {
+    const button = $(id);
+    const label = voice.deafened ? 'Voltar a ouvir' : 'Silenciar todo mundo';
+    button.innerHTML = voice.deafened ? ICONS.headphonesOff : ICONS.headphones;
+    button.setAttribute('aria-pressed', String(voice.deafened));
+    button.setAttribute('aria-label', label);
+    button.title = label;
+  }
+  if (!$('voice-settings-btn').innerHTML) $('voice-settings-btn').innerHTML = ICONS.sliders;
+  if (!$('voice-leave').innerHTML) $('voice-leave').innerHTML = ICONS.hangup;
+  if (!$('edit').innerHTML) $('edit').innerHTML = ICONS.pencil;
+}
+
+// Two soft synthesized notes: up when someone joins the voice, down on leave.
+function chime(up) {
+  if (!voice.ctx) return;
+  const t = voice.ctx.currentTime;
+  const gain = voice.ctx.createGain();
+  gain.connect(voice.ctx.destination);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  const osc = voice.ctx.createOscillator();
+  osc.frequency.setValueAtTime(up ? 523 : 659, t);
+  osc.frequency.setValueAtTime(up ? 659 : 523, t + 0.12);
+  osc.connect(gain);
+  osc.start(t);
+  osc.stop(t + 0.32);
+}
+
+// ---------- configurações de voz ----------
+
+let previewTrack = null; // mic opened just for the meter, when not in voice
+let previewAnalyser = null;
+let meterTimer = null;
+
+async function openVoiceSettings() {
+  $('vs-ns').checked = voice.noiseSuppression;
+  $('vs-volume').value = String(voice.volume);
+  $('voice-settings').showModal();
+  try {
+    voice.ctx ??= new AudioContext();
+    await voice.ctx.resume();
+    const track = voice.track ?? (previewTrack = await openMic());
+    previewAnalyser = analyserFor(track);
+    await fillMicList();
+    meterTimer = setInterval(() => {
+      $('vs-meter').style.width = `${Math.min(100, Math.round(levelOf(previewAnalyser) * 400))}%`;
+    }, 80);
+  } catch {
+    $('vs-mic').replaceChildren(el('option', null, 'Microfone bloqueado ou indisponível'));
+  }
+}
+
+async function fillMicList() {
+  const mics = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+  $('vs-mic').replaceChildren(...mics.map((device, i) => {
+    const option = el('option', null, device.label || `Microfone ${i + 1}`);
+    option.value = device.deviceId;
+    option.selected = device.deviceId === (voice.deviceId || 'default');
+    return option;
+  }));
+}
+
+// A new device or setting: reopen the mic and swap it in wherever it is sent.
+async function switchMic() {
+  let track;
+  try {
+    track = await openMic();
+  } catch {
+    toast('Não deu para abrir esse microfone.');
+    return;
+  }
+  if (voice.joined) {
+    voice.track.stop();
+    voice.track = track;
+    track.contentHint = 'speech';
+    track.enabled = !(voice.muted || voice.deafened);
+    voice.analyser = analyserFor(track);
+    peers.forEach((peer) => {
+      const sender = peer.voiceTransceiver?.sender;
+      if (sender?.track) sender.replaceTrack(track).catch((err) => console.warn(err));
+    });
+  } else {
+    previewTrack?.stop();
+    previewTrack = track;
+  }
+  previewAnalyser = analyserFor(track);
+}
+
+$('voice-settings-btn').onclick = openVoiceSettings;
+$('voice-settings').onclose = () => {
+  clearInterval(meterTimer);
+  previewTrack?.stop();
+  previewTrack = null;
+  previewAnalyser = null;
+};
+$('vs-mic').onchange = () => {
+  voice.deviceId = $('vs-mic').value;
+  save('micId', voice.deviceId);
+  switchMic();
+};
+$('vs-ns').onchange = () => {
+  voice.noiseSuppression = $('vs-ns').checked;
+  save('noiseSuppression', voice.noiseSuppression ? '' : 'off');
+  switchMic();
+};
+$('vs-volume').oninput = () => {
+  voice.volume = Number($('vs-volume').value);
+  save('voiceVolume', String(voice.volume));
+  applyVoiceOutput();
+};
 
 // ---------- chat ----------
 
@@ -759,6 +1135,7 @@ mobile.addEventListener('change', updateUnread);
 // Leaving goes back to the lobby, where your rooms are listed.
 function goToLobby() {
   left = true;
+  leaveVoice();
   clearTimeout(reconnectTimer);
   stopShare();
   ws?.close();
@@ -941,7 +1318,9 @@ function peerStatus(peer) {
     case 'disconnected': return ['conexão instável', 'warn'];
     case 'connected':
       if (peer.sharing) return ['compartilhando', 'live'];
-      return peer.watchesMe ? ['assistindo você', 'online'] : ['na sala', 'muted'];
+      if (peer.watchesMe) return ['assistindo você', 'online'];
+      if (peer.voiceIn) return peer.voiceMuted ? ['na voz · mudo', 'muted'] : ['na voz', 'online'];
+      return ['na sala', 'muted'];
     default: return ['conectando…', 'muted'];
   }
 }
@@ -951,20 +1330,26 @@ function personRow(person) {
   const avatar = el('div', 'avatar');
   avatar.setAttribute('aria-hidden', 'true');
   paintAvatar(avatar, person.name, person.id, person.photo);
+  markSpeaker(avatar, person);
   const name = el('span', 'ellipsis', person.name);
   if (person.self) name.append(el('span', 'muted', ' (você)'));
+  if (person.voiceIn) name.append(voiceIcon(person));
   li.append(avatar, name, el('span', `end ${person.status[1]}`, person.status[0]));
   return li;
 }
 
 function personTile(person) {
   const tile = el('div', person.self ? 'tile card self' : 'tile card');
+  markSpeaker(tile, person);
   const avatar = el('div', 'avatar');
   avatar.setAttribute('aria-hidden', 'true');
   paintAvatar(avatar, person.name, person.id, person.photo);
+  markSpeaker(avatar, person);
   const status = person.self ? ['você', 'online'] : person.status;
   const text = el('div', 'tile-text');
-  text.append(el('strong', 'ellipsis', person.name), el('span', `status ${status[1]}`, status[0]));
+  const name = el('strong', 'ellipsis', person.name);
+  if (person.voiceIn) name.append(voiceIcon(person));
+  text.append(name, el('span', `status ${status[1]}`, status[0]));
   tile.append(avatar, text);
   return tile;
 }
@@ -1003,9 +1388,13 @@ function refresh() {
   const list = [...peers.values()].sort((a, b) => a.id - b.id);
   const me = {
     self: true, id: myId, name: myNick, photo: myPhoto,
-    status: localTrack ? ['compartilhando', 'live'] : ['na sala', 'online'],
+    status: localTrack ? ['compartilhando', 'live'] : voice.joined ? ['na voz', 'online'] : ['na sala', 'online'],
+    voiceIn: voice.joined, voiceMuted: voice.muted || voice.deafened, speaking: voice.speaking,
   };
-  const others = list.map((p) => ({ id: p.id, name: displayName(p), photo: p.photo, status: peerStatus(p) }));
+  const others = list.map((p) => ({
+    id: p.id, name: displayName(p), photo: p.photo, status: peerStatus(p),
+    voiceIn: p.voiceIn, voiceMuted: p.voiceMuted, speaking: p.speaking,
+  }));
   const people = myId === null ? [] : [me, ...others];
 
   $('online').textContent = people.length ? `● ${people.length}/${maxPeers} online` : '';
@@ -1047,8 +1436,11 @@ function refresh() {
 
   paintAvatar($('me-avatar'), myNick, myId, myPhoto);
   $('me-nick').textContent = myNick;
-  $('me-status').textContent = me.status[0] === 'na sala' ? 'Na sala' : 'Compartilhando';
+  $('me-status').textContent = localTrack ? 'Compartilhando'
+    : !voice.joined ? 'Na sala'
+      : voice.deafened ? 'Na voz · sem som' : voice.muted ? 'Na voz · mudo' : 'Na voz';
   $('me-status').className = me.status[1];
+  renderVoiceUi();
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
   $('share-short').textContent = localTrack ? 'Parar' : 'Tela';
