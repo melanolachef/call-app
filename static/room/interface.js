@@ -1,13 +1,13 @@
 // ---------- interface ----------
 
-// "agora", "42 min", "1 h 05 min": how long you have been in the room.
-function elapsed(since) {
-  const minutes = Math.floor((Date.now() - since) / 60_000);
-  if (minutes < 1) return 'agora';
-  if (minutes < 60) return `${minutes} min`;
-  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`;
+// "00:42:10": how long you have been in the call (top bar).
+function clock(since) {
+  const seconds = Math.max(0, Math.floor((Date.now() - since) / 1000));
+  return [seconds / 3600, (seconds % 3600) / 60, seconds % 60].map((n) => String(Math.floor(n)).padStart(2, '0')).join(':');
 }
 
+// A shared screen: a header (who, quality, buttons) over the picture. Not
+// watched yet, the card shrinks to a row with "Assistir" (see room.html).
 function buildScreen() {
   const card = el('div', 'screen');
   card.hidden = true;
@@ -20,9 +20,12 @@ function buildScreen() {
   video.ondblclick = () => toggleFullscreen(card);
   card.addEventListener('click', (e) => { if (!e.target.closest('button, input')) flashScreenUi(card); });
   const waiting = el('div', 'waiting');
-  const waitingText = el('span');
+  const waitingBox = el('div', 'waiting-text');
+  const waitingText = el('span', 'waiting-title');
+  const waitingHint = el('span', 'waiting-hint');
+  waitingBox.append(waitingText, waitingHint);
   const watchBtn = el('button', 'btn primary', 'Assistir');
-  waiting.append(waitingText, watchBtn);
+  waiting.append(waitingBox, watchBtn);
   const failed = el('div', 'waiting failed');
   failed.hidden = true;
   const failedText = el('strong');
@@ -33,10 +36,9 @@ function buildScreen() {
     retryBtn,
   );
   frame.append(video, waiting, failed);
-  // Over the picture: "● Tela de Rafa" bottom-left, details bottom-right,
-  // the controls top-right (shown on hover).
-  const pill = el('span', 'pill glass screen-label');
-  const hint = el('span', 'pill glass screen-info');
+  const head = el('div', 'screen-head');
+  const pill = el('span', 'screen-label');
+  const hint = el('span', 'screen-info');
   const soundBtn = el('button', 'btn small sound-btn');
   const volume = el('input', 'volume');
   volume.type = 'range';
@@ -46,17 +48,31 @@ function buildScreen() {
   const fullBtn = el('button', 'btn small');
   fullBtn.onclick = () => toggleFullscreen(card);
   // Picture-in-Picture: a small always-on-top window, to watch while playing.
-  const pipBtn = el('button', 'btn small pip-btn', 'Janela flutuante');
+  const pipBtn = el('button', 'btn small pip-btn', 'Flutuante');
+  pipBtn.title = 'Janela flutuante: fica por cima do jogo';
   pipBtn.onclick = () => togglePip(video);
   video.addEventListener('enterpictureinpicture', () => (pipBtn.textContent = 'Fechar janela'));
-  video.addEventListener('leavepictureinpicture', () => (pipBtn.textContent = 'Janela flutuante'));
+  video.addEventListener('leavepictureinpicture', () => (pipBtn.textContent = 'Flutuante'));
   const unwatchBtn = el('button', 'btn small');
   unwatchBtn.append(el('span', 'long', 'Parar de assistir'), el('span', 'short', 'Parar'));
-  const actions = el('div', 'screen-actions glass');
+  const viewers = el('span', 'screen-viewers');
+  const actions = el('div', 'screen-actions');
   actions.append(soundBtn, volume, pipBtn, fullBtn, unwatchBtn);
-  card.append(frame, pill, hint, actions);
+  head.append(pill, hint, viewers, actions);
+  card.append(head, frame);
   $('screens').append(card);
-  return { card, video, waiting, waitingText, watchBtn, failed, failedText, retryBtn, pill, hint, soundBtn, volume, pipBtn, fullBtn, unwatchBtn };
+  return { card, video, waiting, waitingText, waitingHint, viewers, watchBtn, failed, failedText, retryBtn, pill, hint, soundBtn, volume, pipBtn, fullBtn, unwatchBtn };
+}
+
+// Top bar: one little block per seat (MAX_PEERS on the server), then "4/12".
+function renderSeats(count) {
+  const seats = $('seats');
+  if (seats.childElementCount !== maxPeers) seats.replaceChildren(...Array.from({ length: maxPeers }, () => el('i')));
+  [...seats.children].forEach((seat, i) => seat.classList.toggle('on', i < count));
+  const online = $('online');
+  online.replaceChildren();
+  if (!count) return;
+  online.append(el('b', null, String(count)), `/${maxPeers}`);
 }
 
 function peerStatus(peer) {
@@ -65,7 +81,11 @@ function peerStatus(peer) {
     case 'disconnected': return ['conexão instável', 'warn'];
     case 'connected':
       if (peer.sharing) return ['compartilhando', 'live'];
-      if (peer.watchesMe) return ['assistindo você', 'online'];
+      if (peer.watching?.length || peer.watchesMe) {
+        const names = watchedNames(peer.watching ?? []);
+        if (peer.watchesMe && !names.includes('você')) names.unshift('você');
+        if (names.length) return [`assistindo ${names.join(', ')}`, 'online'];
+      }
       if (peer.voiceIn) return peer.voiceMuted ? ['na voz · mudo', 'muted'] : ['na voz', 'online'];
       return ['na sala', 'muted'];
     default: return ['conectando…', 'muted'];
@@ -91,6 +111,7 @@ function openPersonCard(person, anchor) {
   $('pc-status').textContent = person.self ? 'Você' : capitalize(person.status[0]);
   $('pc-status').className = `pc-status ${person.self ? '' : person.status[1]}`;
   $('pc-edit').hidden = !person.self;
+  renderPersonAudio(person.self ? null : peers.get(person.id));
   personCard.hidden = false;
   // Beside the clicked row or card, kept inside the window; centered on phones.
   if (mobile.matches) {
@@ -155,10 +176,22 @@ function personRow(person) {
   const text = el('div', 'person-text');
   const name = el('span', 'person-name');
   name.append(el('span', 'ellipsis', person.name));
+  if (person.self) name.append(el('span', 'you', 'você'));
   if (person.voiceIn) name.append(voiceIcon(person));
-  const [status, cls] = person.self && !person.status[0].startsWith('compartilhando') ? ['Você', ''] : person.status;
-  text.append(name, el('span', `person-status ellipsis ${cls}`, capitalize(status)));
+  const [status, cls] = person.status;
+  text.append(name, el('span', `person-status ellipsis ${cls}`, status));
   row.append(avatar, text);
+  if (person.p2p === 'off') {
+    row.append(el('span', 'p2p-off', 'sem P2P'));
+  } else if (person.p2p) {
+    const bars = el('span', `p2p q${person.p2p}`);
+    const how = person.relay ? 'Via servidor de apoio (TURN): a rede bloqueou a conexão direta' : 'Conexão direta (P2P)';
+    bars.title = `${how}; ${person.p2p === 3 ? 'rápida' : person.p2p === 2 ? 'média' : 'lenta'}`;
+    bars.append(el('i'), el('i'), el('i'));
+    const kind = el('span', 'p2p-kind', person.relay ? 'relay' : 'direto');
+    kind.title = how;
+    row.append(bars, kind);
+  }
   li.append(row);
   return li;
 }
@@ -194,7 +227,7 @@ function personTile(person) {
 
 // `watching` false shows the "Assistir" placeholder instead of the video.
 // `failedText` replaces both the video and the "Assistir" placeholder.
-function showScreen(screen, { visible, watching, label, hint, waitingText = '', canUnwatch = false, failedText = '', sound = false }) {
+function showScreen(screen, { visible, watching, label, hint, waitingText = '', waitingHint = '', viewers = [], canUnwatch = false, failedText = '', sound = false }) {
   if (screen.soundBtn.isConnected) {
     screen.soundBtn.hidden = !sound;
     screen.volume.hidden = !sound;
@@ -212,6 +245,8 @@ function showScreen(screen, { visible, watching, label, hint, waitingText = '', 
     document.exitPictureInPicture().catch(() => {});
   }
   screen.card.hidden = !visible;
+  screen.card.classList.toggle('watching', visible && watching && !failedText);
+  screen.card.classList.toggle('idle', visible && !watching);
   screen.video.hidden = !watching || !!failedText;
   screen.waiting.hidden = watching || !!failedText;
   if (screen.failed) {
@@ -219,23 +254,64 @@ function showScreen(screen, { visible, watching, label, hint, waitingText = '', 
     screen.failedText.textContent = failedText;
   }
   screen.waitingText.textContent = waitingText;
+  screen.waitingHint.textContent = waitingHint;
+  renderViewers(screen.viewers, viewers);
   screen.pill.textContent = label;
   screen.hint.textContent = hint;
   screen.unwatchBtn.hidden = !canUnwatch;
   if (visible && watching && screen.video.paused) screen.video.play().catch(() => {});
 }
 
+// "[L][B] 2 assistindo" in a screen's header (up to 3 faces).
+function renderViewers(node, people) {
+  node.hidden = people.length === 0;
+  if (!people.length) return;
+  const faces = el('span', 'viewer-faces');
+  for (const person of people.slice(0, 3)) {
+    const face = el('span', 'avatar');
+    face.title = person.name;
+    paintAvatar(face, person.name, person.id, person.photo);
+    faces.append(face);
+  }
+  node.replaceChildren(faces, `${people.length} assistindo`);
+  node.title = people.map((p) => p.name).join(', ');
+}
+
+function shareHint(info) {
+  if (!info) return '';
+  return [info.height && `${info.height}p`, info.fps && `${info.fps} fps`, info.mode].filter(Boolean).join(' · ');
+}
+
+// Names of the screens someone watches, "você" for yours.
+function watchedNames(ids) {
+  return ids.map((id) => (id === myId ? (localTrack ? 'você' : null) : peers.get(id)?.sharing ? displayName(peers.get(id)) : null)).filter(Boolean);
+}
+
+// Yours, in the people list: what you are doing for the room right now.
+function myStatus(list) {
+  if (localTrack) return ['compartilhando', 'live'];
+  const watched = list.filter((p) => p.iWatch && p.sharing).map(displayName);
+  if (watched.length) return [`assistindo ${watched.join(', ')}`, 'online'];
+  return voice.joined ? ['na voz', 'online'] : ['na sala', ''];
+}
+
+function personOf(peer) {
+  return { id: peer.id, name: displayName(peer), photo: peer.photo };
+}
+
 function refresh() {
   const list = [...peers.values()].sort((a, b) => a.id - b.id);
   const me = {
     self: true, id: myId, name: myNick, photo: myPhoto,
-    status: localTrack ? ['compartilhando', 'live'] : voice.joined ? ['na voz', 'online'] : ['na sala', 'online'],
+    status: myStatus(list),
     voiceIn: voice.joined, voiceMuted: voice.muted || voice.deafened, speaking: voice.speaking,
     camVideo: cam.track ? myCamVideo : null, camOn: !!cam.track,
     bannerColor: validBannerColor(load('bannerColor')), bannerImage: validBannerImage(load('bannerImage')),
   };
   const others = list.map((p) => ({
     id: p.id, name: displayName(p), photo: p.photo, status: peerStatus(p),
+    p2p: p.pc.connectionState === 'failed' ? 'off' : p.p2p ?? 0,
+    relay: !!p.relay,
     voiceIn: p.voiceIn, voiceMuted: p.voiceMuted, speaking: p.speaking,
     camVideo: camLive(p) ? p.camVideo : null, camOn: p.camOn,
     bannerColor: p.bannerColor || '', bannerImage: p.bannerImage || '',
@@ -249,13 +325,13 @@ function refresh() {
       paintAvatar($('pc-avatar'), carded.name, carded.id, carded.photo);
       $('pc-name').textContent = carded.name;
       if (!carded.self) $('pc-status').textContent = capitalize(carded.status[0]);
+      renderPersonAudio(carded.self ? null : peers.get(carded.id));
     } else {
       closePersonCard();
     }
   }
 
-  $('online').textContent = people.length ? `${people.length}/${maxPeers}` : '';
-  $('people-count').textContent = people.length ? `${people.length} ${people.length === 1 ? 'pessoa' : 'pessoas'} · ` : '';
+  renderSeats(people.length);
   $('people').replaceChildren(...people.map(personRow));
   $('tiles').replaceChildren(...people.map(personTile));
   $('tiles').classList.toggle('no-cams', !people.some((p) => p.camOn));
@@ -268,6 +344,7 @@ function refresh() {
     label: 'Sua tela',
     hint: `${viewers === 0 ? 'ninguém assistindo' : viewers === 1 ? '1 pessoa assistindo' : `${viewers} pessoas assistindo`} · ${localAudio ? 'com som' : 'sem som'}${shareMode === 'jogo' && (currentCaps().fps < 30 || currentCaps().maxHeight < 720) ? ` · ${currentCaps().maxHeight}p ${currentCaps().fps} FPS (ajuste automático)` : ''}`,
     waitingText: 'Sua tela está indo para quem clicar em Assistir. A prévia fica escondida para poupar o PC.',
+    viewers: list.filter((p) => p.watchesMe).map(personOf),
     canUnwatch: previewOn,
   });
   for (const peer of list) {
@@ -276,15 +353,17 @@ function refresh() {
     showScreen(peer.screen, {
       visible: peer.sharing,
       watching: peer.iWatch,
-      label: `Tela de ${name}`,
+      label: name,
       hint: failed ? '' : peer.iWatch ? [peer.quality, peer.hasAudio ? '' : 'sem som'].filter(Boolean).join(' · ') : '',
       sound: peer.iWatch && peer.hasAudio && !failed,
-      waitingText: `${name} está compartilhando a tela`,
+      waitingText: `${name} está compartilhando`,
+      waitingHint: shareHint(peer.shareInfo),
+      viewers: [...(peer.iWatch ? [{ id: myId, name: myNick, photo: myPhoto }] : []), ...list.filter((p) => p !== peer && p.watching?.includes(peer.id)).map(personOf)],
       canUnwatch: peer.iWatch && !failed,
       failedText: failed ? (peer.retrying ? 'Tentando conectar de novo…' : `Não foi possível conectar com ${name}`) : '',
     });
     peer.screen.retryBtn.hidden = !!peer.retrying;
-    peer.screen.video.volume = soundVolume;
+    peer.screen.video.volume = soundVolume * personAudio(peer).screen;
     peer.screen.video.muted = !peer.iWatch || soundMuted;
   }
   const shown = (localTrack ? 1 : 0) + list.filter((p) => p.sharing).length;
@@ -292,7 +371,8 @@ function refresh() {
   $('content').classList.toggle('has-screens', shown > 0);
   $('screens').style.setProperty('--cols', shown > 2 ? 2 : 1);
   $('live').hidden = shown === 0;
-  $('reconnecting').hidden = !reconnecting;
+  $('reconnecting').hidden = true; // the banner on the stage says it now
+  renderReconnect();
 
   paintAvatar($('me-avatar'), myNick, myId, myPhoto);
   $('me-nick').textContent = myNick;
@@ -300,8 +380,10 @@ function refresh() {
     : !voice.joined ? 'Na sala'
       : voice.deafened ? 'Na voz · sem som' : voice.muted ? 'Na voz · mudo' : 'Na voz';
   $('me-status').className = me.status[1] === 'live' ? 'live' : voice.joined ? 'online' : '';
+  broadcastWatching();
   renderVoiceUi();
   renderCameraUi();
+  if (!soundPop.hidden) renderSoundpad(); // "entre na voz" hint follows the voice
   syncDesktopKeys();
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';

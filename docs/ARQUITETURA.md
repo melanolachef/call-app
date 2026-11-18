@@ -76,7 +76,7 @@ parar qualquer uma é só `replaceTrack()`, sem renegociar.
 
 ## Decisões técnicas
 
-- **Visual:** segue o design em [docs/design/cpx-call-design.html](design/cpx-call-design.html). A fonte Inter vem do próprio servidor (`/fonts/inter.woff2`), e não do Google Fonts, para abrir o app não avisar terceiros de quem está online.
+- **Visual:** segue o design em [docs/design/cpx-call-componentes.html](design/cpx-call-componentes.html) (componentes e sala; o início e o celular seguem os mesmos tokens de `static/common.css`). As fontes Inter e JetBrains Mono vêm do próprio servidor (`/fonts/`), e não do Google Fonts, para abrir o app não avisar terceiros de quem está online.
 - **HTML/JS embutidos no binário com `include_str!` em vez de `tower-http`:** uma dependência a menos e um binário único. A desvantagem é que qualquer mudança no HTML exige recompilar.
 - **ID da sala gerado no navegador (`crypto.getRandomValues`):** o servidor não precisa do crate `rand`. Salas com nome ganham um final aleatório (`churrasco-k3f9x2`) para estranhos não adivinharem.
 - **Faixas `sendrecv` negociadas uma vez, por quem entra:** iniciar e parar o compartilhamento é só `replaceTrack()`. Assim não há colisão de offers e o padrão "perfect negotiation" fica dispensável.

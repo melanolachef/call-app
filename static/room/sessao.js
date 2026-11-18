@@ -102,6 +102,8 @@ const RETRY_MAX_MS = 30_000;
 let retryDelay = 1000;
 let reconnecting = false;
 let reconnectTimer = null;
+let reconnectAttempt = 0;
+let reconnectAt = 0; // when the next attempt starts (for the countdown)
 
 async function join() {
   [hwH264] = await Promise.all([hwH264Ready, loadIceServers()]); // both needed before any peer
@@ -123,10 +125,50 @@ async function join() {
     myId = null;
     refresh();
     clearTimeout(reconnectTimer);
+    reconnectAttempt += 1;
+    reconnectAt = Date.now() + retryDelay;
     reconnectTimer = setTimeout(join, retryDelay);
+    startReconnectCountdown(retryDelay);
     retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
   };
 }
+
+// The banner on the stage: "Sem conexão com o servidor · Tentando de novo
+// em 4 s · tentativa 3", a bar filling up to the next attempt, and
+// "Tentar agora". Ticks once a second, only while reconnecting.
+let countdownTimer = null;
+function startReconnectCountdown(delay) {
+  const bar = $('rc-bar');
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+  bar.getBoundingClientRect(); // restart the transition
+  bar.style.transition = `width ${delay}ms linear`;
+  bar.style.width = '100%';
+  clearInterval(countdownTimer);
+  countdownTimer = setInterval(renderReconnect, 1000);
+  renderReconnect();
+}
+
+function renderReconnect() {
+  const banner = $('reconnect');
+  banner.hidden = !reconnecting;
+  if (!reconnecting) {
+    clearInterval(countdownTimer);
+    return;
+  }
+  const seconds = Math.ceil((reconnectAt - Date.now()) / 1000);
+  $('rc-when').textContent = seconds > 0 ? `${seconds} s` : 'agora';
+  $('rc-attempt').textContent = String(reconnectAttempt);
+}
+
+$('rc-now').onclick = () => {
+  if (!reconnecting || left) return;
+  clearTimeout(reconnectTimer);
+  retryDelay = 1000;
+  reconnectAt = Date.now();
+  renderReconnect();
+  join();
+};
 
 // Back online: don't wait for the current back-off delay.
 window.addEventListener('online', () => {
@@ -144,11 +186,12 @@ function onMessage(ev) {
       maxPeers = msg.max ?? maxPeers;
       shareBtn.disabled = !canShare;
       retryDelay = 1000;
+      reconnectAttempt = 0;
       if (!timer) { // keeps counting across reconnections
         const joinedAt = Date.now();
-        const tick = () => ($('timer').textContent = elapsed(joinedAt));
+        const tick = () => ($('timer').textContent = clock(joinedAt));
         tick();
-        timer = setInterval(tick, 15_000); // minutes only: no need to tick every second
+        timer = setInterval(tick, 1000); // one text node a second: no layout work
       }
       for (const id of msg.peers) createPeer(id, true);
       rememberRoom(roomId); // shows up in the lobby's "Suas salas"

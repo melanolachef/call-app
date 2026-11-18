@@ -46,8 +46,24 @@ function currentCaps() {
   return LEVELS[Math.min(LEVELS.length - 1, adaptLevel + extra)];
 }
 
+// What the others see before clicking "Assistir": "720p · 30 fps · Jogo".
+// Sent with every change (mode, automatic step down, 3+ viewers).
+function shareInfo() {
+  const caps = currentCaps();
+  return { sharing: true, audio: !!localAudio, mode: shareMode, height: caps.maxHeight, fps: caps.fps };
+}
+let lastShareInfo = '';
+function broadcastShareInfo() {
+  if (!localTrack) return;
+  const info = JSON.stringify(shareInfo());
+  if (info === lastShareInfo) return;
+  lastShareInfo = info;
+  peers.forEach((peer) => send(peer.id, shareInfo()));
+}
+
 function retune() {
   if (!localTrack) return;
+  broadcastShareInfo();
   localTrack.applyConstraints(captureConstraints())
     .catch(() => { /* capture caps are best effort; the encoder caps still apply */ })
     .finally(() => peers.forEach(tuneSender));
@@ -134,6 +150,7 @@ function setShareMode(mode) {
     localTrack.applyConstraints(captureConstraints())
       .catch(() => { /* capture caps are best effort; the encoder caps still apply */ })
       .finally(() => peers.forEach(tuneSender));
+    broadcastShareInfo();
   }
   refresh();
 }
@@ -272,7 +289,22 @@ function setWatch(peer, watch) {
     video.play().catch(() => {});
   }
   send(peer.id, { watch });
-  refresh();
+  refresh(); // also tells everyone else (broadcastWatching)
+}
+
+// Everyone learns who watches whom, for "assistindo Rafa" and the viewers
+// on each screen. The sharer already knew from { watch }; this is the same
+// fact for the rest of the room. Sent only when it changes.
+function myWatching() {
+  return [...peers.values()].filter((p) => p.iWatch && p.sharing).map((p) => p.id).sort((a, b) => a - b);
+}
+let lastWatching = '[]';
+function broadcastWatching() {
+  const list = myWatching();
+  const text = JSON.stringify(list);
+  if (text === lastWatching) return;
+  lastWatching = text;
+  peers.forEach((peer) => send(peer.id, { watching: list }));
 }
 
 function removePeer(id) {
@@ -280,6 +312,7 @@ function removePeer(id) {
   if (!peer) return;
   peer.pc.close();
   peer.voiceAnalyser = dropAnalyser(peer.voiceAnalyser);
+  dropVoiceBoost(peer);
   if (document.pictureInPictureElement === peer.screen.video) document.exitPictureInPicture().catch(() => {});
   peer.screen.card.remove();
   peer.voiceAudio?.remove();
@@ -343,7 +376,7 @@ async function startShare() {
       localAudio = null;
       peers.forEach((peer) => {
         sendScreenTo(peer);
-        send(peer.id, { sharing: true, audio: false });
+        send(peer.id, shareInfo());
       });
       refresh();
     };
@@ -355,7 +388,8 @@ async function startShare() {
   localTrack.onended = stopShare; // the browser's own "stop sharing" bar
   setPreview(previewOn);
   retuneCamera(); // the camera steps down while you share
-  peers.forEach((peer) => send(peer.id, { sharing: true, audio: !!localAudio })); // media only once they ask
+  lastShareInfo = JSON.stringify(shareInfo());
+  peers.forEach((peer) => send(peer.id, shareInfo())); // media only once they ask
   refresh();
 }
 

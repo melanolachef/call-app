@@ -74,12 +74,20 @@ function addMessage({ authorId, name, photo, text, self = false }) {
   lastAuthor = authorId;
   lastAt = now;
 
-  // Bubbles: yours on the right in the accent color; the others' on the left,
-  // with the name above the first one of a run.
+  // No bubbles: a small photo, the name and the time on the first message of
+  // a run, then just the text.
   const li = el('li', `msg${self ? ' self' : ''}${grouped ? ' grouped' : ''}`);
-  if (!grouped && !self) li.append(el('span', 'msg-name', name));
+  const time = new Date(now).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (!grouped) {
+    const avatar = el('div', 'avatar');
+    avatar.setAttribute('aria-hidden', 'true');
+    paintAvatar(avatar, name, authorId, photo);
+    const head = el('div', 'msg-head');
+    head.append(el('span', 'ellipsis', self ? `${name}` : name), el('span', 'msg-time', time));
+    li.append(avatar, head);
+  }
   const body = el('p', isJumbo(text) ? 'msg-text jumbo' : 'msg-text');
-  body.title = new Date(now).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  body.title = time;
   body.append(linkify(text));
   li.append(body);
   appendToChat(li);
