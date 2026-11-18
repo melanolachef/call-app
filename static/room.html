@@ -2,10 +2,13 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>CPX Call</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#000000">
   <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/common.css">
@@ -105,6 +108,20 @@
     .screen-actions .btn:hover { background: rgb(255 255 255 / .1); }
     .screen-actions .volume { width: 90px; accent-color: var(--text); }
     @media (hover: none) { .screen-actions { opacity: 1; } }
+
+    /* Fullscreen (the whole card) and theater (the card covering the page,
+       where the browser has no fullscreen: iPhone). On touch screens the
+       controls hide over the picture and a tap brings them back. */
+    .screen:fullscreen, .screen.theater { border-radius: 0; background: #000; }
+    .screen.theater { position: fixed; inset: 0; z-index: 30; }
+    body.in-theater { overflow: hidden; }
+    .screen.theater .screen-actions, .screen:fullscreen .screen-actions { top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
+    .screen.theater .screen-label, .screen:fullscreen .screen-label { left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); }
+    .screen.theater .screen-info, .screen:fullscreen .screen-info { right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); }
+    @media (hover: none) {
+      .screen.theater:not(.show-ui) :is(.screen-actions, .screen-label, .screen-info),
+      .screen:fullscreen:not(.show-ui) :is(.screen-actions, .screen-label, .screen-info) { opacity: 0; pointer-events: none; transition: opacity .3s; }
+    }
 
     /* Nobody sharing: the people fill the stage. Someone sharing: only the
        cameras stay, as a strip under the screen. */
@@ -244,9 +261,9 @@
       .mode-btn { padding: 0 12px; }
     }
 
-    /* ---------- celular ---------- */
-    @media (max-width: 760px) {
-      .app { display: flex; flex-direction: column; gap: 14px; padding: 20px 16px 100px; }
+    /* ---------- celular (em pé ou deitado; o mesmo teste em chat.js) ---------- */
+    @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
+      .app { display: flex; flex-direction: column; gap: 14px; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 100px max(16px, env(safe-area-inset-left)); }
       .side, .mode, #home, #notify-btn, #live, #net, .screen-actions .volume, .pip-btn, #react-btn, #deafen, #share svg, .voice-join .short { display: none !important; }
       .stage { flex: none; padding: 0; gap: 14px; }
       .stage-head { flex-wrap: wrap; row-gap: 0; }
@@ -274,7 +291,7 @@
       #messages { padding-top: 12px; }
       body.chat-open .chat { position: fixed; inset: 0; z-index: 7; border-radius: 0; }
       body.chat-open .chat-head { display: flex; }
-      .controls { left: 16px; right: 16px; bottom: 24px; transform: none; max-width: none; background: rgb(44 44 46 / .82); }
+      .controls { left: max(16px, env(safe-area-inset-left)); right: max(16px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); transform: none; max-width: none; background: rgb(44 44 46 / .82); }
       .controls #share { flex: 1; }
       .ctl.wide.voice-join { width: 48px; padding: 0; }
       .controls #share { min-width: 0; padding: 0 12px; }
@@ -283,6 +300,13 @@
       .no-share .ctl.wide.voice-join { flex: 1; width: auto; padding: 0 16px; background: var(--primary); color: var(--on-primary); }
       .no-share .voice-join .long { display: inline !important; }
       .no-share .voice-join .short { display: none !important; }
+    }
+    /* Phone sideways (and not in theater): the picture gets the height, and
+       the control bar stays compact in the middle instead of spanning it. */
+    @media (max-height: 500px) and (pointer: coarse) and (orientation: landscape) {
+      #screens { height: calc(100dvh - 130px); }
+      .controls { left: 50%; right: auto; transform: translateX(-50%); }
+      .controls #share, .no-share .ctl.wide.voice-join { flex: none; }
     }
   </style>
 </head>

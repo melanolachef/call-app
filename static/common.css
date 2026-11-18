@@ -157,7 +157,7 @@ html.app-titlebar { --titlebar-h: 32px; }
 .titlebar button:focus-visible { outline-offset: -2px; }
 .titlebar svg { width: 10px; height: 10px; stroke-width: 1; stroke-linecap: square; stroke-linejoin: miter; }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
   .long { display: none; }
   .short { display: inline; }
   .toast { bottom: 112px; }

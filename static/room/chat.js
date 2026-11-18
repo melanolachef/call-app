@@ -6,7 +6,8 @@ const MAX_CHAT = 500;
 const GROUP_MS = 5 * 60_000; // consecutive messages from the same person share a header
 const messagesEl = $('messages');
 const chatInput = $('chat-input');
-const mobile = matchMedia('(max-width: 760px)');
+// Phones, upright or sideways (keep in sync with the CSS in room.html).
+const mobile = matchMedia('(max-width: 760px), (max-height: 500px) and (pointer: coarse)');
 let lastAuthor = null;
 let lastAt = 0;
 let unread = 0;
