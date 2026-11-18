@@ -1,12 +1,15 @@
 // ---------- interface ----------
 
+// "agora", "42 min", "1 h 05 min": how long you have been in the room.
 function elapsed(since) {
-  const s = Math.floor((Date.now() - since) / 1000);
-  return [s / 3600, (s % 3600) / 60, s % 60].map((n) => String(Math.floor(n)).padStart(2, '0')).join(':');
+  const minutes = Math.floor((Date.now() - since) / 60_000);
+  if (minutes < 1) return 'agora';
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`;
 }
 
 function buildScreen() {
-  const card = el('div', 'screen card');
+  const card = el('div', 'screen');
   card.hidden = true;
   const frame = el('div', 'frame');
   const video = el('video');
@@ -29,8 +32,10 @@ function buildScreen() {
     retryBtn,
   );
   frame.append(video, waiting, failed);
-  const pill = el('span', 'pill');
-  const hint = el('span', 'hint muted');
+  // Over the picture: "● Tela de Rafa" bottom-left, details bottom-right,
+  // the controls top-right (shown on hover).
+  const pill = el('span', 'pill glass screen-label');
+  const hint = el('span', 'pill glass screen-info');
   const soundBtn = el('button', 'btn small sound-btn');
   const volume = el('input', 'volume');
   volume.type = 'range';
@@ -46,11 +51,9 @@ function buildScreen() {
   video.addEventListener('leavepictureinpicture', () => (pipBtn.textContent = 'Janela flutuante'));
   const unwatchBtn = el('button', 'btn small');
   unwatchBtn.append(el('span', 'long', 'Parar de assistir'), el('span', 'short', 'Parar'));
-  const foot = el('div', 'screen-foot');
-  const actions = el('div', 'screen-actions'); // wraps below the label when space runs out
+  const actions = el('div', 'screen-actions glass');
   actions.append(soundBtn, volume, pipBtn, fullBtn, unwatchBtn);
-  foot.append(pill, hint, actions);
-  card.append(frame, foot);
+  card.append(frame, pill, hint, actions);
   $('screens').append(card);
   return { card, video, waiting, waitingText, watchBtn, failed, failedText, retryBtn, pill, hint, soundBtn, volume, pipBtn, fullBtn, unwatchBtn };
 }
@@ -68,22 +71,36 @@ function peerStatus(peer) {
   }
 }
 
+function capitalize(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// "Na sala" list: avatar, name and, below it, what the person is doing.
 function personRow(person) {
-  const li = el('li', 'row');
+  const li = el('li');
+  const row = el('div', 'person');
   const avatar = el('div', 'avatar');
   avatar.setAttribute('aria-hidden', 'true');
   paintAvatar(avatar, person.name, person.id, person.photo);
   markSpeaker(avatar, person);
-  const name = el('span', 'ellipsis', person.name);
-  if (person.self) name.append(el('span', 'muted', ' (você)'));
+  const text = el('div', 'person-text');
+  const name = el('span', 'person-name');
+  name.append(el('span', 'ellipsis', person.name));
   if (person.voiceIn) name.append(voiceIcon(person));
-  li.append(avatar, name, el('span', `end ${person.status[1]}`, person.status[0]));
+  const [status, cls] = person.self && !person.status[0].startsWith('compartilhando') ? ['Você', ''] : person.status;
+  text.append(name, el('span', `person-status ellipsis ${cls}`, capitalize(status)));
+  row.append(avatar, text);
+  li.append(row);
   return li;
 }
 
 function personTile(person) {
   const tile = el('div', person.self ? 'tile card self' : 'tile card');
   markSpeaker(tile, person);
+  tile.classList.toggle('is-live', person.status[1] === 'live');
+  // Shown in the strip under a shared screen as soon as the camera is on: the
+  // video is only requested once the card is visible, so it can't wait for it.
+  tile.classList.toggle('cam-on', !!person.camOn);
   if (person.camVideo) {
     // The same <video> moves into each rebuilt card, so the picture never restarts.
     tile.classList.add('has-cam');
@@ -94,9 +111,9 @@ function personTile(person) {
   avatar.setAttribute('aria-hidden', 'true');
   paintAvatar(avatar, person.name, person.id, person.photo);
   markSpeaker(avatar, person);
-  const status = person.self ? ['você', 'online'] : person.status;
+  const status = person.self ? ['você', ''] : person.status;
   const text = el('div', 'tile-text');
-  const name = el('strong', 'ellipsis', person.name);
+  const name = el('strong', 'ellipsis', person.self && mobile.matches ? 'Você' : person.name);
   if (person.voiceIn) name.append(voiceIcon(person));
   text.append(name, el('span', `status ${status[1]}`, status[0]));
   tile.append(avatar, text);
@@ -139,26 +156,27 @@ function refresh() {
     self: true, id: myId, name: myNick, photo: myPhoto,
     status: localTrack ? ['compartilhando', 'live'] : voice.joined ? ['na voz', 'online'] : ['na sala', 'online'],
     voiceIn: voice.joined, voiceMuted: voice.muted || voice.deafened, speaking: voice.speaking,
-    camVideo: cam.track ? myCamVideo : null,
+    camVideo: cam.track ? myCamVideo : null, camOn: !!cam.track,
   };
   const others = list.map((p) => ({
     id: p.id, name: displayName(p), photo: p.photo, status: peerStatus(p),
     voiceIn: p.voiceIn, voiceMuted: p.voiceMuted, speaking: p.speaking,
-    camVideo: camLive(p) ? p.camVideo : null,
+    camVideo: camLive(p) ? p.camVideo : null, camOn: p.camOn,
   }));
   const people = myId === null ? [] : [me, ...others];
 
-  $('online').textContent = people.length ? `● ${people.length}/${maxPeers} online` : '';
+  $('online').textContent = people.length ? `${people.length}/${maxPeers}` : '';
+  $('people-count').textContent = people.length ? `${people.length} ${people.length === 1 ? 'pessoa' : 'pessoas'} · ` : '';
   $('people').replaceChildren(...people.map(personRow));
   $('tiles').replaceChildren(...people.map(personTile));
-  $('tiles').classList.toggle('compact', people.length > 4 && !people.some((p) => p.camVideo)); // big avatars don't fit
+  $('tiles').classList.toggle('no-cams', !people.some((p) => p.camOn));
   observeTiles();
 
   const viewers = list.filter((p) => p.watchesMe).length;
   showScreen(localScreen, {
     visible: !!localTrack,
     watching: previewOn,
-    label: '● Você está compartilhando',
+    label: 'Sua tela',
     hint: `${viewers === 0 ? 'ninguém assistindo' : viewers === 1 ? '1 pessoa assistindo' : `${viewers} pessoas assistindo`} · ${localAudio ? 'com som' : 'sem som'}${shareMode === 'jogo' && (currentCaps().fps < 30 || currentCaps().maxHeight < 720) ? ` · ${currentCaps().maxHeight}p ${currentCaps().fps} FPS (ajuste automático)` : ''}`,
     waitingText: 'Sua tela está indo para quem clicar em Assistir. A prévia fica escondida para poupar o PC.',
     canUnwatch: previewOn,
@@ -169,8 +187,8 @@ function refresh() {
     showScreen(peer.screen, {
       visible: peer.sharing,
       watching: peer.iWatch,
-      label: `● ${name} está compartilhando`,
-      hint: failed ? '' : peer.iWatch ? (peer.hasAudio ? '' : 'sem som') : 'O vídeo só chega para quem assiste',
+      label: `Tela de ${name}`,
+      hint: failed ? '' : peer.iWatch ? [peer.quality, peer.hasAudio ? '' : 'sem som'].filter(Boolean).join(' · ') : '',
       sound: peer.iWatch && peer.hasAudio && !failed,
       waitingText: `${name} está compartilhando a tela`,
       canUnwatch: peer.iWatch && !failed,
@@ -182,6 +200,7 @@ function refresh() {
   }
   const shown = (localTrack ? 1 : 0) + list.filter((p) => p.sharing).length;
   $('empty').hidden = shown > 0;
+  $('content').classList.toggle('has-screens', shown > 0);
   $('screens').style.setProperty('--cols', shown > 2 ? 2 : 1);
   $('live').hidden = shown === 0;
   $('reconnecting').hidden = !reconnecting;
@@ -191,14 +210,31 @@ function refresh() {
   $('me-status').textContent = localTrack ? 'Compartilhando'
     : !voice.joined ? 'Na sala'
       : voice.deafened ? 'Na voz · sem som' : voice.muted ? 'Na voz · mudo' : 'Na voz';
-  $('me-status').className = me.status[1];
+  $('me-status').className = me.status[1] === 'live' ? 'live' : voice.joined ? 'online' : '';
   renderVoiceUi();
   renderCameraUi();
   syncDesktopKeys();
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
-  $('share-short').textContent = localTrack ? 'Parar' : 'Tela';
+  $('share-short').textContent = localTrack ? 'Parar' : 'Compartilhar';
+  $('share').classList.toggle('sharing', !!localTrack);
   $('mode-jogo').setAttribute('aria-pressed', String(shareMode === 'jogo'));
   $('mode-texto').setAttribute('aria-pressed', String(shareMode === 'texto'));
 }
 
+
+// "1080p · 30 fps" on the screens you watch: the receiver's own numbers, read
+// every 2 s and only for screens being watched (nothing runs otherwise).
+setInterval(async () => {
+  for (const peer of peers.values()) {
+    if (!peer.iWatch || !peer.sharing || !peer.transceiver) continue;
+    let quality = '';
+    (await peer.transceiver.receiver.getStats()).forEach((s) => {
+      if (s.type === 'inbound-rtp' && s.frameHeight) quality = `${s.frameHeight}p · ${Math.round(s.framesPerSecond || 0)} fps`;
+    });
+    if (quality !== peer.quality) {
+      peer.quality = quality;
+      peer.screen.hint.textContent = [quality, peer.hasAudio ? '' : 'sem som'].filter(Boolean).join(' · ');
+    }
+  }
+}, 2000);
