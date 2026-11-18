@@ -8,14 +8,20 @@
 // #75), unless the tooltip is open.
 // Idea and first version by Sydowz (#69), moved to the split room script.
 
-async function measureRtt(pc) {
+// Round-trip time of the pair in use, and whether it goes through the TURN
+// relay (a network that blocks direct connections) instead of peer to peer.
+async function measureRtt(pc, peer) {
   if (pc.connectionState !== 'connected') return null;
   let rtt = null;
-  (await pc.getStats()).forEach((s) => {
+  let local = null;
+  const report = await pc.getStats();
+  report.forEach((s) => {
     if (s.type === 'candidate-pair' && (s.selected || (s.nominated && s.state === 'succeeded')) && typeof s.currentRoundTripTime === 'number') {
       rtt = Math.round(s.currentRoundTripTime * 1000);
+      local = report.get(s.localCandidateId);
     }
   });
+  if (peer && local) peer.relayNow = local.candidateType === 'relay';
   return rtt;
 }
 
@@ -40,12 +46,13 @@ async function updatePing() {
   for (const peer of [...peers.values()].sort((a, b) => a.id - b.id)) {
     let rtt = null;
     try {
-      rtt = await measureRtt(peer.pc);
+      rtt = await measureRtt(peer.pc, peer);
     } catch { /* closed meanwhile */ }
-    if (rtt !== null) rows.push({ name: displayName(peer), rtt });
+    if (rtt !== null) rows.push({ name: displayName(peer), rtt, relay: !!peer.relayNow });
     const level = p2pLevel(rtt);
-    if (level !== (peer.p2p ?? 0)) {
+    if (level !== (peer.p2p ?? 0) || !!peer.relayNow !== !!peer.relay) {
       peer.p2p = level;
+      peer.relay = !!peer.relayNow;
       changed = true;
     }
   }
@@ -56,7 +63,7 @@ async function updatePing() {
   net.className = `net ${worst < 80 ? 'good' : worst < 200 ? 'mid' : 'bad'}`;
   $('net-tip').replaceChildren(...rows.map((r) => {
     const row = el('div', 'net-row');
-    row.append(el('span', 'ellipsis', r.name), el('strong', null, `${r.rtt} ms`));
+    row.append(el('span', 'ellipsis', r.name), el('strong', null, `${r.rtt} ms${r.relay ? ' · relay' : ''}`));
     return row;
   }));
   net.setAttribute('aria-label', `Ping: ${rows.map((r) => `${r.name} ${r.rtt} ms`).join(', ')}`);

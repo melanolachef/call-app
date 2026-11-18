@@ -126,11 +126,11 @@ $('join-form').onsubmit = (e) => {
 const ago = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' });
 function timeAgo(at) {
   const minutes = Math.round((Date.now() - at) / 60_000);
-  if (minutes < 1) return 'Agora há pouco';
+  if (minutes < 1) return 'agora há pouco';
   const text = minutes < 60 ? ago.format(-minutes, 'minute')
     : minutes < 24 * 60 ? ago.format(-Math.round(minutes / 60), 'hour')
       : ago.format(-Math.round(minutes / (24 * 60)), 'day');
-  return `Visitada ${text}`; // "Visitada ontem", "Visitada há 3 horas"
+  return `visitada ${text}`; // "visitada ontem", "visitada há 3 horas"
 }
 
 // Right side of a row: "● 3 agora" in green, or "Vazia".
@@ -154,6 +154,15 @@ function iconButton(svg, label, pressed) {
   return button;
 }
 
+// One square per person in the room (up to 3). Only counts: the server
+// doesn't know names, and the lobby shouldn't expose who is where.
+function presence(count) {
+  const faces = el('span', 'presence');
+  faces.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < Math.min(count || 0, 3); i++) faces.append(el('i'));
+  return faces;
+}
+
 function roomItem(room) {
   const name = displayRoomName(room.id);
   const li = el('li');
@@ -164,15 +173,19 @@ function roomItem(room) {
   icon.setAttribute('aria-hidden', 'true');
   if (room.home) icon.innerHTML = ICON_HOME;
   else icon.textContent = Array.from(name)[0] ?? '#';
+  // "Block [fixa]" over the room code in mono ("block-q81zd0 · visitada
+  // ontem"), then who is there and "Entrar", as in the design.
   const text = el('span', 'room-text');
-  const when = room.home ? 'Sua sala fixa' : `${room.pinned ? 'Fixada · ' : ''}${timeAgo(room.at)}`;
-  text.append(el('strong', 'ellipsis', name), el('span', 'room-meta ellipsis', when));
+  const title = el('span', 'room-title');
+  title.append(el('strong', 'ellipsis', name));
+  if (room.home) title.append(el('span', 'tag', 'fixa'));
+  else if (room.pinned) title.append(el('span', 'tag', 'fixada'));
+  const meta = el('span', 'room-meta ellipsis');
+  meta.append(el('span', 'mono', room.id));
+  if (!room.home) meta.append(` · ${timeAgo(room.at)}`);
+  text.append(title, meta);
   const [people, cls] = peopleText(room.id);
-  const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  chevron.setAttribute('viewBox', '0 0 24 24');
-  chevron.setAttribute('class', 'chevron');
-  chevron.innerHTML = '<path d="M9 6l6 6-6 6"/>';
-  link.append(icon, text, el('span', `room-count ${cls}`, people), chevron);
+  link.append(icon, text, presence(counts[room.id]), el('span', `room-count ${cls}`, people), el('span', 'room-enter', 'Entrar'));
   row.append(link);
 
   if (!room.home) { // the fixed room can't be pinned or removed
