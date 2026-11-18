@@ -60,16 +60,17 @@ async function photoFromFile(file) {
 
 function initials(name) {
   const words = name.trim().split(/\s+/).filter(Boolean);
+  // One letter, as in the design; two only for two-word names ("Ana Paula" → AP).
   const chars = words.length > 1
     ? [Array.from(words[0])[0], Array.from(words[1])[0]]
-    : Array.from(words[0] ?? '?').slice(0, 2);
+    : Array.from(words[0] ?? '?').slice(0, 1);
   return chars.join('').toUpperCase();
 }
 
 function paintAvatar(node, name, id, photo) {
   node.textContent = photo ? '' : initials(name || '?');
-  node.style.backgroundColor = AVATAR_COLORS[((id ?? 1) - 1) % AVATAR_COLORS.length];
   // Safe inside url(""): validPhoto() only lets base64 characters through.
+  // Without a photo, the CSS grey gradient shows.
   node.style.backgroundImage = photo ? `url("${photo}")` : '';
 }
 
@@ -170,8 +171,8 @@ function toast(text, ms = 2500) {
 // Accent, theme and background: only on this screen, saved in this browser.
 // Changes apply live behind the dialog; theme.js (in <head>) applies them on
 // every page load. Nothing here runs per frame.
-const ACCENTS = [['Roxo', '#7C5CFF'], ['Azul', '#3B82F6'], ['Ciano', '#06B6D4'], ['Verde', '#22C55E'], ['Rosa', '#EC4899'], ['Laranja', '#F97316']];
-const THEME_CHOICES = [['escuro', 'Escuro'], ['amoled', 'AMOLED'], ['meia-noite', 'Meia-noite']];
+const ACCENTS = [['Azul', '#0A84FF'], ['Roxo', '#7C5CFF'], ['Ciano', '#64D2FF'], ['Verde', '#30D158'], ['Rosa', '#FF375F'], ['Laranja', '#FF9F0A']];
+const THEME_CHOICES = [['escuro', 'Escuro'], ['grafite', 'Grafite'], ['meia-noite', 'Meia-noite']];
 const BG_CHOICES = [['none', 'Nenhum'], ['aurora', 'Aurora'], ['por-do-sol', 'Pôr do sol'], ['oceano', 'Oceano'], ['image', 'Sua imagem']];
 const MAX_BG_IMAGE = 1_800_000; // characters of data URL (localStorage holds ~5 MB)
 

@@ -48,8 +48,10 @@ const ROOM_JS: &str = concat!(
     include_str!("../static/room/webrtc.js"),
     include_str!("../static/room/compartilhar.js"),
     include_str!("../static/room/voz.js"),
+    include_str!("../static/room/camera.js"),
     include_str!("../static/room/ptt.js"),
     include_str!("../static/room/chat.js"),
+    include_str!("../static/room/emojis.js"),
     include_str!("../static/room/notificacoes.js"),
     include_str!("../static/room/reacoes.js"),
     include_str!("../static/room/lateral.js"),
@@ -62,6 +64,9 @@ const COMMON_CSS: &str = include_str!("../static/common.css");
 const THEME_JS: &str = include_str!("../static/theme.js");
 const FAVICON_SVG: &str = include_str!("../static/favicon.svg");
 const TOUCH_ICON_PNG: &[u8] = include_bytes!("../static/apple-touch-icon.png");
+// Inter (variable, Latin subset), served from here instead of Google Fonts so
+// opening the app never tells a third party who is online. License: static/fonts/OFL.txt.
+const INTER_WOFF2: &[u8] = include_bytes!("../static/fonts/inter.woff2");
 
 /// Most rooms the lobby may ask about in one request.
 const MAX_COUNT_IDS: usize = 30;
@@ -126,6 +131,18 @@ fn app(rooms: Rooms, ice: Arc<Ice>) -> Router {
         .route(
             "/favicon.ico",
             get(|| async { icon("image/png", TOUCH_ICON_PNG) }),
+        )
+        .route(
+            "/fonts/inter.woff2",
+            get(|| async {
+                (
+                    [
+                        (header::CONTENT_TYPE, "font/woff2"),
+                        (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+                    ],
+                    INTER_WOFF2,
+                )
+            }),
         )
         .route("/api/rooms", get(room_counts))
         .route("/api/ice", get(ice_servers))
@@ -280,6 +297,9 @@ mod tests {
         assert!(get("/apple-touch-icon.png")
             .await
             .contains("content-type: image/png"));
+        assert!(get("/fonts/inter.woff2")
+            .await
+            .contains("content-type: font/woff2"));
         let health = get("/health").await;
         assert!(health.starts_with("HTTP/1.1 200") && health.ends_with("ok"));
     }

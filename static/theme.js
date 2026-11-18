@@ -5,18 +5,18 @@
 // pages; the editing dialog lives in common.js. Everything is static CSS: no
 // blur, no animation, nothing that costs per frame (the app is for gamers).
 
-const THEME_VARS = ['--bg', '--card', '--raised', '--frame', '--border', '--border-strong'];
+const THEME_VARS = ['--bg', '--card', '--raised', '--raised-2', '--frame', '--border', '--border-strong'];
 const THEMES = {
-  escuro: {},
-  amoled: { '--bg': '#000000', '--card': '#0B0B0E', '--raised': '#17181D', '--frame': '#0F1014', '--border': '#1C1D24', '--border-strong': '#262833' },
-  'meia-noite': { '--bg': '#0A0F1F', '--card': '#111933', '--raised': '#1A2444', '--frame': '#141D38', '--border': '#1E2A4A', '--border-strong': '#2A3A60' },
+  escuro: {}, // the design: black with grey cards
+  grafite: { '--bg': '#141416', '--card': '#232326', '--raised': '#323236', '--raised-2': '#424247', '--frame': '#18181B', '--border': '#323236', '--border-strong': '#45454A' },
+  'meia-noite': { '--bg': '#0A0F1F', '--card': '#111933', '--raised': '#1A2444', '--raised-2': '#243056', '--frame': '#0D1428', '--border': '#1E2A4A', '--border-strong': '#2A3A60' },
 };
 const BACKGROUNDS = {
   aurora: 'radial-gradient(circle at 15% 20%, rgb(124 92 255 / .38), transparent 45%), radial-gradient(circle at 85% 25%, rgb(59 217 138 / .22), transparent 40%), radial-gradient(circle at 50% 95%, rgb(59 130 246 / .28), transparent 50%)',
   'por-do-sol': 'linear-gradient(160deg, #1d0d2b 0%, #4a1838 45%, #8f3a2c 100%)',
   oceano: 'linear-gradient(160deg, #03141c 0%, #08354a 50%, #0b5561 100%)',
 };
-const DEFAULT_APPEARANCE = { accent: '#7C5CFF', theme: 'escuro', background: 'none' };
+const DEFAULT_APPEARANCE = { accent: '#0A84FF', theme: 'escuro', background: 'none' };
 
 function loadAppearance() {
   try {

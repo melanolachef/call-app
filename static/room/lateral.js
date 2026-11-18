@@ -21,13 +21,10 @@ function hudItem(room) {
       if (!okToLeave()) e.preventDefault();
     };
   }
-  const icon = el('span', 'hud-icon', room.home ? '★' : '#');
-  icon.style.background = colorFor(room.id);
-  icon.setAttribute('aria-hidden', 'true');
   const count = hudCounts[room.id];
-  const text = el('span', 'hud-count', count > 0 ? `● ${count}` : '');
-  if (count > 0) text.classList.add('online');
-  link.append(icon, el('span', 'hud-name ellipsis', displayRoomName(room.id)), text);
+  const text = el('span', 'hud-count', count === undefined ? '' : count === 0 ? 'vazia' : `${count} ${count === 1 ? 'pessoa' : 'pessoas'}`);
+  if (count > 0 && !current) text.classList.add('online');
+  link.append(el('span', 'hud-name ellipsis', displayRoomName(room.id)), text);
   const li = el('li');
   li.append(link);
   return li;
@@ -38,19 +35,13 @@ function renderHud() {
 }
 
 async function updateHudCounts() {
-  if (document.hidden || !$('hud').open) return; // nothing to show while folded
+  if (document.hidden) return;
   const fresh = await fetchRoomCounts(orderedRooms().map((r) => r.id));
   if (!fresh) return; // offline: keep the last numbers
   hudCounts = fresh;
   renderHud();
 }
 
-// Folded by default so the chat keeps its space; remembered per browser.
-$('hud').open = load('hud-open') === '1';
-$('hud').ontoggle = () => {
-  save('hud-open', $('hud').open ? '1' : '');
-  updateHudCounts();
-};
 
 $('hud-new').onsubmit = (e) => {
   e.preventDefault();
@@ -89,7 +80,6 @@ async function invite() {
   }
 }
 $('invite').onclick = invite;
-$('invite-side').onclick = invite;
 
 const notice = $('notice');
 const RELOAD = { label: 'Entrar de novo', run: () => location.reload() };
