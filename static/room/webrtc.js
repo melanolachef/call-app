@@ -57,6 +57,7 @@ function createPeer(id, initiator) {
   }
 
   send(id, profileMsg());
+  sendBannerImage(id);
   if (localTrack) send(id, { sharing: true, audio: !!localAudio });
   if (voice.joined) send(id, { voice: voiceState() });
   if (cam.track) send(id, { camera: true });
@@ -175,6 +176,9 @@ async function handleSignal(peer, data) {
     sendVoiceTo(peer);
     applyVoiceOutput();
     refresh();
+  } else if ('bannerImage' in data) {
+    peer.bannerImage = validBannerImage(data.bannerImage);
+    refresh();
   } else if ('camera' in data) {
     peer.camOn = !!data.camera;
     updateCamWants();
@@ -229,6 +233,7 @@ function handleProfile(peer, data) {
   peer.nick = cleanNick(data.nick);
   peer.photo = validPhoto(data.photo);
   peer.hwH264 = data.hwH264 === true;
+  peer.bannerColor = validBannerColor(data.banner);
   peer.resolveProfile();
   if (!peer.announced) {
     peer.announced = true; // wait for the nick so the line has a name

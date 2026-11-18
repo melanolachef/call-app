@@ -75,10 +75,78 @@ function capitalize(text) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+// ---------- cartão de perfil ----------
+
+// Clicking someone opens their card, as in Discord: banner, photo, name and
+// what they are doing. Yours has a shortcut to edit the profile.
+const personCard = $('person-card');
+let personCardFor = null;
+
+function openPersonCard(person, anchor) {
+  personCardFor = person.id;
+  paintBanner($('pc-banner'), person.bannerColor, person.bannerImage);
+  paintAvatar($('pc-avatar'), person.name, person.id, person.photo);
+  $('pc-name').textContent = person.name;
+  $('pc-status').textContent = person.self ? 'Você' : capitalize(person.status[0]);
+  $('pc-status').className = `pc-status ${person.self ? '' : person.status[1]}`;
+  $('pc-edit').hidden = !person.self;
+  personCard.hidden = false;
+  // Beside the clicked row or card, kept inside the window; centered on phones.
+  if (mobile.matches) {
+    Object.assign(personCard.style, { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
+  } else {
+    const rect = anchor.getBoundingClientRect();
+    const w = personCard.offsetWidth;
+    const h = personCard.offsetHeight;
+    const left = rect.right + 12 + w < innerWidth ? rect.right + 12 : Math.max(12, rect.left - 12 - w);
+    const top = Math.min(Math.max(12, rect.top), innerHeight - h - 12);
+    Object.assign(personCard.style, { left: `${left}px`, top: `${top}px`, transform: '' });
+  }
+  $('pc-close').focus();
+}
+
+function closePersonCard() {
+  personCard.hidden = true;
+  personCardFor = null;
+}
+
+function clickable(node, person) {
+  node.tabIndex = 0;
+  node.setAttribute('role', 'button');
+  node.setAttribute('aria-label', `Perfil de ${person.name}`);
+  node.onclick = () => (personCardFor === person.id && !personCard.hidden ? closePersonCard() : openPersonCard(person, node));
+  node.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      node.click();
+    }
+  };
+}
+
+$('pc-close').onclick = closePersonCard;
+$('pc-edit').onclick = () => {
+  closePersonCard();
+  openProfile();
+};
+document.addEventListener('pointerdown', (e) => {
+  if (!personCard.hidden && !personCard.contains(e.target) && !e.target.closest('[role="button"][aria-label^="Perfil de"]')) closePersonCard();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !personCard.hidden) closePersonCard();
+});
+
+// Banner behind a card on the stage: the image darkened, or the color blended in.
+function tileBackground(person) {
+  if (person.bannerImage) return `linear-gradient(rgb(0 0 0 / .45), rgb(0 0 0 / .62)), url("${person.bannerImage}") center / cover no-repeat`;
+  if (person.bannerColor) return `color-mix(in srgb, ${person.bannerColor} 42%, var(--card))`;
+  return '';
+}
+
 // "Na sala" list: avatar, name and, below it, what the person is doing.
 function personRow(person) {
   const li = el('li');
   const row = el('div', 'person');
+  clickable(row, person);
   const avatar = el('div', 'avatar');
   avatar.setAttribute('aria-hidden', 'true');
   paintAvatar(avatar, person.name, person.id, person.photo);
@@ -97,6 +165,9 @@ function personRow(person) {
 function personTile(person) {
   const tile = el('div', person.self ? 'tile card self' : 'tile card');
   markSpeaker(tile, person);
+  clickable(tile, person);
+  const background = tileBackground(person);
+  if (background) tile.style.setProperty('--tile-bg', background);
   tile.classList.toggle('is-live', person.status[1] === 'live');
   // Shown in the strip under a shared screen as soon as the camera is on: the
   // video is only requested once the card is visible, so it can't wait for it.
@@ -157,13 +228,27 @@ function refresh() {
     status: localTrack ? ['compartilhando', 'live'] : voice.joined ? ['na voz', 'online'] : ['na sala', 'online'],
     voiceIn: voice.joined, voiceMuted: voice.muted || voice.deafened, speaking: voice.speaking,
     camVideo: cam.track ? myCamVideo : null, camOn: !!cam.track,
+    bannerColor: validBannerColor(load('bannerColor')), bannerImage: validBannerImage(load('bannerImage')),
   };
   const others = list.map((p) => ({
     id: p.id, name: displayName(p), photo: p.photo, status: peerStatus(p),
     voiceIn: p.voiceIn, voiceMuted: p.voiceMuted, speaking: p.speaking,
     camVideo: camLive(p) ? p.camVideo : null, camOn: p.camOn,
+    bannerColor: p.bannerColor || '', bannerImage: p.bannerImage || '',
   }));
   const people = myId === null ? [] : [me, ...others];
+  // An open card follows changes (status, banner) or closes if the person left.
+  const carded = people.find((p) => p.id === personCardFor);
+  if (!personCard.hidden) {
+    if (carded) {
+      paintBanner($('pc-banner'), carded.bannerColor, carded.bannerImage);
+      paintAvatar($('pc-avatar'), carded.name, carded.id, carded.photo);
+      $('pc-name').textContent = carded.name;
+      if (!carded.self) $('pc-status').textContent = capitalize(carded.status[0]);
+    } else {
+      closePersonCard();
+    }
+  }
 
   $('online').textContent = people.length ? `${people.length}/${maxPeers}` : '';
   $('people-count').textContent = people.length ? `${people.length} ${people.length === 1 ? 'pessoa' : 'pessoas'} · ` : '';

@@ -20,10 +20,14 @@ function load(key) {
   try { return localStorage.getItem(key) || ''; } catch { return ''; }
 }
 
+// Returns false when the browser refused (storage full or blocked).
 function save(key, value) {
   try {
     if (value) localStorage.setItem(key, value); else localStorage.removeItem(key);
-  } catch { /* private mode: keep it in memory */ }
+    return true;
+  } catch {
+    return false; // private mode: keep it in memory
+  }
 }
 
 // ---------- perfil ----------
@@ -37,25 +41,6 @@ function cleanNick(value) {
 function validPhoto(value) {
   return typeof value === 'string' && value.length <= MAX_PHOTO &&
     /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(value) ? value : '';
-}
-
-// Center-crops and shrinks the picked image to a small JPEG data URL.
-async function photoFromFile(file) {
-  const bitmap = await createImageBitmap(file);
-  const size = 128;
-  const side = Math.min(bitmap.width, bitmap.height);
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#1F2230'; // JPEG has no transparency
-  ctx.fillRect(0, 0, size, size);
-  ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, size, size);
-  bitmap.close();
-  for (const quality of [0.85, 0.7, 0.5]) {
-    const url = canvas.toDataURL('image/jpeg', quality);
-    if (url.length <= MAX_PHOTO) return url;
-  }
-  throw new Error('foto grande demais');
 }
 
 function initials(name) {
@@ -74,46 +59,274 @@ function paintAvatar(node, name, id, photo) {
   node.style.backgroundImage = photo ? `url("${photo}")` : '';
 }
 
-// ---------- diálogo de perfil e toast (marcação comum às duas páginas) ----------
+// ---------- banner (como no Discord) ----------
+
+// A color, or an image cut to 3:1. Like the photo, it lives in this browser
+// and goes to the others through the signaling relay; the image travels in a
+// message of its own, so photo + banner never get near the 64 KB limit.
+const MAX_BANNER_IMAGE = 30_000;
+const BANNER_COLORS = ['#0A84FF', '#5E5CE6', '#BF5AF2', '#FF375F', '#FF9F0A', '#30D158', '#64D2FF', '#636366'];
+
+function validBannerColor(value) {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : '';
+}
+
+function validBannerImage(value) {
+  return typeof value === 'string' && value.length <= MAX_BANNER_IMAGE &&
+    /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(value) ? value : '';
+}
+
+// Image first, then color, else the default gradient from the CSS.
+function paintBanner(node, color, image) {
+  // Safe inside url(""): validBannerImage() only lets base64 characters through.
+  node.style.backgroundImage = image ? `url("${image}")` : color ? 'none' : '';
+  node.style.backgroundColor = color || '';
+}
+
+// ---------- recorte de imagem (foto e banner) ----------
+
+// Drag to place, zoom with the slider, the mouse wheel or two fingers; a
+// rule-of-thirds grid helps to frame. Everything happens on a canvas in this
+// browser; only the small JPEG that comes out is kept.
+const CROP_STAGE = 320;
+const ICON_MINUS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>';
+const ICON_PLUS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+const ICON_PENCIL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>';
+const ICON_CAMERA = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
 
 document.body.insertAdjacentHTML('beforeend', `
-  <dialog id="profile" aria-labelledby="profile-title">
+  <dialog id="profile" class="profile-dialog" aria-labelledby="profile-title">
     <form id="profile-form">
-      <div class="banner"></div>
+      <div class="banner" id="preview-banner">
+        <button type="button" class="banner-btn" id="banner-edit" title="Imagem do banner" aria-label="Escolher imagem do banner">${ICON_PENCIL}</button>
+      </div>
       <div class="dialog-body">
         <div class="avatar-row">
-          <div class="avatar big" id="preview-avatar" aria-hidden="true"></div>
+          <button type="button" class="avatar-btn" id="photo-change" title="Trocar foto" aria-label="Trocar foto">
+            <span class="avatar big" id="preview-avatar" aria-hidden="true"></span>
+            <span class="avatar-badge" aria-hidden="true">${ICON_CAMERA}</span>
+          </button>
           <button type="button" class="btn small" id="photo-pick">Adicionar foto</button>
           <button type="button" class="btn small" id="photo-remove">Remover</button>
           <input type="file" id="photo-input" accept="image/*" hidden>
         </div>
         <div class="heading">
           <h2 id="profile-title">Como seus amigos vão te ver?</h2>
-          <span class="muted">Nick e foto aparecem só para quem está na sala.</span>
+          <span class="muted">Nick, foto e banner aparecem só para quem está na sala.</span>
         </div>
         <label class="field">
           <span class="muted">Nick</span>
           <input id="nick-input" maxlength="32" autocomplete="nickname" required>
         </label>
+        <div class="field">
+          <span class="muted">Banner</span>
+          <div class="swatches" id="banner-colors" role="group" aria-label="Cor do banner"></div>
+          <input type="file" id="banner-input" accept="image/*" hidden>
+        </div>
         <button class="btn small primary" id="profile-submit">Salvar</button>
         <button type="button" class="btn small" id="open-appearance">Personalizar aparência</button>
       </div>
     </form>
   </dialog>
+  <dialog id="cropper" aria-labelledby="crop-title">
+    <div class="dialog-body">
+      <div class="heading">
+        <h2 id="crop-title">Ajustar foto</h2>
+        <span class="muted">Arraste para posicionar e use o zoom.</span>
+      </div>
+      <div class="crop-stage" id="crop-stage" tabindex="0" aria-label="Imagem: arraste ou use as setas; + e − para zoom">
+        <canvas id="crop-canvas"></canvas>
+        <div class="crop-frame" id="crop-frame"></div>
+      </div>
+      <div class="crop-zoom">
+        <button type="button" class="icon-btn" id="crop-out" aria-label="Diminuir zoom">${ICON_MINUS}</button>
+        <input type="range" id="crop-zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
+        <button type="button" class="icon-btn" id="crop-in" aria-label="Aumentar zoom">${ICON_PLUS}</button>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn small" id="crop-cancel">Cancelar</button>
+        <button type="button" class="btn small primary" id="crop-apply">Aplicar</button>
+      </div>
+    </div>
+  </dialog>
   <div class="toast" id="toast" role="status" hidden></div>
 `);
 
-let draftPhoto = ''; // photo being edited in the profile dialog
+const crop = { bitmap: null, zoom: 1, x: 0, y: 0, frame: null, opts: null, resolve: null, pointers: new Map(), pinch: null };
+
+function cropScale() {
+  const { bitmap, frame } = crop;
+  return Math.max(frame.w / bitmap.width, frame.h / bitmap.height) * crop.zoom;
+}
+
+// The image always covers the frame: no empty corners in the result.
+function clampCrop() {
+  const s = cropScale();
+  const { frame } = crop;
+  crop.x = Math.min(frame.x, Math.max(frame.x + frame.w - crop.bitmap.width * s, crop.x));
+  crop.y = Math.min(frame.y, Math.max(frame.y + frame.h - crop.bitmap.height * s, crop.y));
+}
+
+function drawCrop() {
+  const canvas = $('crop-canvas');
+  const dpr = devicePixelRatio || 1;
+  canvas.width = CROP_STAGE * dpr;
+  canvas.height = CROP_STAGE * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, CROP_STAGE, CROP_STAGE);
+  const s = cropScale();
+  ctx.drawImage(crop.bitmap, crop.x, crop.y, crop.bitmap.width * s, crop.bitmap.height * s);
+  $('crop-zoom').value = String(crop.zoom);
+}
+
+// Zooms keeping the point (cx, cy) of the stage still (the frame's center by default).
+function setCropZoom(zoom, cx = crop.frame.x + crop.frame.w / 2, cy = crop.frame.y + crop.frame.h / 2) {
+  const next = Math.min(4, Math.max(1, zoom));
+  const ratio = next / crop.zoom;
+  crop.x = cx - (cx - crop.x) * ratio;
+  crop.y = cy - (cy - crop.y) * ratio;
+  crop.zoom = next;
+  clampCrop();
+  drawCrop();
+}
+
+function stagePoint(e) {
+  const rect = $('crop-stage').getBoundingClientRect();
+  return { x: (e.clientX - rect.left) * (CROP_STAGE / rect.width), y: (e.clientY - rect.top) * (CROP_STAGE / rect.height) };
+}
+
+const cropStage = $('crop-stage');
+cropStage.onpointerdown = (e) => {
+  cropStage.setPointerCapture(e.pointerId);
+  crop.pointers.set(e.pointerId, stagePoint(e));
+  cropStage.classList.add('dragging');
+  if (crop.pointers.size === 2) {
+    const [a, b] = [...crop.pointers.values()];
+    crop.pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: crop.zoom };
+  }
+};
+cropStage.onpointermove = (e) => {
+  const last = crop.pointers.get(e.pointerId);
+  if (!last) return;
+  const now = stagePoint(e);
+  crop.pointers.set(e.pointerId, now);
+  if (crop.pointers.size === 2 && crop.pinch) { // two fingers: zoom around their middle
+    const [a, b] = [...crop.pointers.values()];
+    setCropZoom(crop.pinch.zoom * Math.hypot(a.x - b.x, a.y - b.y) / crop.pinch.dist, (a.x + b.x) / 2, (a.y + b.y) / 2);
+    return;
+  }
+  crop.x += now.x - last.x;
+  crop.y += now.y - last.y;
+  clampCrop();
+  drawCrop();
+};
+cropStage.onpointerup = cropStage.onpointercancel = (e) => {
+  crop.pointers.delete(e.pointerId);
+  if (crop.pointers.size < 2) crop.pinch = null;
+  if (!crop.pointers.size) cropStage.classList.remove('dragging');
+};
+cropStage.onwheel = (e) => {
+  e.preventDefault();
+  const p = stagePoint(e);
+  setCropZoom(crop.zoom * Math.exp(-e.deltaY * 0.0015), p.x, p.y);
+};
+cropStage.onkeydown = (e) => {
+  const step = e.shiftKey ? 30 : 8;
+  const moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+  if (moves[e.key]) {
+    crop.x += moves[e.key][0];
+    crop.y += moves[e.key][1];
+    clampCrop();
+    drawCrop();
+  } else if (e.key === '+' || e.key === '=') {
+    setCropZoom(crop.zoom * 1.1);
+  } else if (e.key === '-') {
+    setCropZoom(crop.zoom / 1.1);
+  } else {
+    return;
+  }
+  e.preventDefault();
+};
+$('crop-zoom').oninput = () => setCropZoom(Number($('crop-zoom').value));
+$('crop-in').onclick = () => setCropZoom(crop.zoom * 1.2);
+$('crop-out').onclick = () => setCropZoom(crop.zoom / 1.2);
+
+function finishCrop(result) {
+  const { resolve } = crop;
+  crop.resolve = null;
+  crop.bitmap?.close();
+  crop.bitmap = null;
+  if ($('cropper').open) $('cropper').close();
+  resolve?.(result);
+}
+
+$('crop-cancel').onclick = () => finishCrop(null);
+$('cropper').oncancel = (e) => {
+  e.preventDefault(); // Esc: cancel the crop, keep the profile dialog open
+  finishCrop(null);
+};
+$('crop-apply').onclick = () => {
+  const { opts, frame } = crop;
+  const s = cropScale();
+  const canvas = document.createElement('canvas');
+  canvas.width = opts.width;
+  canvas.height = opts.height;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#1C1C1E'; // JPEG has no transparency
+  ctx.fillRect(0, 0, opts.width, opts.height);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(crop.bitmap, (frame.x - crop.x) / s, (frame.y - crop.y) / s, frame.w / s, frame.h / s, 0, 0, opts.width, opts.height);
+  for (const quality of [0.86, 0.75, 0.62, 0.5, 0.4]) {
+    const url = canvas.toDataURL('image/jpeg', quality);
+    if (url.length <= opts.max) {
+      finishCrop(url);
+      return;
+    }
+  }
+  toast('Essa imagem ficou pesada demais. Tente outra.');
+};
+
+// Opens the cropper for `file`; resolves to a JPEG data URL, or null if cancelled.
+// opts: { title, aspect (width/height), round, width, height, max (characters) }
+async function cropImage(file, opts) {
+  const bitmap = await createImageBitmap(file); // throws for files that aren't images
+  crop.bitmap = bitmap;
+  crop.opts = opts;
+  crop.zoom = 1;
+  const w = opts.aspect >= 1 ? CROP_STAGE - 40 : (CROP_STAGE - 40) * opts.aspect;
+  const h = w / opts.aspect;
+  crop.frame = { x: (CROP_STAGE - w) / 2, y: (CROP_STAGE - h) / 2, w, h };
+  const frameEl = $('crop-frame');
+  Object.assign(frameEl.style, { left: `${(crop.frame.x / CROP_STAGE) * 100}%`, top: `${(crop.frame.y / CROP_STAGE) * 100}%`, width: `${(w / CROP_STAGE) * 100}%`, height: `${(h / CROP_STAGE) * 100}%` });
+  frameEl.classList.toggle('round', !!opts.round);
+  const s = cropScale(); // centered
+  crop.x = crop.frame.x + (w - bitmap.width * s) / 2;
+  crop.y = crop.frame.y + (h - bitmap.height * s) / 2;
+  $('crop-title').textContent = opts.title;
+  drawCrop();
+  $('cropper').showModal();
+  cropStage.focus();
+  return new Promise((resolve) => (crop.resolve = resolve));
+}
+
+// ---------- diálogo de perfil ----------
+
+let draftPhoto = ''; // what the profile dialog is editing, saved only on "Salvar"
+let draftBannerColor = '';
+let draftBannerImage = '';
 let profileColorId = 1;
 let profileRequired = false;
 let profileOnSave = null;
 
-// Opens the profile dialog; `onSave(nick, photo)` runs after both are stored.
+// Opens the profile dialog; `onSave(nick, photo)` runs after everything is stored.
 function openProfileDialog({ title, submitLabel, required = false, nick, photo, colorId, onSave }) {
   $('profile-title').textContent = title;
   $('profile-submit').textContent = submitLabel;
   $('nick-input').value = nick;
   draftPhoto = photo;
+  draftBannerColor = validBannerColor(load('bannerColor'));
+  draftBannerImage = validBannerImage(load('bannerImage'));
   profileColorId = colorId ?? 1;
   profileRequired = required;
   profileOnSave = onSave;
@@ -121,29 +334,106 @@ function openProfileDialog({ title, submitLabel, required = false, nick, photo, 
   $('profile').showModal();
 }
 
-function updateProfilePreview() {
-  paintAvatar($('preview-avatar'), cleanNick($('nick-input').value), profileColorId, draftPhoto);
-  $('photo-remove').hidden = !draftPhoto;
-  $('photo-pick').textContent = draftPhoto ? 'Trocar foto' : 'Adicionar foto';
+function bannerSwatch(color, label) {
+  const button = el('button', 'swatch');
+  button.type = 'button';
+  button.style.background = color;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.setAttribute('aria-pressed', String(!draftBannerImage && draftBannerColor.toLowerCase() === color.toLowerCase()));
+  button.onclick = () => {
+    draftBannerColor = color;
+    draftBannerImage = '';
+    updateProfilePreview();
+  };
+  return button;
 }
 
-$('nick-input').oninput = updateProfilePreview;
+function renderBannerChoices() {
+  const isPreset = BANNER_COLORS.some((c) => c.toLowerCase() === draftBannerColor.toLowerCase());
+  // Free color: the picker stays open while dragging (only the preview changes);
+  // the buttons are rebuilt once it closes.
+  const custom = el('label', 'swatch swatch-custom');
+  custom.title = 'Outra cor';
+  custom.setAttribute('aria-pressed', String(!draftBannerImage && !!draftBannerColor && !isPreset));
+  if (draftBannerColor && !isPreset) custom.style.background = draftBannerColor;
+  const input = el('input');
+  input.type = 'color';
+  input.value = draftBannerColor || '#0A84FF';
+  input.setAttribute('aria-label', 'Escolher outra cor de banner');
+  input.oninput = () => {
+    draftBannerColor = input.value;
+    draftBannerImage = '';
+    custom.style.background = input.value;
+    paintBanner($('preview-banner'), draftBannerColor, '');
+  };
+  input.onchange = updateProfilePreview;
+  custom.append(input);
+  const image = el('button', 'swatch swatch-image');
+  image.type = 'button';
+  image.title = 'Imagem';
+  image.setAttribute('aria-label', 'Usar uma imagem no banner');
+  image.setAttribute('aria-pressed', String(!!draftBannerImage));
+  if (draftBannerImage) image.style.backgroundImage = `url("${draftBannerImage}")`;
+  else image.innerHTML = ICON_PLUS;
+  image.onclick = () => $('banner-input').click();
+  const choices = [...BANNER_COLORS.map((c) => bannerSwatch(c, 'Cor do banner')), custom, image];
+  if (draftBannerColor || draftBannerImage) {
+    const none = el('button', 'swatch swatch-none');
+    none.type = 'button';
+    none.title = 'Sem banner';
+    none.setAttribute('aria-label', 'Tirar o banner');
+    none.onclick = () => {
+      draftBannerColor = '';
+      draftBannerImage = '';
+      updateProfilePreview();
+    };
+    choices.push(none);
+  }
+  $('banner-colors').replaceChildren(...choices);
+}
+
+function updateProfilePreview() {
+  paintAvatar($('preview-avatar'), cleanNick($('nick-input').value), profileColorId, draftPhoto);
+  paintBanner($('preview-banner'), draftBannerColor, draftBannerImage);
+  $('photo-remove').hidden = !draftPhoto;
+  $('photo-pick').textContent = draftPhoto ? 'Trocar foto' : 'Adicionar foto';
+  renderBannerChoices();
+}
+
+async function pickImage(input, opts, apply) {
+  const file = input.files[0];
+  input.value = ''; // picking the same file again still fires onchange
+  if (!file) return;
+  try {
+    const url = await cropImage(file, opts);
+    if (url) {
+      apply(url);
+      updateProfilePreview();
+    }
+  } catch {
+    finishCrop(null);
+    toast('Não deu para usar essa imagem');
+  }
+}
+
+$('nick-input').oninput = () => paintAvatar($('preview-avatar'), cleanNick($('nick-input').value), profileColorId, draftPhoto);
 $('photo-pick').onclick = () => $('photo-input').click();
+$('photo-change').onclick = () => $('photo-input').click();
 $('photo-remove').onclick = () => {
   draftPhoto = '';
   updateProfilePreview();
 };
-$('photo-input').onchange = async () => {
-  const file = $('photo-input').files[0];
-  $('photo-input').value = ''; // picking the same file again still fires onchange
-  if (!file) return;
-  try {
-    draftPhoto = await photoFromFile(file);
-    updateProfilePreview();
-  } catch {
-    toast('Não deu para usar essa imagem');
-  }
-};
+$('photo-input').onchange = () => pickImage($('photo-input'),
+  { title: 'Ajustar foto', aspect: 1, round: true, width: 192, height: 192, max: MAX_PHOTO },
+  (url) => (draftPhoto = url));
+$('banner-edit').onclick = () => $('banner-input').click();
+$('banner-input').onchange = () => pickImage($('banner-input'),
+  { title: 'Ajustar banner', aspect: 3, round: false, width: 600, height: 200, max: MAX_BANNER_IMAGE },
+  (url) => {
+    draftBannerImage = url;
+    draftBannerColor = '';
+  });
 $('profile').oncancel = (e) => {
   if (profileRequired) e.preventDefault(); // e.g. a nick is required before joining
 };
@@ -151,11 +441,19 @@ $('profile-form').onsubmit = (e) => {
   e.preventDefault();
   const nick = cleanNick($('nick-input').value);
   if (!nick) return;
-  save('nick', nick);
-  save('photo', draftPhoto);
+  const stored = [save('nick', nick), save('photo', draftPhoto), save('bannerColor', draftBannerColor), save('bannerImage', draftBannerImage)];
+  if (stored.includes(false)) toast('O navegador não deixou guardar o perfil: ele vale só até fechar esta página.', 6000);
   $('profile').close();
   profileOnSave?.(nick, draftPhoto);
 };
+
+// Another tab of this browser changed the profile: `callback` refreshes this one.
+const PROFILE_KEYS = ['nick', 'photo', 'bannerColor', 'bannerImage'];
+function onProfileChangedElsewhere(callback) {
+  window.addEventListener('storage', (e) => {
+    if (e.key === null || PROFILE_KEYS.includes(e.key)) callback();
+  });
+}
 
 let toastTimer = null;
 function toast(text, ms = 2500) {
@@ -223,7 +521,15 @@ function renderAppearance() {
     input.type = 'color';
     input.value = current.accent;
     input.setAttribute('aria-label', 'Escolher outra cor');
-    input.oninput = () => saveAppearance({ accent: input.value });
+    // Live while dragging, without rebuilding the buttons: rebuilding would
+    // remove this input and the browser would close its picker mid-drag.
+    input.oninput = () => {
+      const next = { ...loadAppearance(), accent: input.value };
+      save('appearance', JSON.stringify(next));
+      applyAppearance(next);
+      label.style.background = input.value;
+    };
+    input.onchange = renderAppearance; // the picker closed
     label.append(input);
     return label;
   })());
