@@ -18,4 +18,4 @@ strip = true
 [dev-dependencies]
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 tokio = { version = "1", features = ["io-util", "test-util"] }
-tokio-tungstenite = "0.29"
+tokio-tungstenite = "0.30"
