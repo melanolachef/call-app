@@ -255,6 +255,18 @@
     #emoji-btn:disabled { opacity: .3; }
     #chat-send { flex: none; height: 34px; padding: 0 12px; border-radius: var(--r-md); background: var(--raised); color: var(--text); font-size: 13px; font-weight: 600; }
     #chat-send:hover:not(:disabled) { filter: brightness(1.2); }
+    .emoji-mode { margin-bottom: 8px; }
+    .emoji-mode .q-choice { flex: 1; }
+    .gif-panel { display: flex; flex-direction: column; gap: 8px; }
+    .gif-search { height: 34px; font-size: 13px; }
+    .gif-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; max-height: 300px; overflow-y: auto; }
+    .gif-choice { height: 96px; padding: 0; border-radius: var(--r-sm); overflow: hidden; background: var(--raised); }
+    .gif-choice img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .gif-choice:hover img, .gif-choice:focus-visible img { opacity: .85; }
+    .gif-status { margin: 0; font-size: 12px; color: var(--muted); }
+    .gif-status:empty { display: none; }
+    .gif-credit { margin: 0; font-size: 10px; color: var(--faint); text-align: right; }
+    .msg-gif { grid-column: 2; display: block; max-width: min(240px, 100%); max-height: 240px; width: 240px; height: auto; border-radius: var(--r-md); background: var(--raised); object-fit: contain; }
     .emoji-pop { position: fixed; z-index: 9; width: min(316px, calc(100vw - 16px)); padding: 8px; box-shadow: 0 12px 32px rgb(0 0 0 / .5); }
     .emoji-tabs { display: flex; gap: 2px; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
     .emoji-tab { width: 34px; height: 30px; border-radius: var(--r-md); background: transparent; font-size: 17px; line-height: 1; opacity: .6; }
@@ -577,9 +589,20 @@
       </div>
     </div>
   </div>
-  <div class="emoji-pop card" id="emoji-pop" role="group" aria-label="Emojis" hidden>
+  <div class="emoji-pop card" id="emoji-pop" role="group" aria-label="Emojis e GIFs" hidden>
+    <div class="q-seg emoji-mode" id="emoji-mode" hidden>
+      <button type="button" class="q-choice" id="emoji-mode-emoji" aria-pressed="true">Emojis</button>
+      <button type="button" class="q-choice" id="emoji-mode-gif" aria-pressed="false">GIFs</button>
+    </div>
     <div class="emoji-tabs" id="emoji-tabs"></div>
     <div class="emoji-grid" id="emoji-grid"></div>
+    <div class="gif-panel" id="gif-panel" hidden>
+      <input class="input gif-search" id="gif-search" maxlength="50" placeholder="Buscar GIFs" autocomplete="off" aria-label="Buscar GIFs">
+      <div class="gif-grid" id="gif-grid"></div>
+      <p class="gif-status" id="gif-status" role="status"></p>
+      <button type="button" class="btn small ghost" id="gif-more" hidden>Mais</button>
+      <p class="gif-credit">via KLIPY</p>
+    </div>
   </div>
 
   <dialog id="voice-settings" aria-labelledby="vs-title">

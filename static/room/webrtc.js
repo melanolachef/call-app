@@ -174,6 +174,8 @@ async function handleSignal(peer, data) {
     if (text) addMessage({ authorId: peer.id, name: displayName(peer), photo: peer.photo, text });
   } else if ('reaction' in data) {
     handleReaction(peer, data);
+  } else if ('gif' in data) {
+    handleGif(peer, data);
   } else if ('sound' in data) {
     handleSound(peer, data);
   } else if ('voice' in data) {
