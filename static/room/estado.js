@@ -39,3 +39,32 @@ let timer = null;
 const peers = new Map();
 const localScreen = buildScreen();
 
+
+// Why the camera or microphone didn't open, in words that say what to do.
+// "Permission" was the only message before, even when access was already
+// granted and the device was simply busy in another app.
+async function mediaErrorMessage(err, kind) {
+  console.warn(kind, err);
+  const what = kind === 'camera' ? 'a câmera' : 'o microfone';
+  const What = kind === 'camera' ? 'A câmera' : 'O microfone';
+  switch (err?.name) {
+    case 'NotAllowedError':
+    case 'SecurityError': {
+      let granted = false;
+      try {
+        granted = (await navigator.permissions.query({ name: kind })).state === 'granted';
+      } catch { /* the Permissions API doesn't know this name: assume the site prompt */ }
+      return granted
+        ? `O sistema está bloqueando ${what}. No Windows: Configurações › Privacidade e segurança › ${kind === 'camera' ? 'Câmera' : 'Microfone'}, e libere o acesso para aplicativos da área de trabalho.`
+        : `Não deu para usar ${what}. Libere o acesso no cadeado ao lado do endereço e tente de novo.`;
+    }
+    case 'NotReadableError':
+    case 'AbortError':
+      return `${What} está sendo usad${kind === 'camera' ? 'a' : 'o'} por outro app (Discord, OBS, Teams, Zoom…). Feche esse app e tente de novo.`;
+    case 'NotFoundError':
+    case 'OverconstrainedError':
+      return kind === 'camera' ? 'Nenhuma câmera foi encontrada. Confira se ela está conectada.' : 'Nenhum microfone foi encontrado. Confira se ele está conectado.';
+    default:
+      return `Não deu para usar ${what} (${err?.name || 'erro desconhecido'}). Tente de novo.`;
+  }
+}

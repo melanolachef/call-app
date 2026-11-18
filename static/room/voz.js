@@ -105,8 +105,8 @@ async function joinVoice() {
     voice.ctx ??= new AudioContext(); // created on this click, so it may play
     await voice.ctx.resume();
     voice.track = await openMic();
-  } catch {
-    toast('Não deu para usar o microfone. Libere o acesso no cadeado ao lado do endereço e tente de novo.', 7000);
+  } catch (err) {
+    toast(await mediaErrorMessage(err, 'microphone'), 8000);
     return;
   }
   voice.track.contentHint = 'speech';
