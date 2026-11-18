@@ -17,7 +17,7 @@
     .top { display: flex; align-items: center; gap: 10px; padding: 18px 32px; }
     .top .brand { margin: 0; font-size: 15px; font-weight: 600; }
     .top-end { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .me-pill { display: flex; align-items: center; gap: 10px; min-width: 0; height: 36px; padding: 4px 14px 4px 4px; border-radius: 999px; background: var(--card); font-size: 14px; }
+    .me-pill { display: flex; align-items: center; gap: 10px; min-width: 0; height: 36px; padding: 4px 12px 4px 4px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--card); font-size: 14px; }
     .me-pill .avatar { width: 28px; height: 28px; font-size: 12px; }
     .me-pill span { max-width: 22ch; }
     .top .icon-btn, .top .get-app { height: 36px; }
@@ -39,19 +39,19 @@
     #rooms li + li .room-item { margin-left: -70px; }
     .room-item { position: relative; display: flex; align-items: center; padding-right: 12px; }
     .room-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 12px 8px 12px 20px; color: var(--text); text-decoration: none; }
-    .room-icon { flex: none; width: 36px; height: 36px; border-radius: 10px; background: var(--raised); color: var(--soft); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; text-transform: lowercase; }
+    .room-icon { flex: none; width: 36px; height: 36px; border-radius: var(--r-md); background: var(--raised); color: var(--soft); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; text-transform: lowercase; }
     .room-icon svg { width: 18px; height: 18px; }
     .room-text { display: flex; flex-direction: column; min-width: 0; }
     .room-text strong { font-weight: 500; }
     .room-meta { font-size: 13px; color: var(--muted); }
     .room-count { margin-left: auto; flex: none; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-    .room-count.online::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--online); }
+    .room-count.online::before { content: ''; width: 7px; height: 7px; border-radius: 2px; background: var(--online); }
     .chevron { flex: none; width: 14px; height: 14px; stroke: var(--faint); stroke-width: 2.4; }
     .room-link:hover .room-text strong { text-decoration: underline; }
     /* Pin / remove: quiet until the row is hovered or focused. */
     .room-actions { position: absolute; right: 40px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; padding-left: 12px; background: var(--card); opacity: 0; transition: opacity .12s; }
     .room-item:hover .room-actions, .room-item:focus-within .room-actions { opacity: 1; }
-    .ghost { width: 32px; height: 32px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
+    .ghost { width: 32px; height: 32px; padding: 0; border-radius: var(--r-md); background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
     .ghost svg { width: 16px; height: 16px; }
     .ghost:hover { color: var(--text); background: var(--raised); }
     .ghost[aria-pressed="true"] { color: var(--warn); opacity: 1; }

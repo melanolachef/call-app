@@ -72,6 +72,7 @@ const MANIFEST: &str = include_str!("../static/manifest.webmanifest");
 // Inter (variable, Latin subset), served from here instead of Google Fonts so
 // opening the app never tells a third party who is online. License: static/fonts/OFL.txt.
 const INTER_WOFF2: &[u8] = include_bytes!("../static/fonts/inter.woff2");
+const MONO_WOFF2: &[u8] = include_bytes!("../static/fonts/jetbrains-mono.woff2");
 
 /// Most rooms the lobby may ask about in one request.
 const MAX_COUNT_IDS: usize = 30;
@@ -150,17 +151,10 @@ fn app(rooms: Rooms, ice: Arc<Ice>) -> Router {
             "/favicon.ico",
             get(|| async { icon("image/png", TOUCH_ICON_PNG) }),
         )
+        .route("/fonts/inter.woff2", get(|| async { font(INTER_WOFF2) }))
         .route(
-            "/fonts/inter.woff2",
-            get(|| async {
-                (
-                    [
-                        (header::CONTENT_TYPE, "font/woff2"),
-                        (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
-                    ],
-                    INTER_WOFF2,
-                )
-            }),
+            "/fonts/jetbrains-mono.woff2",
+            get(|| async { font(MONO_WOFF2) }),
         )
         .route("/api/rooms", get(room_counts))
         .route("/api/ice", get(ice_servers))
@@ -183,6 +177,16 @@ fn icon(content_type: &'static str, bytes: &'static [u8]) -> impl IntoResponse {
         [
             (header::CONTENT_TYPE, content_type),
             (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        bytes,
+    )
+}
+
+fn font(bytes: &'static [u8]) -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, "font/woff2"),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
         ],
         bytes,
     )
@@ -321,6 +325,9 @@ mod tests {
         assert!(get("/icon-512.png")
             .await
             .contains("content-type: image/png"));
+        assert!(get("/fonts/jetbrains-mono.woff2")
+            .await
+            .contains("content-type: font/woff2"));
         assert!(get("/fonts/inter.woff2")
             .await
             .contains("content-type: font/woff2"));

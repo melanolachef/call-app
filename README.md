@@ -84,7 +84,7 @@ terceiros de quem está online.
 | Entender a arquitetura e as decisões técnicas | [docs/ARQUITETURA.md](docs/ARQUITETURA.md) |
 | Rodar o seu servidor (local, rede, Fly.io, TURN) | [docs/HOSPEDAR.md](docs/HOSPEDAR.md) |
 | Desenvolver ou publicar o app para Windows | [docs/APP-WINDOWS.md](docs/APP-WINDOWS.md) |
-| Ver o design das telas | [docs/design/cpx-call-design.html](docs/design/cpx-call-design.html) (abra no navegador) |
+| Ver o design das telas | [docs/design/cpx-call-componentes.html](docs/design/cpx-call-componentes.html) (componentes e sala, atual) e [docs/design/cpx-call-design.html](docs/design/cpx-call-design.html) (início e celular, versão anterior); abra no navegador |
 | Contribuir com código | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Reportar uma falha de segurança | [SECURITY.md](SECURITY.md) |
 

@@ -146,9 +146,9 @@ function onMessage(ev) {
       retryDelay = 1000;
       if (!timer) { // keeps counting across reconnections
         const joinedAt = Date.now();
-        const tick = () => ($('timer').textContent = elapsed(joinedAt));
+        const tick = () => ($('timer').textContent = clock(joinedAt));
         tick();
-        timer = setInterval(tick, 15_000); // minutes only: no need to tick every second
+        timer = setInterval(tick, 1000); // one text node a second: no layout work
       }
       for (const id of msg.peers) createPeer(id, true);
       rememberRoom(roomId); // shows up in the lobby's "Suas salas"
