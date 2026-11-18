@@ -67,6 +67,11 @@ _Atualizado em 2026-11-18._
 - **No ar (main):** design novo (Claude Design), câmera sob demanda, emojis,
   app para Windows `app-v0.1.0` (Tauri, tecla de falar global), perfil com
   recorte de foto, banner e cartão de perfil, README/docs/CI.
+- **Na `development`, ainda não na main:** barra de título do app desenhada
+  pela página (#102, exige lançar o app v0.2.0); celular com tela cheia /
+  modo cinema, layout deitado e PWA instalável (#105, testado num iPhone
+  real; falta Android); menos trabalho contínuo para quem compartilha (#107, a #75
+  segue aberta esperando medição); frases fixas no "Boa noite" (#90).
 - **Assinatura do instalador:** falta a inscrição na SignPath (o mantenedor faz).
 - **Branch local `feat/compartilhar-nativo`** (só no Windows principal, ainda
   não enviada): protótipo `desktop/examples/captura.rs` de captura + H.264 na
@@ -89,6 +94,12 @@ _Atualizado em 2026-11-18._
    Proposta: fechar o acesso ao grupo (login do Google + lista), moderação pelo
    dono da sala, botão "Denunciar" com o que quem denuncia viu, termos/idade;
    registros mínimos só depois de consulta jurídica.
-3. Ideias registradas: canais fixos do servidor iguais para todos (estilo
-   servidor do Discord) e contas opcionais (Google + Neon); frases no
-   "Boa noite" via API do GPT (#90).
+3. **Clipes no app** (#103, estudo): buffer dos últimos ~30 s já codificados
+   em RAM sobre o pipeline da fase 1, tecla → MP4 pelo Media Foundation.
+   Medir o custo com jogo rodando antes; se pesar, abandonar.
+4. **Para mais tarde — tolerância a queda no servidor (#78):** ao cair o
+   WebSocket, segurar o lugar da pessoa ~20 s antes do `peer-left`, para as
+   conexões P2P sobreviverem ao celular ir para segundo plano (seletor de
+   fotos) e ao 4G instável. Esperando o relato de quem viu o problema.
+5. Ideias registradas: canais fixos do servidor iguais para todos (estilo
+   servidor do Discord) e contas opcionais (Google + Neon).

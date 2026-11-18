@@ -17,7 +17,9 @@ let shareMode = load('shareMode') === 'texto' ? 'texto' : 'jogo';
 // told); after 2 calm minutes it steps back up. With 3+ people watching (one
 // encode each in a mesh), Jogo already starts one level down. Frame-rate
 // drops alone don't count: a still screen (a game menu) also sends fewer
-// frames while the PC is fine.
+// frames while the PC is fine. Each step changes the capture (a small hiccup
+// in the game), so after two drops in one share it stays down instead of
+// going up and down for the rest of the session.
 const LEVELS = [
   { fps: 30, maxHeight: 720 },
   { fps: 24, maxHeight: 720 },
@@ -27,7 +29,9 @@ const LEVELS = [
 const ADAPT_EVERY_MS = 5000;
 const STRIKES_TO_STEP_DOWN = 3; // ~15s CPU-limited
 const CALM_TO_STEP_UP = 24; // ~2 min fine
+const MAX_DROPS_TO_STEP_UP = 2;
 let adaptLevel = 0;
+let drops = 0;
 let strikes = 0;
 let calm = 0;
 
@@ -57,11 +61,12 @@ function adaptQuality(limited) {
     calm = 0;
     if (++strikes >= STRIKES_TO_STEP_DOWN && adaptLevel < LEVELS.length - 1) {
       adaptLevel++;
+      drops++;
       strikes = 0;
     }
   } else {
     strikes = 0;
-    if (++calm >= CALM_TO_STEP_UP && adaptLevel > 0) {
+    if (++calm >= CALM_TO_STEP_UP && adaptLevel > 0 && drops < MAX_DROPS_TO_STEP_UP) {
       adaptLevel--;
       calm = 0;
     }
@@ -70,7 +75,7 @@ function adaptQuality(limited) {
   if (after.fps === before.fps && after.maxHeight === before.maxHeight) return;
   retune();
   if (after.fps < before.fps || after.maxHeight < before.maxHeight) {
-    toast(`Seu PC está no limite: a transmissão foi para ${after.maxHeight}p a ${after.fps} FPS para não travar o jogo. Volta sozinha quando aliviar.`, 7000);
+    toast(`Seu PC está no limite: a transmissão foi para ${after.maxHeight}p a ${after.fps} FPS para não travar o jogo. ${drops < MAX_DROPS_TO_STEP_UP ? 'Volta sozinha quando aliviar.' : 'Fica assim até o fim desta transmissão.'}`, 7000);
   }
 }
 
@@ -158,8 +163,6 @@ function restartIce(peer) {
   });
 }
 
-// Fullscreen on desktop and Android; iPhone Safari only supports it on the
-// <video> element through its own webkit API. Phones also try landscape.
 function togglePip(video) {
   if (document.pictureInPictureElement === video) {
     document.exitPictureInPicture().catch(() => {});
@@ -168,17 +171,79 @@ function togglePip(video) {
   }
 }
 
-function enterFullscreen(video) {
-  const landscape = () => screen.orientation?.lock?.('landscape').catch(() => {});
-  if (video.requestFullscreen) {
-    video.requestFullscreen().then(landscape, () => video.webkitEnterFullscreen?.());
+// ---------- tela cheia ----------
+
+// The whole screen card goes fullscreen, so the label and the controls stay
+// over the picture. Where the browser can't do that (iPhone Safari only has
+// its own <video> player), the card covers the page instead ("theater"); with
+// the site added to the home screen (manifest.webmanifest) that is the whole
+// display. A phone turned sideways while watching enters theater by itself,
+// like a video app, and leaves it when turned back.
+let theaterCard = null;
+let autoTheater = false;
+const phoneLandscape = matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)');
+
+function isFullscreen(card) {
+  return document.fullscreenElement === card || theaterCard === card;
+}
+
+function toggleFullscreen(card) {
+  if (isFullscreen(card)) {
+    exitFullscreen();
+  } else if (document.fullscreenEnabled && card.requestFullscreen) {
+    card.requestFullscreen({ navigationUI: 'hide' }).then(
+      () => screen.orientation?.lock?.('landscape').catch(() => {}),
+      () => setTheater(card),
+    );
   } else {
-    video.webkitEnterFullscreen?.();
+    setTheater(card);
   }
 }
+
+function exitFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  setTheater(null);
+}
+
+// Only the classes: safe to call from refresh().
+function placeTheater(card, auto = false) {
+  theaterCard?.classList.remove('theater', 'show-ui');
+  theaterCard = card;
+  autoTheater = !!card && auto;
+  card?.classList.add('theater');
+  document.body.classList.toggle('in-theater', !!card);
+}
+
+function setTheater(card, auto = false) {
+  placeTheater(card, auto);
+  refresh();
+  if (card) flashScreenUi(card); // show how to leave
+}
+
 document.addEventListener('fullscreenchange', () => {
-  if (!document.fullscreenElement) screen.orientation?.unlock?.();
+  if (document.fullscreenElement) flashScreenUi(document.fullscreenElement);
+  else screen.orientation?.unlock?.();
+  refresh();
 });
+
+phoneLandscape.addEventListener('change', () => {
+  if (phoneLandscape.matches) {
+    if (theaterCard || document.fullscreenElement) return;
+    const watched = [...peers.values()].find((p) => p.sharing && p.iWatch);
+    if (watched) setTheater(watched.screen.card, true);
+  } else if (autoTheater) {
+    setTheater(null);
+  }
+});
+
+// On touch screens the controls over a fullscreen picture hide; a tap brings
+// them back for a few seconds.
+function flashScreenUi(card) {
+  if (!isFullscreen(card)) return;
+  card.classList.add('show-ui');
+  clearTimeout(card.uiTimer);
+  card.uiTimer = setTimeout(() => card.classList.remove('show-ui'), 3000);
+}
 
 // One volume and mute for every stream you watch, saved in this browser.
 let soundVolume = Math.min(1, Math.max(0, Number(load('volume') || 1)));
@@ -214,6 +279,7 @@ function removePeer(id) {
   const peer = peers.get(id);
   if (!peer) return;
   peer.pc.close();
+  peer.voiceAnalyser = dropAnalyser(peer.voiceAnalyser);
   if (document.pictureInPictureElement === peer.screen.video) document.exitPictureInPicture().catch(() => {});
   peer.screen.card.remove();
   peer.voiceAudio?.remove();
@@ -313,6 +379,7 @@ function setPreview(on) {
 function stopShare() {
   if (!localTrack) return;
   adaptLevel = 0;
+  drops = 0;
   strikes = 0;
   calm = 0;
   localTrack.onended = null;

@@ -17,7 +17,8 @@ function buildScreen() {
   video.muted = true;
   video.playsInline = true;
   video.title = 'Duplo clique para tela cheia';
-  video.ondblclick = () => enterFullscreen(video);
+  video.ondblclick = () => toggleFullscreen(card);
+  card.addEventListener('click', (e) => { if (!e.target.closest('button, input')) flashScreenUi(card); });
   const waiting = el('div', 'waiting');
   const waitingText = el('span');
   const watchBtn = el('button', 'btn primary', 'Assistir');
@@ -42,8 +43,8 @@ function buildScreen() {
   volume.min = '0';
   volume.max = '1';
   volume.step = '0.05';
-  const fullBtn = el('button', 'btn small', 'Tela cheia');
-  fullBtn.onclick = () => enterFullscreen(video);
+  const fullBtn = el('button', 'btn small');
+  fullBtn.onclick = () => toggleFullscreen(card);
   // Picture-in-Picture: a small always-on-top window, to watch while playing.
   const pipBtn = el('button', 'btn small pip-btn', 'Janela flutuante');
   pipBtn.onclick = () => togglePip(video);
@@ -202,6 +203,9 @@ function showScreen(screen, { visible, watching, label, hint, waitingText = '', 
     screen.volume.value = String(soundVolume);
   }
   screen.fullBtn.hidden = !canUnwatch; // only for a screen you are watching
+  // Leave theater when its picture goes away (stopped sharing, unwatched).
+  if (theaterCard === screen.card && (!visible || !watching || failedText)) placeTheater(null);
+  screen.fullBtn.textContent = isFullscreen(screen.card) ? 'Sair da tela cheia' : 'Tela cheia';
   screen.pipBtn.hidden = !canUnwatch || !document.pictureInPictureEnabled;
   // Close the floating window when that screen stops being watched.
   if ((!visible || !watching || failedText) && document.pictureInPictureElement === screen.video) {
