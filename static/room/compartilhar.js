@@ -273,6 +273,7 @@ async function startShare() {
   localTrack.contentHint = MODES[shareMode].hint;
   localTrack.onended = stopShare; // the browser's own "stop sharing" bar
   setPreview(previewOn);
+  retuneCamera(); // the camera steps down while you share
   peers.forEach((peer) => send(peer.id, { sharing: true, audio: !!localAudio })); // media only once they ask
   refresh();
 }
@@ -308,6 +309,7 @@ function stopShare() {
     localAudio = null;
   }
   localScreen.video.srcObject = null;
+  retuneCamera();
   peers.forEach((peer) => {
     peer.watchesMe = false;
     sendScreenTo(peer);
@@ -319,6 +321,7 @@ function stopShare() {
 function leaveRoom(title, text, action) {
   left = true;
   leaveVoice();
+  stopCamera();
   clearTimeout(reconnectTimer);
   stopShare();
   ws?.close();

@@ -84,6 +84,12 @@ function personRow(person) {
 function personTile(person) {
   const tile = el('div', person.self ? 'tile card self' : 'tile card');
   markSpeaker(tile, person);
+  if (person.camVideo) {
+    // The same <video> moves into each rebuilt card, so the picture never restarts.
+    tile.classList.add('has-cam');
+    tile.append(person.camVideo);
+    if (person.camVideo.paused) person.camVideo.play().catch(() => {});
+  }
   const avatar = el('div', 'avatar');
   avatar.setAttribute('aria-hidden', 'true');
   paintAvatar(avatar, person.name, person.id, person.photo);
@@ -133,17 +139,20 @@ function refresh() {
     self: true, id: myId, name: myNick, photo: myPhoto,
     status: localTrack ? ['compartilhando', 'live'] : voice.joined ? ['na voz', 'online'] : ['na sala', 'online'],
     voiceIn: voice.joined, voiceMuted: voice.muted || voice.deafened, speaking: voice.speaking,
+    camVideo: cam.track ? myCamVideo : null,
   };
   const others = list.map((p) => ({
     id: p.id, name: displayName(p), photo: p.photo, status: peerStatus(p),
     voiceIn: p.voiceIn, voiceMuted: p.voiceMuted, speaking: p.speaking,
+    camVideo: camLive(p) ? p.camVideo : null,
   }));
   const people = myId === null ? [] : [me, ...others];
 
   $('online').textContent = people.length ? `● ${people.length}/${maxPeers} online` : '';
   $('people').replaceChildren(...people.map(personRow));
   $('tiles').replaceChildren(...people.map(personTile));
-  $('tiles').classList.toggle('compact', people.length > 4); // big avatars don't fit
+  $('tiles').classList.toggle('compact', people.length > 4 && !people.some((p) => p.camVideo)); // big avatars don't fit
+  observeTiles();
 
   const viewers = list.filter((p) => p.watchesMe).length;
   showScreen(localScreen, {
@@ -184,6 +193,7 @@ function refresh() {
       : voice.deafened ? 'Na voz · sem som' : voice.muted ? 'Na voz · mudo' : 'Na voz';
   $('me-status').className = me.status[1];
   renderVoiceUi();
+  renderCameraUi();
   syncDesktopKeys();
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
