@@ -18,6 +18,8 @@ function cleanChat(value) {
 function setChatEnabled(on) {
   chatInput.disabled = !on;
   $('chat-send').disabled = !on;
+  $('emoji-btn').disabled = !on;
+  if (!on) setEmojiPicker(false);
 }
 
 function chatVisible() {
@@ -70,7 +72,7 @@ function addMessage({ authorId, name, photo, text, self = false }) {
     head.append(avatar, el('strong', 'ellipsis', self ? `${name} (você)` : name), time);
     li.append(head);
   }
-  const body = el('p', 'msg-text');
+  const body = el('p', isJumbo(text) ? 'msg-text jumbo' : 'msg-text');
   body.append(linkify(text));
   li.append(body);
   appendToChat(li);
