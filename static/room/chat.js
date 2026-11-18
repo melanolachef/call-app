@@ -114,6 +114,7 @@ mobile.addEventListener('change', updateUnread);
 function goToLobby() {
   left = true;
   leaveVoice();
+  stopCamera();
   clearTimeout(reconnectTimer);
   stopShare();
   ws?.close();
