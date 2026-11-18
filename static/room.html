@@ -270,6 +270,27 @@
     .react-pop { position: fixed; z-index: 9; display: grid; grid-template-columns: repeat(6, 40px); gap: 4px; padding: 8px; box-shadow: 0 12px 32px rgb(0 0 0 / .5); }
     .react-choice { width: 40px; height: 40px; border-radius: var(--r-md); background: transparent; font-size: 22px; line-height: 1; }
     .react-choice:hover, .react-choice:focus-visible { background: var(--raised); }
+    /* ---------- sons (soundpad.js) ---------- */
+    .sound-pop { position: fixed; z-index: 9; width: min(340px, calc(100vw - 16px)); padding: 10px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 12px 32px rgb(0 0 0 / .5); }
+    .sound-head { display: flex; align-items: center; gap: 6px; }
+    .sound-head h2 { margin: 0 auto 0 2px; font-size: 13px; font-weight: 600; }
+    .sound-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: 260px; overflow-y: auto; }
+    .sound-item { display: flex; min-width: 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg); }
+    .sound-play { flex: 1; min-width: 0; height: 34px; padding: 0 10px; background: transparent; color: var(--text); font-size: 13px; text-align: left; border-radius: var(--r-md) 0 0 var(--r-md); }
+    .sound-play:hover { background: var(--raised); }
+    .sound-play.playing { color: var(--live); box-shadow: inset 2px 0 var(--live); }
+    .sound-edit { flex: none; width: 28px; background: transparent; color: var(--faint); border-left: 1px solid var(--border); border-radius: 0 var(--r-md) var(--r-md) 0; display: flex; align-items: center; justify-content: center; }
+    .sound-edit:hover { color: var(--text); background: var(--raised); }
+    .sound-edit svg { width: 16px; height: 16px; stroke-width: 2.4; }
+    .sound-empty, .sound-hint { margin: 0; font-size: 12px; color: var(--muted); }
+    .sound-hint { color: var(--faint); }
+    #sound-btn.playing { color: var(--live); }
+    .se-wave { width: 100%; height: 56px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg); }
+    .se-range { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 13px; color: var(--soft); }
+    .se-range output { font-size: 12px; color: var(--muted); }
+    .se-range input { grid-column: 1 / -1; width: 100%; }
+    .se-note { font-size: 12px; }
+
     #react-layer { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
     .float-react { position: absolute; left: var(--x); bottom: 90px; display: flex; flex-direction: column; align-items: center; gap: 2px; animation: react-float 2.6s ease-out forwards; }
     .float-emoji { font-size: 38px; line-height: 1; }
@@ -316,7 +337,7 @@
     @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
       .app { display: flex; flex-direction: column; gap: 12px; height: auto; min-height: 100dvh; padding: 0 max(16px, env(safe-area-inset-right)) 96px max(16px, env(safe-area-inset-left)); }
       .topbar { margin: 0 calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left))); padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); gap: 10px; }
-      .side, .mode, #notify-btn, #live, #net, .seats, .top-end .vsep, #timer, .screen-actions .volume, .pip-btn, #react-btn, #deafen, #share svg, #invite-bar, .ctl-sep, .chat-note { display: none !important; }
+      .side, .mode, #notify-btn, #live, #net, .seats, .top-end .vsep, #timer, .screen-actions .volume, .pip-btn, #react-btn, #sound-btn, #deafen, #share svg, #invite-bar, .ctl-sep, .chat-note { display: none !important; }
       .room-link { flex: 1; }
       .stage { flex: none; padding: 0; gap: 12px; }
       .content { flex: none; }
@@ -463,6 +484,7 @@
         <span class="ctl-sep" aria-hidden="true"></span>
         <button class="ctl" id="invite-bar" title="Copiar o convite da sala">Convidar</button>
         <button class="ctl" id="react-btn" title="Reagir" aria-label="Reagir" aria-haspopup="true" aria-expanded="false">😊</button>
+        <button class="ctl" id="sound-btn" title="Sons" aria-label="Sons" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
         <button class="ctl" id="chat-toggle" title="Chat" aria-label="Mostrar chat"><span class="long" aria-hidden="true">Chat</span><svg class="short" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span class="badge" id="chat-badge" hidden></span></button>
         <span class="ctl-sep" aria-hidden="true"></span>
         <button class="ctl" id="leave" title="Sair da sala">Sair</button>
@@ -471,6 +493,17 @@
   </div>
 
   <div class="react-pop card" id="react-pop" role="group" aria-label="Reações" hidden></div>
+  <div class="sound-pop card" id="sound-pop" role="group" aria-labelledby="sound-title" hidden>
+    <div class="sound-head">
+      <h2 id="sound-title">Sons</h2>
+      <button type="button" class="btn small ghost" id="sound-stop" disabled>Parar</button>
+      <button type="button" class="btn small" id="sound-add">Adicionar</button>
+    </div>
+    <div class="sound-grid" id="sound-grid"></div>
+    <p class="sound-empty" id="sound-empty">Adicione um som: um .mp3, .wav, .ogg ou até um vídeo .mp4 (fica só o áudio). Até 15 s cada.</p>
+    <p class="sound-hint" id="sound-hint"></p>
+    <input type="file" id="sound-file" accept="audio/*,video/mp4,video/webm,video/quicktime,.mp3,.m4a,.mp4,.ogg,.opus,.wav,.webm,.aac,.flac" hidden>
+  </div>
   <div id="react-layer" aria-hidden="true"></div>
   <div class="person-card card" id="person-card" role="dialog" aria-labelledby="pc-name" hidden>
     <button class="icon-btn" id="pc-close" aria-label="Fechar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
@@ -515,6 +548,27 @@
       <label class="field"><span class="muted">Volume das vozes</span><input type="range" id="vs-volume" min="0" max="1" step="0.05"></label>
       <button class="btn primary">Pronto</button>
     </form>
+  </dialog>
+
+  <dialog id="sound-editor" aria-labelledby="se-title">
+    <div class="dialog-body">
+      <h2 id="se-title">Novo som</h2>
+      <label class="field"><span class="muted">Nome</span><input id="se-name" maxlength="24" autocomplete="off"></label>
+      <canvas class="se-wave" id="se-wave" aria-hidden="true"></canvas>
+      <label class="se-range"><span>Começo</span><output class="mono" id="se-start-value"></output><input type="range" id="se-start" min="0"></label>
+      <label class="se-range"><span>Fim</span><output class="mono" id="se-end-value"></output><input type="range" id="se-end" min="0"></label>
+      <p class="muted se-note"><span id="se-note"></span> Trecho: <span class="mono" id="se-length"></span></p>
+      <label class="se-range"><span>Volume</span><output class="mono" id="se-volume-value"></output><input type="range" id="se-volume" min="0" max="1.5" step="0.05"></label>
+      <div class="actions">
+        <button type="button" class="btn small ghost" id="se-preview">Ouvir</button>
+        <button type="button" class="btn small ghost" id="se-export">Exportar</button>
+        <button type="button" class="btn small danger" id="se-delete">Apagar</button>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="se-cancel">Cancelar</button>
+        <button type="button" class="btn primary" id="se-save">Salvar</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="notice" aria-labelledby="notice-title">

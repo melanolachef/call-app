@@ -17,7 +17,7 @@ const SPEAKING_LEVEL = 0.02; // RMS above this counts as talking
 const SPEAKING_HOLD_MS = 300; // keeps the ring steady between words
 const voice = {
   joined: false, muted: false, deafened: false,
-  track: null, ctx: null, analyser: null, speaking: false, lastLoud: 0,
+  track: null, mix: null, ctx: null, analyser: null, speaking: false, lastLoud: 0,
   deviceId: load('micId'),
   noiseSuppression: load('noiseSuppression') !== 'off',
   volume: Math.min(1, Math.max(0, Number(load('voiceVolume') || 1))),
@@ -67,11 +67,38 @@ function broadcastVoice() {
   peers.forEach((peer) => send(peer.id, { voice: voiceState() }));
 }
 
+// What goes out to the others: the mic plus the soundpad (soundpad.js),
+// mixed in Web Audio into one track. Mute and push-to-talk still close only
+// the mic (track.enabled), so sounds play even with the mic muted.
+function buildVoiceMix(micTrack) {
+  const out = voice.ctx.createMediaStreamDestination();
+  const sounds = voice.ctx.createGain();
+  sounds.connect(out);
+  const track = out.stream.getAudioTracks()[0];
+  track.contentHint = 'speech';
+  voice.mix = { out, sounds, mic: null, track };
+  plugMic(micTrack);
+}
+
+function plugMic(micTrack) {
+  voice.mix.mic?.disconnect();
+  voice.mix.mic = voice.ctx.createMediaStreamSource(new MediaStream([micTrack]));
+  voice.mix.mic.connect(voice.mix.out);
+}
+
+function dropVoiceMix() {
+  if (!voice.mix) return;
+  voice.mix.mic?.disconnect();
+  voice.mix.sounds.disconnect();
+  voice.mix.track.stop();
+  voice.mix = null;
+}
+
 // Voice only flows between two people who are both in the voice channel.
 function sendVoiceTo(peer) {
   const sender = peer.voiceTransceiver?.sender;
   if (!sender) return;
-  const track = voice.joined && peer.voiceIn ? voice.track : null;
+  const track = voice.joined && peer.voiceIn ? voice.mix.track : null;
   if (sender.track !== track) sender.replaceTrack(track).catch((err) => console.warn(err));
 }
 
@@ -126,6 +153,7 @@ async function joinVoice() {
   }
   voice.track.contentHint = 'speech';
   voice.analyser = analyserFor(voice.track);
+  buildVoiceMix(voice.track);
   voice.joined = true;
   voice.muted = false;
   voice.deafened = false;
@@ -144,6 +172,7 @@ function leaveVoice() {
   if (!voice.joined) return;
   voice.joined = false;
   voice.pttHeld = false;
+  stopSound();
   voice.track?.stop();
   voice.track = null;
   voice.analyser = dropAnalyser(voice.analyser);
@@ -153,6 +182,7 @@ function leaveVoice() {
   chime(false);
   broadcastVoice();
   peers.forEach(sendVoiceTo);
+  dropVoiceMix();
   applyVoiceOutput();
   refresh();
 }
@@ -361,11 +391,9 @@ async function switchMic() {
     voice.track = track;
     track.contentHint = 'speech';
     applyTrackEnabled();
+    dropAnalyser(voice.analyser);
     voice.analyser = analyserFor(track);
-    peers.forEach((peer) => {
-      const sender = peer.voiceTransceiver?.sender;
-      if (sender?.track) sender.replaceTrack(track).catch((err) => console.warn(err));
-    });
+    plugMic(track); // the others keep receiving the same mixed track
   } else {
     previewTrack?.stop();
     previewTrack = track;
