@@ -31,34 +31,47 @@ function camProfile() {
   return localTrack ? CAM.light : CAM.normal;
 }
 
+// Small and slow is only a preference: a camera that can't do it still opens.
+async function openCamera() {
+  const { height, fps } = CAM.normal;
+  const ideal = { width: { ideal: Math.round((height * 16) / 9) }, height: { ideal: height }, frameRate: { ideal: fps } };
+  const attempts = [
+    ...(cam.deviceId ? [{ ...ideal, deviceId: { exact: cam.deviceId } }] : []),
+    ideal, // the saved camera is gone or busy: the default one
+    true, // no preferences at all
+  ];
+  let lastError;
+  for (const video of attempts) {
+    try {
+      const track = (await navigator.mediaDevices.getUserMedia({ video })).getVideoTracks()[0];
+      if (video !== attempts[0] && cam.deviceId) {
+        cam.deviceId = '';
+        save('camId', '');
+      }
+      return track;
+    } catch (err) {
+      lastError = err;
+      if (err.name === 'NotAllowedError' || err.name === 'SecurityError') break; // retrying won't help
+    }
+  }
+  throw lastError;
+}
+
 async function startCamera() {
   if (cam.track || cam.starting) return;
   cam.starting = true;
   refresh();
   try {
-    const { height, fps } = CAM.normal;
-    const video = {
-      width: { ideal: Math.round((height * 16) / 9) },
-      height: { ideal: height },
-      frameRate: { ideal: fps, max: fps },
-      deviceId: cam.deviceId ? { exact: cam.deviceId } : undefined,
-    };
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video });
-    } catch (err) {
-      if (!cam.deviceId || err.name !== 'OverconstrainedError') throw err;
-      cam.deviceId = ''; // the saved camera is gone: use the default one
-      save('camId', '');
-      stream = await navigator.mediaDevices.getUserMedia({ video: { ...video, deviceId: undefined } });
-    }
-    cam.track = stream.getVideoTracks()[0];
-  } catch {
-    toast('Não deu para usar a câmera. Libere o acesso no cadeado ao lado do endereço e tente de novo.', 7000);
+    cam.track = await openCamera();
+  } catch (err) {
+    toast(await mediaErrorMessage(err, 'camera'), 8000);
     return;
   } finally {
     cam.starting = false;
   }
+  // The frame rate is a preference above (some cameras refuse a maximum); cap
+  // it here when the camera allows, the encoder caps it anyway.
+  cam.track.applyConstraints({ frameRate: { max: CAM.normal.fps } }).catch(() => {});
   cam.track.contentHint = 'motion';
   cam.track.onended = stopCamera; // unplugged, or taken by another app
   myCamVideo.srcObject = new MediaStream([cam.track]);
