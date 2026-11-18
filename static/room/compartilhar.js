@@ -237,13 +237,28 @@ const SHARE_AUDIO = {
   suppressLocalAudioPlayback: false,
 };
 
+// By default, Chrome and Edge bring the chosen window or tab to the front as
+// soon as sharing starts, which hides the call. A CaptureController asks them
+// to stay here instead, so you can see that the share worked. It has to be
+// called right after the picker resolves; browsers without it just switch.
+async function getDisplay(options) {
+  const controller = typeof CaptureController === 'function' ? new CaptureController() : null;
+  const stream = await navigator.mediaDevices.getDisplayMedia(controller ? { ...options, controller } : options);
+  try {
+    controller?.setFocusBehavior?.('no-focus-change');
+  } catch {
+    // Whole screens can't take focus anyway, and some captures refuse the call.
+  }
+  return stream;
+}
+
 async function captureScreen() {
   try {
-    return await navigator.mediaDevices.getDisplayMedia({ video: captureConstraints(), audio: SHARE_AUDIO, systemAudio: 'include' });
+    return await getDisplay({ video: captureConstraints(), audio: SHARE_AUDIO, systemAudio: 'include' });
   } catch (err) {
     if (err.name === 'NotAllowedError' || err.name === 'AbortError') throw err; // picker cancelled
     // A browser that rejects audio capture outright: share without sound.
-    return navigator.mediaDevices.getDisplayMedia({ video: captureConstraints(), audio: false });
+    return getDisplay({ video: captureConstraints(), audio: false });
   }
 }
 
