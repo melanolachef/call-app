@@ -43,7 +43,8 @@ Details: [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
 | `desktop/` app, `desktop/examples/captura.rs` | yes (needs VS Build Tools C++) | no: Windows-only APIs (keyboard hook, Windows Graphics Capture, Media Foundation) |
 | Shell quirks | Windows PowerShell 5.1: no `&&`, use `;` or `if ($?) {}` | bash |
 
-Browser testing with Playwright: on Windows only Edge is installed, so use
+Browser testing with Playwright: on Pop!_OS port 3000 is often taken by
+another project, so run the server with `PORT=3001`. On Windows only Edge is installed, so use
 `playwright-core` with `channel: 'msedge'`. Fake media: Edge's default fake
 camera stops after ~1 s, so feed a `.y4m` file with
 `--use-file-for-fake-video-capture=<absolute path>`; the fake screen capture is
@@ -70,8 +71,11 @@ _Atualizado em 2026-11-18._
 - **Na `development`, ainda não na main:** barra de título do app desenhada
   pela página (#102, exige lançar o app v0.2.0); celular com tela cheia /
   modo cinema, layout deitado e PWA instalável (#105, testado num iPhone
-  real; falta Android); menos trabalho contínuo para quem compartilha (#107, a #75
-  segue aberta esperando medição); frases fixas no "Boa noite" (#90).
+  real; falta Android); menos trabalho contínuo para quem compartilha (#107,
+  a #75 segue aberta esperando medição); frases fixas no "Boa noite" (#90);
+  volume individual por pessoa (#113); soundpad (#112); **design novo**
+  `docs/design/cpx-call-componentes.html` com quem assiste, direto/relay,
+  banner de reconexão e resolução antes de assistir (#115).
 - **Assinatura do instalador:** falta a inscrição na SignPath (o mantenedor faz).
 - **Branch local `feat/compartilhar-nativo`** (só no Windows principal, ainda
   não enviada): protótipo `desktop/examples/captura.rs` de captura + H.264 na
@@ -94,12 +98,13 @@ _Atualizado em 2026-11-18._
    Proposta: fechar o acesso ao grupo (login do Google + lista), moderação pelo
    dono da sala, botão "Denunciar" com o que quem denuncia viu, termos/idade;
    registros mínimos só depois de consulta jurídica.
-3. **Clipes no app** (#103, estudo): buffer dos últimos ~30 s já codificados
+3. **Soundpad, depois:** botão no celular, atalhos por som no app Windows.
+4. **Clipes no app** (#103, estudo): buffer dos últimos ~30 s já codificados
    em RAM sobre o pipeline da fase 1, tecla → MP4 pelo Media Foundation.
    Medir o custo com jogo rodando antes; se pesar, abandonar.
-4. **Para mais tarde — tolerância a queda no servidor (#78):** ao cair o
+5. **Para mais tarde — tolerância a queda no servidor (#78):** ao cair o
    WebSocket, segurar o lugar da pessoa ~20 s antes do `peer-left`, para as
    conexões P2P sobreviverem ao celular ir para segundo plano (seletor de
    fotos) e ao 4G instável. Esperando o relato de quem viu o problema.
-5. Ideias registradas: canais fixos do servidor iguais para todos (estilo
+6. Ideias registradas: canais fixos do servidor iguais para todos (estilo
    servidor do Discord) e contas opcionais (Google + Neon).
