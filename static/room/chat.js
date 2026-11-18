@@ -56,9 +56,14 @@ function linkify(text) {
   return frag;
 }
 
+// Long sessions: only the last messages stay on the page (nothing is saved
+// anyway), so the chat never grows without limit.
+const MAX_CHAT_ITEMS = 300;
+
 function appendToChat(item) {
   const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
   messagesEl.append(item);
+  while (messagesEl.childElementCount > MAX_CHAT_ITEMS) messagesEl.firstElementChild.remove();
   if (nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
