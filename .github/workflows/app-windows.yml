@@ -38,16 +38,42 @@ jobs:
         run: cp desktop/target/release/bundle/nsis/*-setup.exe CPX-Call-Windows.exe
 
       - uses: actions/upload-artifact@v4
+        id: unsigned
         with:
           name: CPX-Call-Windows
           path: CPX-Call-Windows.exe
+
+      # Free code signing by the SignPath Foundation (CODE_SIGNING_POLICY.md).
+      # Skipped until the repository variables in docs/APP-WINDOWS.md exist;
+      # the installer then ships unsigned, as before.
+      - name: Assinar (SignPath)
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Usar o instalador assinado
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: bash
+        run: cp signed/CPX-Call-Windows.exe CPX-Call-Windows.exe
 
       - name: Publicar no GitHub Releases
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" CPX-Call-Windows.exe
-          --title "CPX Call para Windows ${GITHUB_REF_NAME#app-v}"
-          --notes "Instale e abra: é a mesma sala do navegador, com a tecla de falar e o Ctrl+Shift+M funcionando com o jogo em foco. O Windows pode avisar que o app não é reconhecido (ainda não é assinado): clique em Mais informações e Executar assim mesmo."
+          SIGNED: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        run: |
+          notes="Instale e abra: é a mesma sala do navegador, com a tecla de falar e o Ctrl+Shift+M funcionando com o jogo em foco."
+          if [ "$SIGNED" = true ]; then
+            notes="$notes O instalador é assinado pela SignPath Foundation. Nas primeiras versões, o Windows ainda pode avisar enquanto o certificado ganha reputação: Mais informações › Executar assim mesmo."
+          else
+            notes="$notes O Windows pode avisar que o app não é reconhecido (ainda não é assinado): clique em Mais informações e Executar assim mesmo."
+          fi
+          gh release create "$GITHUB_REF_NAME" CPX-Call-Windows.exe             --title "CPX Call para Windows ${GITHUB_REF_NAME#app-v}"             --notes "$notes"

@@ -1,0 +1,20 @@
+# Keeps dependencies current with one grouped PR per ecosystem a month,
+# opened against development like every other change.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directories: ["/", "/desktop"]
+    target-branch: development
+    schedule:
+      interval: monthly
+    groups:
+      rust:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: development
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

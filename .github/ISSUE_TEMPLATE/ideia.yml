@@ -1,0 +1,26 @@
+name: Ideia
+description: Uma funcionalidade ou melhoria
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Que problema isso resolve?
+      placeholder: Quando estou jogando, eu queria…
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: Proposta
+      description: Como você imagina que funcione.
+    validations:
+      required: true
+  - type: checkboxes
+    id: principios
+    attributes:
+      label: Princípios do projeto
+      description: Veja o [CONTRIBUTING.md](https://github.com/melanolachef/call-app/blob/main/CONTRIBUTING.md#princípios-do-projeto).
+      options:
+        - label: A ideia mantém o app leve para quem está jogando, ou explica o custo.
+        - label: A ideia não faz o servidor guardar dados, ou explica por quê.
