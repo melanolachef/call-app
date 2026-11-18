@@ -1,7 +1,23 @@
 // ---------- perfil ----------
 
 function profileMsg() {
-  return { nick: myNick, photo: myPhoto, hwH264 };
+  return { nick: myNick, photo: myPhoto, hwH264, banner: validBannerColor(load('bannerColor')) };
+}
+
+// The banner image goes in a message of its own (photo + banner together
+// could pass the server's 64 KB limit). `always` also sends an empty one, to
+// clear a banner that was removed.
+function sendBannerImage(id, always = false) {
+  const image = validBannerImage(load('bannerImage'));
+  if (image || always) send(id, { bannerImage: image });
+}
+
+function broadcastProfile() {
+  peers.forEach((peer) => {
+    send(peer.id, profileMsg());
+    sendBannerImage(peer.id, true);
+  });
+  refresh();
 }
 
 function displayName(peer) {
@@ -21,8 +37,7 @@ function openProfile() {
       myNick = nick;
       myPhoto = photo;
       if (ws) {
-        peers.forEach((peer) => send(peer.id, profileMsg()));
-        refresh();
+        broadcastProfile();
       } else {
         enterRoom();
       }
@@ -30,6 +45,14 @@ function openProfile() {
   });
 }
 $('edit').onclick = openProfile;
+
+// Edited in another tab (the lobby, say): this room follows, and tells the others.
+onProfileChangedElsewhere(() => {
+  myNick = cleanNick(load('nick')) || myNick;
+  myPhoto = validPhoto(load('photo'));
+  if (ws) broadcastProfile();
+  else refresh();
+});
 
 // ---------- uma aba por sala ----------
 

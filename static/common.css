@@ -101,11 +101,39 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 dialog { width: min(380px, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 20px; background: var(--card); color: var(--text); overflow: hidden; box-shadow: 0 20px 60px rgb(0 0 0 / .6); }
 dialog:focus-visible { outline: none; }
 dialog::backdrop { background: rgb(0 0 0 / .7); }
-.banner { height: 72px; background: linear-gradient(135deg, var(--raised-2), var(--raised)); }
+.banner { position: relative; height: 72px; background: linear-gradient(135deg, var(--raised-2), var(--raised)) center / cover no-repeat; }
+.profile-dialog .banner { height: 120px; }
+.banner-btn { position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: rgb(0 0 0 / .55); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+.banner-btn svg { width: 16px; height: 16px; }
+.avatar-btn { position: relative; margin-right: auto; padding: 0; border-radius: 50%; background: none; }
+.avatar-btn .avatar { margin: 0; }
+.avatar-badge { position: absolute; right: 2px; bottom: 2px; width: 26px; height: 26px; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px var(--card); }
+.avatar-badge svg { width: 15px; height: 15px; }
+.avatar-btn:hover .avatar { filter: brightness(.8); }
+.swatch-image, .swatch-none { display: inline-flex; align-items: center; justify-content: center; background: var(--raised) center / cover no-repeat; color: var(--soft); }
+.swatch-image svg, .swatch-none svg { width: 16px; height: 16px; }
+.swatch-none { background: repeating-linear-gradient(135deg, var(--raised) 0 6px, var(--raised-2) 6px 12px); }
+
+/* ---------- recorte (foto e banner) ---------- */
+#cropper { width: min(380px, calc(100vw - 24px)); }
+.crop-stage { position: relative; width: 100%; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: #000; touch-action: none; cursor: grab; user-select: none; }
+.crop-stage.dragging { cursor: grabbing; }
+.crop-stage canvas { display: block; width: 100%; height: 100%; }
+/* The frame dims everything outside it; the grid (rule of thirds) helps to frame. */
+.crop-frame { position: absolute; pointer-events: none; box-shadow: 0 0 0 2px rgb(255 255 255 / .9), 0 0 0 9999px rgb(0 0 0 / .6);
+  background:
+    linear-gradient(to right, transparent calc(33.333% - .5px), rgb(255 255 255 / .35) 0 calc(33.333% + .5px), transparent 0 calc(66.666% - .5px), rgb(255 255 255 / .35) 0 calc(66.666% + .5px), transparent 0),
+    linear-gradient(to bottom, transparent calc(33.333% - .5px), rgb(255 255 255 / .35) 0 calc(33.333% + .5px), transparent 0 calc(66.666% - .5px), rgb(255 255 255 / .35) 0 calc(66.666% + .5px), transparent 0);
+  transition: background-color .15s; }
+.crop-frame.round { border-radius: 50%; }
+.crop-stage.dragging .crop-frame { background-color: rgb(255 255 255 / .04); }
+.crop-zoom { display: flex; align-items: center; gap: 10px; }
+.crop-zoom input { flex: 1; accent-color: var(--accent); }
+.crop-zoom .icon-btn { width: 32px; height: 32px; }
 .dialog-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
 .banner + .dialog-body { padding-top: 0; }
 .avatar-row { margin-top: -36px; display: flex; align-items: flex-end; gap: 8px; }
-.avatar-row .avatar { margin-right: auto; }
+
 .avatar.big { width: 76px; height: 76px; font-size: 26px; font-weight: 700; border: 4px solid var(--card); }
 dialog h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
 dialog p { margin: 0; }

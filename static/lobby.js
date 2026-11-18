@@ -152,6 +152,11 @@ async function updateCounts() {
 
 renderProfile();
 if (nick) ensureHomeRoom(nick);
+onProfileChangedElsewhere(() => { // edited in a room open in another tab
+  nick = cleanNick(load('nick'));
+  photo = validPhoto(load('photo'));
+  renderProfile();
+});
 renderRooms();
 updateCounts();
 setInterval(updateCounts, COUNTS_EVERY_MS);

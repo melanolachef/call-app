@@ -103,6 +103,9 @@
     .content.has-screens #tiles .tile { flex: none; width: 200px; }
     .content.has-screens #tiles .tile:not(.cam-on) { display: none; }
     .content.has-screens #tiles.no-cams { display: none; }
+    .tile { background: var(--tile-bg, var(--card)); cursor: pointer; }
+    .person { cursor: pointer; border-radius: 12px; }
+    .person:hover { background: rgb(255 255 255 / .04); }
     .tile { position: relative; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; overflow: hidden; }
     .tile .avatar { width: 72px; height: 72px; font-size: 26px; }
     .tile-text { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; max-width: calc(100% - 16px); }
@@ -119,6 +122,19 @@
     .tile.has-cam .tile-text { position: relative; align-self: stretch; align-items: flex-start; max-width: none; padding: 20px 12px 8px; background: linear-gradient(transparent, rgb(0 0 0 / .65)); color: #fff; text-align: left; }
     .tile.has-cam .tile-text .status { color: rgb(255 255 255 / .75); }
     #empty { flex: none; margin: 0; text-align: center; font-size: 13px; color: var(--muted); }
+
+    /* ---------- cartão de perfil ---------- */
+    .person-card { position: fixed; z-index: 9; width: 300px; max-width: calc(100vw - 24px); overflow: hidden; box-shadow: 0 20px 60px rgb(0 0 0 / .6); }
+    .person-card .banner { height: 104px; }
+    .pc-body { position: relative; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 2px; }
+    .pc-body .avatar { margin-top: -40px; margin-bottom: 8px; width: 80px; height: 80px; font-size: 28px; border: 5px solid var(--card); }
+    .pc-body strong { font-size: 20px; font-weight: 700; letter-spacing: -.01em; overflow-wrap: anywhere; }
+    .pc-status { font-size: 13px; color: var(--muted); }
+    .pc-status.live { color: var(--live); }
+    .pc-status.online { color: var(--online); }
+    .pc-status.warn { color: var(--warn); }
+    #pc-edit { margin-top: 12px; }
+    #pc-close { position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; background: rgb(0 0 0 / .5); color: #fff; z-index: 1; }
 
     /* Voice: who is talking gets a green ring. */
     .avatar.speaking { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--online); }
@@ -352,6 +368,16 @@
 
   <div class="react-pop card" id="react-pop" role="group" aria-label="Reações" hidden></div>
   <div id="react-layer" aria-hidden="true"></div>
+  <div class="person-card card" id="person-card" role="dialog" aria-labelledby="pc-name" hidden>
+    <button class="icon-btn" id="pc-close" aria-label="Fechar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    <div class="banner" id="pc-banner"></div>
+    <div class="pc-body">
+      <div class="avatar" id="pc-avatar" aria-hidden="true"></div>
+      <strong id="pc-name"></strong>
+      <span class="pc-status" id="pc-status"></span>
+      <button class="btn small" id="pc-edit" hidden>Editar perfil</button>
+    </div>
+  </div>
   <div class="emoji-pop card" id="emoji-pop" role="group" aria-label="Emojis" hidden>
     <div class="emoji-tabs" id="emoji-tabs"></div>
     <div class="emoji-grid" id="emoji-grid"></div>
