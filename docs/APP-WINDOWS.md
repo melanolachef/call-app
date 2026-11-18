@@ -18,7 +18,14 @@ Ctrl+Shift+M, sem consumir nenhuma (o jogo continua recebendo), e descarta todas
 as outras ali mesmo. Quando a própria janela do app está na frente, o gancho fica
 quieto e a página cuida das teclas.
 
-A página só pode chamar esse único comando do app: a permissão fica em
+A barra de título é desenhada pela página (no fim de `static/theme.js`), para
+seguir o tema e o fundo, com o nome no centro. O app começa com a barra do
+Windows e só a tira quando a página pede (comando `window_control`, que também
+minimiza, maximiza, fecha e arrasta). Se o site não carregar, a janela continua
+com a barra normal; um app antigo não conhece o comando e a página não desenha a
+dela, então nunca aparecem duas barras.
+
+A página só pode chamar esses dois comandos do app: a permissão fica em
 [desktop/capabilities/remote.json](../desktop/capabilities/remote.json), restrita
 aos endereços do CPX Call.
 

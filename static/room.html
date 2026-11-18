@@ -12,7 +12,7 @@
   <script src="/theme.js"></script>
   <style>
     /* ---------- layout: pessoas | palco | chat, barra flutuante embaixo ---------- */
-    .app { height: 100vh; height: 100dvh; padding: 16px; display: grid; grid-template-columns: 260px minmax(0, 1fr) 300px; gap: 16px; }
+    .app { height: calc(100vh - var(--titlebar-h)); height: calc(100dvh - var(--titlebar-h)); padding: 16px; display: grid; grid-template-columns: 260px minmax(0, 1fr) 300px; gap: 16px; }
     body.chat-collapsed .app { grid-template-columns: 260px minmax(0, 1fr); }
     body.chat-collapsed .chat { display: none; }
     .side { min-height: 0; display: flex; flex-direction: column; gap: 16px; padding-bottom: 84px; overflow-y: auto; }
@@ -239,7 +239,7 @@
     @media (max-width: 1199px) {
       .app, body.chat-collapsed .app { grid-template-columns: 240px minmax(0, 1fr); }
       .chat { display: none; }
-      body.chat-open .chat { display: flex; position: fixed; z-index: 7; top: 16px; right: 16px; bottom: 100px; width: min(340px, calc(100vw - 32px)); margin: 0; box-shadow: 0 20px 60px rgb(0 0 0 / .6); }
+      body.chat-open .chat { display: flex; position: fixed; z-index: 7; top: calc(16px + var(--titlebar-h)); right: 16px; bottom: 100px; width: min(340px, calc(100vw - 32px)); margin: 0; box-shadow: 0 20px 60px rgb(0 0 0 / .6); }
       #chat-close { display: inline-flex; }
       .mode-btn { padding: 0 12px; }
     }

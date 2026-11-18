@@ -6,12 +6,14 @@
 //! tells the app which push-to-talk key to watch (`set_ptt_key`); a low-level
 //! keyboard hook *observes* that key and Ctrl+Shift+M without consuming them
 //! (the game still gets them) and forwards them to the page. Nothing else is
-//! read: every other key is ignored right in the hook.
+//! read: every other key is ignored right in the hook. The page also draws the
+//! window's title bar in the app's colors (`titlebar`).
 
 // No console window behind the app in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod keys;
+mod titlebar;
 
 use tauri::{Manager, Url};
 
@@ -24,7 +26,10 @@ fn set_ptt_key(code: String) {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![set_ptt_key])
+        .invoke_handler(tauri::generate_handler![
+            set_ptt_key,
+            titlebar::window_control
+        ])
         .setup(|app| {
             let window = app
                 .get_webview_window("main")
