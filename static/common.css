@@ -33,10 +33,11 @@
   --danger-bg: rgb(255 69 58 / .16);
   --glass: rgb(44 44 46 / .78);
   --bg-image: none;
+  --titlebar-h: 0px; /* 32px inside the Windows app (see .titlebar) */
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; background-color: var(--bg); background-image: var(--bg-image); background-size: cover; background-position: center; background-repeat: no-repeat; color: var(--text); font: 15px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+body { margin: 0; min-height: 100vh; padding-top: var(--titlebar-h); background-color: var(--bg); background-image: var(--bg-image); background-size: cover; background-position: center; background-repeat: no-repeat; color: var(--text); font: 15px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
 /* With a background, cards let it show through a little (no blur: it costs GPU every frame). */
 .has-bg .card { background: color-mix(in srgb, var(--card) 90%, transparent); }
 button, input, select { font: inherit; color: inherit; }
@@ -143,6 +144,18 @@ dialog p { margin: 0; }
 .actions .btn { flex: 1; }
 
 .toast { position: fixed; left: 50%; bottom: 104px; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 16px; background: var(--glass); backdrop-filter: blur(20px); font-size: 14px; text-align: center; z-index: 10; box-shadow: 0 10px 30px rgb(0 0 0 / .5); }
+
+/* Inside the Windows app (desktop/) the page draws the window's title bar, so
+   it follows the theme and background. Transparent: the body shows through. */
+html.app-titlebar { --titlebar-h: 32px; }
+.titlebar { position: fixed; top: 0; left: 0; right: 0; z-index: 20; height: var(--titlebar-h); display: flex; justify-content: flex-end; user-select: none; }
+.titlebar-name { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: 600; color: var(--muted); pointer-events: none; }
+.titlebar button { width: 46px; height: 100%; display: flex; align-items: center; justify-content: center; background: none; color: var(--soft); }
+.titlebar button:hover { background: rgb(255 255 255 / .08); color: var(--text); }
+.titlebar button:active { background: rgb(255 255 255 / .14); }
+.titlebar button.close:hover { background: #C42B1C; color: #fff; }
+.titlebar button:focus-visible { outline-offset: -2px; }
+.titlebar svg { width: 10px; height: 10px; stroke-width: 1; stroke-linecap: square; stroke-linejoin: miter; }
 
 @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
   .long { display: none; }

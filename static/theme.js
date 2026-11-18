@@ -4,6 +4,7 @@
 // page paints, so the default look never flashes. Loaded in <head> by both
 // pages; the editing dialog lives in common.js. Everything is static CSS: no
 // blur, no animation, nothing that costs per frame (the app is for gamers).
+// The end of the file draws the Windows app's title bar.
 
 const THEME_VARS = ['--bg', '--card', '--raised', '--raised-2', '--frame', '--border', '--border-strong'];
 const THEMES = {
@@ -58,3 +59,73 @@ function applyAppearance(appearance = loadAppearance()) {
 }
 
 applyAppearance();
+
+// ---------- title bar of the Windows app ----------
+
+// Inside the app (desktop/), the page draws the window's title bar so it
+// follows the theme. The app keeps the native bar until the page asks for it
+// to go (`window_control('enable')`); an older app answers with an error and
+// keeps its bar, so the window never ends up with two bars or none. The class
+// is set right away when this tab already had the bar (lobby → room), so the
+// layout doesn't jump on every page.
+(() => {
+  const app = window.__TAURI__?.core;
+  if (!app) return;
+  const root = document.documentElement;
+  const control = (action) => app.invoke('window_control', { action });
+  const remember = (on) => { try { sessionStorage.setItem('app-titlebar', on ? '1' : ''); } catch { /* storage blocked */ } };
+  try { if (sessionStorage.getItem('app-titlebar')) root.classList.add('app-titlebar'); } catch { /* storage blocked */ }
+
+  const svg = (path) => `<svg viewBox="0 0 10 10" aria-hidden="true">${path}</svg>`;
+  const ICON_MAXIMIZE = svg('<rect x=".5" y=".5" width="9" height="9"/>');
+  const ICON_RESTORE = svg('<path d="M2.5 2.5V.5h7v7h-2"/><rect x=".5" y="2.5" width="7" height="7"/>');
+  let maxButton = null;
+  let isMaximized = false;
+  const showState = (maximized) => {
+    isMaximized = maximized;
+    if (!maxButton) return;
+    maxButton.innerHTML = maximized ? ICON_RESTORE : ICON_MAXIMIZE;
+    maxButton.setAttribute('aria-label', maximized ? 'Restaurar' : 'Maximizar');
+    maxButton.title = maxButton.getAttribute('aria-label');
+  };
+  const run = (action) => control(action).then(showState).catch((err) => console.warn('app', err));
+
+  function build() {
+    const bar = document.createElement('div');
+    bar.className = 'titlebar';
+    bar.innerHTML = `<span class="titlebar-name">CPX Call</span>
+      <button type="button" data-action="minimize" aria-label="Minimizar" title="Minimizar">${svg('<path d="M0 5h10"/>')}</button>
+      <button type="button" data-action="toggle_maximize"></button>
+      <button type="button" class="close" data-action="close" aria-label="Fechar" title="Fechar">${svg('<path d="M.5.5l9 9M9.5.5l-9 9"/>')}</button>`;
+    maxButton = bar.querySelector('[data-action="toggle_maximize"]');
+    bar.addEventListener('click', (e) => {
+      const button = e.target.closest('button');
+      if (button) run(button.dataset.action);
+    });
+    // Dragging the empty bar moves the window; double-click maximizes, like
+    // the native bar. The drag must start while the button is down.
+    bar.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || e.target.closest('button')) return;
+      run(e.detail === 2 ? 'toggle_maximize' : 'drag');
+    });
+    // Maximized by Win+↑, a snap or the taskbar: the icon follows.
+    let resizeTimer = 0;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => run('state'), 150);
+    });
+    document.body.prepend(bar);
+    showState(isMaximized);
+  }
+
+  control('enable').then((maximized) => {
+    root.classList.add('app-titlebar');
+    remember(true);
+    showState(maximized);
+    if (document.body) build(); else document.addEventListener('DOMContentLoaded', build);
+  }).catch((err) => {
+    root.classList.remove('app-titlebar');
+    remember(false);
+    console.warn('app', err);
+  });
+})();

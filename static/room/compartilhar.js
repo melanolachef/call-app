@@ -17,7 +17,9 @@ let shareMode = load('shareMode') === 'texto' ? 'texto' : 'jogo';
 // told); after 2 calm minutes it steps back up. With 3+ people watching (one
 // encode each in a mesh), Jogo already starts one level down. Frame-rate
 // drops alone don't count: a still screen (a game menu) also sends fewer
-// frames while the PC is fine.
+// frames while the PC is fine. Each step changes the capture (a small hiccup
+// in the game), so after two drops in one share it stays down instead of
+// going up and down for the rest of the session.
 const LEVELS = [
   { fps: 30, maxHeight: 720 },
   { fps: 24, maxHeight: 720 },
@@ -27,7 +29,9 @@ const LEVELS = [
 const ADAPT_EVERY_MS = 5000;
 const STRIKES_TO_STEP_DOWN = 3; // ~15s CPU-limited
 const CALM_TO_STEP_UP = 24; // ~2 min fine
+const MAX_DROPS_TO_STEP_UP = 2;
 let adaptLevel = 0;
+let drops = 0;
 let strikes = 0;
 let calm = 0;
 
@@ -57,11 +61,12 @@ function adaptQuality(limited) {
     calm = 0;
     if (++strikes >= STRIKES_TO_STEP_DOWN && adaptLevel < LEVELS.length - 1) {
       adaptLevel++;
+      drops++;
       strikes = 0;
     }
   } else {
     strikes = 0;
-    if (++calm >= CALM_TO_STEP_UP && adaptLevel > 0) {
+    if (++calm >= CALM_TO_STEP_UP && adaptLevel > 0 && drops < MAX_DROPS_TO_STEP_UP) {
       adaptLevel--;
       calm = 0;
     }
@@ -70,7 +75,7 @@ function adaptQuality(limited) {
   if (after.fps === before.fps && after.maxHeight === before.maxHeight) return;
   retune();
   if (after.fps < before.fps || after.maxHeight < before.maxHeight) {
-    toast(`Seu PC está no limite: a transmissão foi para ${after.maxHeight}p a ${after.fps} FPS para não travar o jogo. Volta sozinha quando aliviar.`, 7000);
+    toast(`Seu PC está no limite: a transmissão foi para ${after.maxHeight}p a ${after.fps} FPS para não travar o jogo. ${drops < MAX_DROPS_TO_STEP_UP ? 'Volta sozinha quando aliviar.' : 'Fica assim até o fim desta transmissão.'}`, 7000);
   }
 }
 
@@ -274,6 +279,7 @@ function removePeer(id) {
   const peer = peers.get(id);
   if (!peer) return;
   peer.pc.close();
+  peer.voiceAnalyser = dropAnalyser(peer.voiceAnalyser);
   if (document.pictureInPictureElement === peer.screen.video) document.exitPictureInPicture().catch(() => {});
   peer.screen.card.remove();
   peer.voiceAudio?.remove();
@@ -373,6 +379,7 @@ function setPreview(on) {
 function stopShare() {
   if (!localTrack) return;
   adaptLevel = 0;
+  drops = 0;
   strikes = 0;
   calm = 0;
   localTrack.onended = null;

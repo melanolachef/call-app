@@ -87,12 +87,22 @@ function applyVoiceOutput() {
 function analyserFor(track) {
   const analyser = voice.ctx.createAnalyser();
   analyser.fftSize = 512;
-  voice.ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser);
+  analyser.source = voice.ctx.createMediaStreamSource(new MediaStream([track]));
+  analyser.source.connect(analyser);
+  analyser.buffer = new Float32Array(analyser.fftSize); // reused every tick
   return analyser;
 }
 
+// Audio nodes keep running on the audio thread until disconnected: every
+// join/leave and every reconnect used to leave two behind (#75).
+function dropAnalyser(analyser) {
+  analyser?.source.disconnect();
+  analyser?.disconnect();
+  return null;
+}
+
 function levelOf(analyser) {
-  const data = new Float32Array(analyser.fftSize);
+  const data = analyser.buffer;
   analyser.getFloatTimeDomainData(data);
   let sum = 0;
   for (const v of data) sum += v * v;
@@ -131,7 +141,8 @@ function leaveVoice() {
   voice.pttHeld = false;
   voice.track?.stop();
   voice.track = null;
-  voice.analyser = null;
+  voice.analyser = dropAnalyser(voice.analyser);
+  peers.forEach((peer) => (peer.voiceAnalyser = dropAnalyser(peer.voiceAnalyser)));
   voice.speaking = false;
   document.body.classList.remove('in-voice');
   chime(false);
@@ -203,6 +214,8 @@ setInterval(() => {
   peers.forEach((peer) => {
     if (peer.voiceIn && peer.voiceTransceiver && !peer.voiceAnalyser) {
       peer.voiceAnalyser = analyserFor(peer.voiceTransceiver.receiver.track);
+    } else if (!peer.voiceIn && peer.voiceAnalyser) {
+      peer.voiceAnalyser = dropAnalyser(peer.voiceAnalyser);
     }
     check(peer, peer.voiceAnalyser, peer.voiceIn && !peer.voiceMuted && !voice.deafened);
   });
