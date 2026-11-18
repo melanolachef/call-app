@@ -4,6 +4,7 @@ function createPeer(id, initiator) {
   const pc = new RTCPeerConnection({ iceServers });
   const peer = {
     id, nick: '', photo: '', pc, transceiver: null, audioTransceiver: null, voiceTransceiver: null,
+    camTransceiver: null, camOn: false, camWantsMe: false, iWantCam: false, camVideo: buildCamVideo(),
     voiceIn: false, voiceMuted: false, voiceAudio: null, voiceAnalyser: null, speaking: false,
     sharing: false, hasAudio: false, iWatch: false, watchesMe: false,
     announced: initiator, // people already here when we joined don't get an "entrou" line
@@ -25,7 +26,10 @@ function createPeer(id, initiator) {
   };
   pc.onconnectionstatechange = () => {
     if (pc.connectionState !== 'failed') peer.retrying = false;
-    if (pc.connectionState === 'connected') tuneSender(peer); // encodings exist now
+    if (pc.connectionState === 'connected') { // encodings exist now
+      tuneSender(peer);
+      tuneCamSender(peer);
+    }
     refresh();
   };
 
@@ -39,11 +43,14 @@ function createPeer(id, initiator) {
     const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
     // ...and a third one for the voice channel (microphone).
     const voiceTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
-    attachTransceiver(peer, transceiver, audioTransceiver, voiceTransceiver);
+    // ...and a fourth for the camera, filled only for those who see your card.
+    const camTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
+    attachTransceiver(peer, transceiver, audioTransceiver, voiceTransceiver, camTransceiver);
     enqueue(peer, async () => {
       // Their profile says what they encode well; give up waiting after 3s.
       await Promise.race([peer.profileKnown, new Promise((r) => setTimeout(r, 3000))]);
       preferCodecs(transceiver, peer);
+      preferCodecs(camTransceiver, peer);
       await pc.setLocalDescription(); // creates the offer implicitly
       send(id, { description: pc.localDescription });
     });
@@ -52,6 +59,7 @@ function createPeer(id, initiator) {
   send(id, profileMsg());
   if (localTrack) send(id, { sharing: true, audio: !!localAudio });
   if (voice.joined) send(id, { voice: voiceState() });
+  if (cam.track) send(id, { camera: true });
   refresh();
   return peer;
 }
@@ -96,7 +104,7 @@ function preferCodecs(transceiver, peer) {
   }
 }
 
-function attachTransceiver(peer, transceiver, audioTransceiver, voiceTransceiver) {
+function attachTransceiver(peer, transceiver, audioTransceiver, voiceTransceiver, camTransceiver) {
   peer.transceiver = transceiver;
   peer.audioTransceiver = audioTransceiver ?? null;
   peer.voiceTransceiver = voiceTransceiver ?? null;
@@ -115,6 +123,7 @@ function attachTransceiver(peer, transceiver, audioTransceiver, voiceTransceiver
   if (audioTransceiver) tracks.push(audioTransceiver.receiver.track);
   peer.screen.video.srcObject = new MediaStream(tracks);
   sendScreenTo(peer); // in case they asked to watch before this was set up
+  if (camTransceiver) attachCamera(peer, camTransceiver); // absent with someone on an older version
 }
 
 async function handleSignal(peer, data) {
@@ -124,16 +133,17 @@ async function handleSignal(peer, data) {
     if (data.description.type === 'offer') {
       // Transceivers created from a remote offer default to "recvonly";
       // switch them to "sendrecv" so we can share our screen back later.
-      // In m-line order: video, then the screen's sound, then voice.
-      const transceiver = pc.getTransceivers().find((t) => t.receiver.track.kind === 'video');
+      // In m-line order: screen, its sound, voice, camera.
+      const [transceiver, camTransceiver] = pc.getTransceivers().filter((t) => t.receiver.track.kind === 'video');
       const [audioTransceiver, voiceTransceiver] = pc.getTransceivers().filter((t) => t.receiver.track.kind === 'audio');
-      transceiver.direction = 'sendrecv';
-      if (audioTransceiver) audioTransceiver.direction = 'sendrecv';
-      if (voiceTransceiver) voiceTransceiver.direction = 'sendrecv';
+      for (const t of [transceiver, audioTransceiver, voiceTransceiver, camTransceiver]) {
+        if (t) t.direction = 'sendrecv';
+      }
       preferCodecs(transceiver, peer); // their profile arrived before the offer
+      if (camTransceiver) preferCodecs(camTransceiver, peer);
       await pc.setLocalDescription(); // creates the answer implicitly
       send(peer.id, { description: pc.localDescription });
-      attachTransceiver(peer, transceiver, audioTransceiver, voiceTransceiver);
+      attachTransceiver(peer, transceiver, audioTransceiver, voiceTransceiver, camTransceiver);
     }
   } else if (data.candidate) {
     await pc.addIceCandidate(data.candidate);
@@ -165,6 +175,13 @@ async function handleSignal(peer, data) {
     sendVoiceTo(peer);
     applyVoiceOutput();
     refresh();
+  } else if ('camera' in data) {
+    peer.camOn = !!data.camera;
+    updateCamWants();
+    refresh();
+  } else if ('camWatch' in data) {
+    peer.camWantsMe = !!data.camWatch;
+    sendCameraTo(peer);
   } else if ('restart' in data) {
     if (myId > peer.id) restartIce(peer); // they asked us to redo the connection
   } else if ('watch' in data) {
