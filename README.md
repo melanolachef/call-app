@@ -22,6 +22,20 @@ Abra http://localhost:3000. Você cai no **lobby**: escolha seu nick, crie uma s
 
 ![Sala do CPX Call: telas compartilhadas, chat e participantes](assets/screenshot.png)
 
+## App para Windows
+
+O lobby mostra **Baixar app para Windows** (só no Windows). O app abre a mesma sala do site numa janela própria e faz o que o navegador não consegue: a **tecla de falar** e o **Ctrl+Shift+M** funcionam com o jogo em primeiro plano. Ele só observa essas duas teclas (o jogo continua recebendo) e não lê nenhuma outra. Como o app carrega o site, toda mudança na página chega sem atualizar o app.
+
+Fica em [desktop/](desktop/), em Rust com [Tauri 2](https://tauri.app) (usa o WebView2 que já vem no Windows, então o instalador tem poucos MB). Para rodar apontando para o servidor local:
+
+```sh
+cargo run --release                         # o servidor, em outro terminal
+cd desktop
+CPX_URL=http://localhost:3000 cargo run     # PowerShell: $env:CPX_URL="http://localhost:3000"; cargo run
+```
+
+Para gerar o instalador: `cargo install tauri-cli --version "^2" --locked` e `cargo tauri build` dentro de `desktop/`. Para publicar, crie uma tag `app-vX.Y.Z`: o workflow [app-windows.yml](.github/workflows/app-windows.yml) compila e cria o release com `CPX-Call-Windows.exe`, que é para onde o botão do lobby aponta. O app ainda não é assinado, então o Windows avisa na primeira vez ("Mais informações" › "Executar assim mesmo").
+
 ## Testar
 
 **Dois navegadores (mesmo computador):** abra http://localhost:3000, crie uma sala, clique em "Convidar" e abra o link em outro navegador ou numa janela anônima (duas abas do mesmo navegador não entram na mesma sala). Clique em "Compartilhar tela" numa delas e a tela aparece na outra. Dica: compartilhe uma *outra* janela ou aba para não criar o efeito de espelho infinito. Dê um duplo clique no vídeo para ver em tela cheia.

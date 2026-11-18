@@ -184,6 +184,7 @@ function refresh() {
       : voice.deafened ? 'Na voz · sem som' : voice.muted ? 'Na voz · mudo' : 'Na voz';
   $('me-status').className = me.status[1];
   renderVoiceUi();
+  syncDesktopKeys();
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
   $('share-short').textContent = localTrack ? 'Parar' : 'Tela';
