@@ -334,6 +334,7 @@ function refresh() {
   $('me-status').className = me.status[1] === 'live' ? 'live' : voice.joined ? 'online' : '';
   renderVoiceUi();
   renderCameraUi();
+  if (!soundPop.hidden) renderSoundpad(); // "entre na voz" hint follows the voice
   syncDesktopKeys();
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
