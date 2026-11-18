@@ -283,10 +283,25 @@
     #react-btn { font-size: 18px; line-height: 1; }
     .ctl-sep { flex: none; width: 1px; height: 24px; margin: 0 4px; background: var(--border); }
     .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-sm); background: var(--live); color: #000; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-    .mode { flex: none; display: flex; height: 40px; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
-    .mode-btn { padding: 0 14px; background: transparent; color: var(--muted); font-size: 13px; }
-    .mode-btn + .mode-btn { border-left: 1px solid var(--border); }
-    .mode-btn[aria-pressed="true"] { background: var(--raised-2); color: var(--text); font-weight: 600; }
+    .quality-btn { gap: 6px; padding: 0 10px 0 12px; border: 1px solid var(--border); font-size: 13px; }
+    .quality-btn svg { width: 14px; height: 14px; color: var(--muted); }
+    .quality-btn[aria-expanded="true"] { background: var(--raised); }
+    .quality-pop { position: fixed; z-index: 9; width: min(360px, calc(100vw - 16px)); padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 12px 32px rgb(0 0 0 / .5); }
+    .quality-pop h2 { margin: 0; font-size: 13px; font-weight: 600; }
+    .q-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .q-choice { height: 30px; padding: 0 10px; background: transparent; color: var(--muted); font-size: 13px; }
+    .q-choice + .q-choice { border-left: 1px solid var(--border); }
+    .q-choice[aria-pressed="true"] { background: var(--raised-2); color: var(--text); font-weight: 600; }
+    .q-preset { height: auto; padding: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: 1px solid var(--border) !important; border-radius: var(--r-md); text-align: left; }
+    .q-preset[aria-pressed="true"] { border-color: var(--text) !important; background: var(--raised); }
+    .q-preset strong { color: var(--text); font-size: 13px; }
+    .q-preset .mono { font-size: 11px; }
+    .q-preset .q-note { font-size: 11px; color: var(--faint); font-weight: 400; }
+    .q-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--soft); }
+    .q-seg { display: flex; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+    .q-cost { margin: 0; font-size: 11px; color: var(--muted); }
+    .q-cost.warn { color: var(--warn); }
+    .quality-pop > .q-note { margin: 0; font-size: 11px; color: var(--faint); }
 
     .react-pop { position: fixed; z-index: 9; display: grid; grid-template-columns: repeat(6, 40px); gap: 4px; padding: 8px; box-shadow: 0 12px 32px rgb(0 0 0 / .5); }
     .react-choice { width: 40px; height: 40px; border-radius: var(--r-md); background: transparent; font-size: 22px; line-height: 1; }
@@ -358,7 +373,7 @@
     @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
       .app { display: flex; flex-direction: column; gap: 12px; height: auto; min-height: 100dvh; padding: 0 max(16px, env(safe-area-inset-right)) 96px max(16px, env(safe-area-inset-left)); }
       .topbar { margin: 0 calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left))); padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); gap: 10px; }
-      .side, .mode, #notify-btn, #live, #net, .seats, .top-end .vsep, #timer, .screen-actions .volume, .pip-btn, #react-btn, #sound-btn, #deafen, #share svg, #invite-bar, .ctl-sep, .chat-note { display: none !important; }
+      .side, .quality-btn, #notify-btn, #live, #net, .seats, .top-end .vsep, #timer, .screen-actions .volume, .pip-btn, #react-btn, #sound-btn, #deafen, #share svg, #invite-bar, .ctl-sep, .chat-note { display: none !important; }
       .room-link { flex: 1; }
       .stage { flex: none; padding: 0; gap: 12px; }
       .content { flex: none; }
@@ -507,10 +522,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
           <span class="long" id="share-long">Compartilhar tela</span><span class="short" id="share-short">Compartilhar</span>
         </button>
-        <div class="mode" role="group" aria-label="Qualidade ao compartilhar">
-          <button class="mode-btn" id="mode-jogo" aria-pressed="true" title="Fluido e leve para o PC: até 720p a 30 FPS">Jogo</button>
-          <button class="mode-btn" id="mode-texto" aria-pressed="false" title="Nítido para código e documentos: até 1080p a 15 FPS">Texto</button>
-        </div>
+        <button class="ctl quality-btn" id="quality-btn" aria-haspopup="true" aria-expanded="false"><span class="q-label mono"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
         <span class="ctl-sep" aria-hidden="true"></span>
         <button class="ctl" id="invite-bar" title="Copiar o convite da sala">Convidar</button>
         <button class="ctl" id="react-btn" title="Reagir" aria-label="Reagir" aria-haspopup="true" aria-expanded="false">😊</button>
@@ -523,6 +535,15 @@
   </div>
 
   <div class="react-pop card" id="react-pop" role="group" aria-label="Reações" hidden></div>
+  <div class="quality-pop card" id="quality-pop" role="group" aria-labelledby="q-title" hidden>
+    <h2 id="q-title">Qualidade ao compartilhar</h2>
+    <div class="q-presets" id="q-presets"></div>
+    <div class="q-row"><span>Resolução</span><div class="q-seg" id="q-heights"></div></div>
+    <div class="q-row"><span>FPS</span><div class="q-seg" id="q-fps"></div></div>
+    <div class="q-row"><span>Se faltar fôlego</span><div class="q-seg" id="q-priority"></div></div>
+    <p class="q-cost mono" id="q-cost"></p>
+    <p class="q-note">Vale na hora, também durante a transmissão. Se o PC apertar, a qualidade baixa sozinha a partir daqui.</p>
+  </div>
   <div class="sound-pop card" id="sound-pop" role="group" aria-labelledby="sound-title" hidden>
     <div class="sound-head">
       <h2 id="sound-title">Sons</h2>
