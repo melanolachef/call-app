@@ -1,31 +1,65 @@
-// ---------- modo Jogo / Texto ----------
+// ---------- qualidade: resolução, FPS e prioridade ----------
 
-// Jogo: smooth and light. Texto: sharp text for code and documents, at a low
-// frame rate. The caps are applied in the encoder (works for any capture
-// source) and, best effort, in the capture itself.
-const MODES = {
-  jogo: { hint: 'motion', fps: 30, maxHeight: 720, bitrate: 2_500_000, degradation: 'maintain-framerate' },
-  texto: { hint: 'text', fps: 15, maxHeight: 1080, bitrate: 2_500_000, degradation: 'maintain-resolution' },
+// One button opens a box to pick the resolution, the frame rate and what to
+// keep when the PC or the network can't keep up: "Fluidez" (games: keeps
+// the frame rate, contentHint motion) or "Nitidez" (code, documents: keeps
+// the resolution, contentHint text). The caps are applied in the encoder
+// (works for any capture source) and, best effort, in the capture itself.
+const QUALITY_HEIGHTS = [480, 720, 1080, 1440];
+const QUALITY_FPS = [15, 30, 60];
+const PRIORITY = {
+  motion: { hint: 'motion', degradation: 'maintain-framerate', label: 'Fluidez' },
+  text: { hint: 'text', degradation: 'maintain-resolution', label: 'Nitidez' },
 };
-let shareMode = load('shareMode') === 'texto' ? 'texto' : 'jogo';
+const QUALITY_PRESETS = [
+  { name: 'Jogo', height: 720, fps: 30, priority: 'motion', note: 'leve para o PC' },
+  { name: 'Jogo liso', height: 1080, fps: 60, priority: 'motion', note: 'pesa mais' },
+  { name: 'Texto', height: 1080, fps: 15, priority: 'text', note: 'código e documentos' },
+];
+
+function loadQuality() {
+  try {
+    const saved = JSON.parse(load('shareQuality') || 'null');
+    if (saved && QUALITY_HEIGHTS.includes(saved.height) && QUALITY_FPS.includes(saved.fps) && saved.priority in PRIORITY) {
+      return { height: saved.height, fps: saved.fps, priority: saved.priority };
+    }
+  } catch { /* broken entry */ }
+  // The old Jogo / Texto setting, if any.
+  const { height, fps, priority } = QUALITY_PRESETS[load('shareMode') === 'texto' ? 2 : 0];
+  return { height, fps, priority };
+}
+let quality = loadQuality();
+// What the others are told ("Jogo" / "Texto") and what the old code reads.
+let shareMode = quality.priority === 'text' ? 'texto' : 'jogo';
+
+// Upload per viewer (one encode each in a mesh): ~0,09 bit per pixel per
+// frame, between 0,8 and 6 Mb/s. 720p30 ≈ 2,5 Mb/s, as before.
+function qualityBitrate(height, fps) {
+  const width = Math.round((height * 16) / 9);
+  return Math.round(Math.min(6_000_000, Math.max(800_000, width * height * fps * 0.09)));
+}
 
 // ---------- ajuste automático (PC no limite) ----------
 
 // Some PCs heat up after minutes of game + encoding and the game starts to
 // stutter. Every 5s we read what the encoder reports: if it says it is
 // CPU-limited for ~15s, the stream steps down one level (and the sharer is
-// told); after 2 calm minutes it steps back up. With 3+ people watching (one
-// encode each in a mesh), Jogo already starts one level down. Frame-rate
+// told); after 2 calm minutes it steps back up. Frame-rate
 // drops alone don't count: a still screen (a game menu) also sends fewer
 // frames while the PC is fine. Each step changes the capture (a small hiccup
 // in the game), so after two drops in one share it stays down instead of
 // going up and down for the rest of the session.
-const LEVELS = [
-  { fps: 30, maxHeight: 720 },
-  { fps: 24, maxHeight: 720 },
-  { fps: 24, maxHeight: 540 },
-  { fps: 20, maxHeight: 480 },
-];
+// Steps down from what was chosen: Fluidez gives up resolution first,
+// Nitidez gives up frames first.
+function levelCaps(level) {
+  const { height, fps, priority } = quality;
+  const steps = priority === 'text'
+    ? [[1, 1], [1, 0.8], [1, 0.66], [0.75, 0.5]]
+    : [[1, 1], [1, 0.8], [0.75, 0.8], [0.66, 0.66]];
+  const [h, f] = steps[Math.min(level, steps.length - 1)];
+  return { maxHeight: Math.round((height * h) / 2) * 2, fps: Math.max(5, Math.round(fps * f)) };
+}
+const LEVEL_COUNT = 4;
 const ADAPT_EVERY_MS = 5000;
 const STRIKES_TO_STEP_DOWN = 3; // ~15s CPU-limited
 const CALM_TO_STEP_UP = 24; // ~2 min fine
@@ -39,11 +73,10 @@ function viewerCount() {
   return [...peers.values()].filter((p) => p.watchesMe).length;
 }
 
+// With 3+ people watching (one encode each), it starts one step down.
 function currentCaps() {
-  const mode = MODES[shareMode];
-  if (shareMode !== 'jogo') return { fps: mode.fps, maxHeight: mode.maxHeight };
   const extra = viewerCount() >= 3 ? 1 : 0;
-  return LEVELS[Math.min(LEVELS.length - 1, adaptLevel + extra)];
+  return levelCaps(Math.min(LEVEL_COUNT - 1, adaptLevel + extra));
 }
 
 // What the others see before clicking "Assistir": "720p · 30 fps · Jogo".
@@ -75,7 +108,7 @@ function adaptQuality(limited) {
   const before = currentCaps();
   if (limited) {
     calm = 0;
-    if (++strikes >= STRIKES_TO_STEP_DOWN && adaptLevel < LEVELS.length - 1) {
+    if (++strikes >= STRIKES_TO_STEP_DOWN && adaptLevel < LEVEL_COUNT - 1) {
       adaptLevel++;
       drops++;
       strikes = 0;
@@ -96,7 +129,7 @@ function adaptQuality(limited) {
 }
 
 setInterval(async () => {
-  if (!localTrack || shareMode !== 'jogo') return;
+  if (!localTrack) return;
   let limited = false;
   let sending = false;
   for (const peer of peers.values()) {
@@ -118,7 +151,7 @@ function encoderSettings(sender) {
   const caps = currentCaps();
   const height = sender.track.getSettings().height || caps.maxHeight;
   return {
-    maxBitrate: MODES[shareMode].bitrate,
+    maxBitrate: qualityBitrate(caps.maxHeight, caps.fps),
     maxFramerate: caps.fps,
     scaleResolutionDownBy: Math.max(1, height / caps.maxHeight),
   };
@@ -130,7 +163,7 @@ async function tuneSender(peer) {
   const params = sender.getParameters();
   if (!params.encodings?.length) return; // not negotiated yet: retried once connected
   Object.assign(params.encodings[0], encoderSettings(sender));
-  params.degradationPreference = MODES[shareMode].degradation;
+  params.degradationPreference = PRIORITY[quality.priority].degradation;
   try {
     await sender.setParameters(params);
   } catch {
@@ -142,20 +175,87 @@ async function tuneSender(peer) {
   }
 }
 
-function setShareMode(mode) {
-  shareMode = mode;
-  save('shareMode', mode);
+// A new choice applies at once, also in the middle of a share, and starts
+// the automatic adjustment over from it.
+function setQuality(patch) {
+  quality = { ...quality, ...patch };
+  shareMode = quality.priority === 'text' ? 'texto' : 'jogo';
+  save('shareQuality', JSON.stringify(quality));
+  adaptLevel = 0;
+  drops = 0;
+  strikes = 0;
+  calm = 0;
   if (localTrack) {
-    localTrack.contentHint = MODES[mode].hint;
+    localTrack.contentHint = PRIORITY[quality.priority].hint;
     localTrack.applyConstraints(captureConstraints())
       .catch(() => { /* capture caps are best effort; the encoder caps still apply */ })
       .finally(() => peers.forEach(tuneSender));
     broadcastShareInfo();
   }
+  renderQualityPicker();
   refresh();
 }
-$('mode-jogo').onclick = () => setShareMode('jogo');
-$('mode-texto').onclick = () => setShareMode('texto');
+
+// ---------- caixa de qualidade ----------
+
+const qualityBtn = $('quality-btn');
+const qualityPop = $('quality-pop');
+
+function choiceButton(label, pressed, onclick, title) {
+  const button = el('button', 'q-choice', label);
+  button.type = 'button';
+  button.setAttribute('aria-pressed', String(pressed));
+  if (title) button.title = title;
+  button.onclick = onclick;
+  return button;
+}
+
+function renderQualityPicker() {
+  const { height, fps, priority } = quality;
+  qualityBtn.querySelector('.q-label').textContent = `${height}p · ${fps}`;
+  qualityBtn.title = `Qualidade ao compartilhar: ${height}p a ${fps} FPS, prioridade ${PRIORITY[priority].label.toLowerCase()}`;
+  if (qualityPop.hidden) return;
+  $('q-presets').replaceChildren(...QUALITY_PRESETS.map((p) => {
+    const pressed = p.height === height && p.fps === fps && p.priority === priority;
+    const button = choiceButton('', pressed, () => setQuality({ height: p.height, fps: p.fps, priority: p.priority }));
+    button.classList.add('q-preset');
+    button.append(el('strong', null, p.name), el('span', 'mono', `${p.height}p · ${p.fps} fps`), el('span', 'q-note', p.note));
+    return button;
+  }));
+  $('q-heights').replaceChildren(...QUALITY_HEIGHTS.map((h) => choiceButton(`${h}p`, h === height, () => setQuality({ height: h }))));
+  $('q-fps').replaceChildren(...QUALITY_FPS.map((f) => choiceButton(String(f), f === fps, () => setQuality({ fps: f }))));
+  $('q-priority').replaceChildren(
+    choiceButton('Fluidez', priority === 'motion', () => setQuality({ priority: 'motion' }), 'Jogos e vídeo: mantém os quadros e baixa a resolução se precisar'),
+    choiceButton('Nitidez', priority === 'text', () => setQuality({ priority: 'text' }), 'Código e documentos: mantém a resolução e baixa os quadros se precisar'),
+  );
+  const mbps = (qualityBitrate(height, fps) / 1_000_000).toFixed(1).replace('.', ',');
+  const heavy = height * fps >= 1080 * 60 || height >= 1440;
+  $('q-cost').textContent = `até ${mbps} Mb/s por pessoa assistindo${heavy ? ' · pesa mais no PC e na internet de quem compartilha' : ''}`;
+  $('q-cost').classList.toggle('warn', heavy);
+}
+
+function setQualityPicker(open) {
+  qualityPop.hidden = !open;
+  qualityBtn.setAttribute('aria-expanded', String(open));
+  if (!open) return;
+  renderQualityPicker();
+  const rect = qualityBtn.getBoundingClientRect();
+  const width = qualityPop.offsetWidth;
+  qualityPop.style.left = `${Math.min(Math.max(8, rect.left + rect.width / 2 - width / 2), innerWidth - width - 8)}px`;
+  qualityPop.style.bottom = `${innerHeight - rect.top + 10}px`;
+}
+
+qualityBtn.onclick = () => setQualityPicker(qualityPop.hidden);
+document.addEventListener('pointerdown', (e) => {
+  if (!qualityPop.hidden && !qualityPop.contains(e.target) && !qualityBtn.contains(e.target)) setQualityPicker(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !qualityPop.hidden) {
+    setQualityPicker(false);
+    qualityBtn.focus();
+  }
+});
+renderQualityPicker();
 
 // "Tentar de novo": an ICE restart (new offer with fresh ICE credentials).
 // Only the participant with the higher number sends it, so both sides
@@ -384,7 +484,7 @@ async function startShare() {
     toast('Compartilhando sem som. Para incluir o som, escolha "Tela inteira" e marque "Compartilhar áudio do sistema", ou uma aba do Chrome com "Compartilhar áudio da guia".', 9000);
   }
   // "motion" keeps the frame rate (games); "text" keeps sharpness (code).
-  localTrack.contentHint = MODES[shareMode].hint;
+  localTrack.contentHint = PRIORITY[quality.priority].hint;
   localTrack.onended = stopShare; // the browser's own "stop sharing" bar
   setPreview(previewOn);
   retuneCamera(); // the camera steps down while you share

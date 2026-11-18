@@ -38,7 +38,7 @@ registro de quem entrou.
 
 | Recurso | O que dá para fazer |
 |---|---|
-| **Compartilhar tela** | Cada pessoa compartilha a própria tela, com o **som** do jogo ou da aba. Modo **Jogo** (fluido, até 720p a 30 FPS) ou **Texto** (nítido, até 1080p). Quem assiste vê em tela cheia ou numa janela flutuante por cima do jogo. |
+| **Compartilhar tela** | Cada pessoa compartilha a própria tela, com o **som** do jogo ou da aba. Um botão escolhe a **qualidade**: resolução (480p a 1440p), FPS (15, 30 ou 60) e se, quando faltar fôlego, mantém a fluidez (jogos) ou a nitidez (texto), com atalhos Jogo, Jogo liso e Texto. Quem assiste vê em tela cheia ou numa janela flutuante por cima do jogo. |
 | **Voz** | Canal de voz como no Discord, com supressão de ruído, anel verde em quem fala, **apertar para falar** e **Ctrl+Shift+M** para mutar. |
 | **Câmera** | Câmera leve no card de cada pessoa, enviada só para quem está vendo o card. |
 | **Chat** | Mensagens em balões, emojis e reações que flutuam pela tela. Nada fica salvo. |
