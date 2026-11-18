@@ -65,6 +65,9 @@ const COMMON_CSS: &str = include_str!("../static/common.css");
 const THEME_JS: &str = include_str!("../static/theme.js");
 const FAVICON_SVG: &str = include_str!("../static/favicon.svg");
 const TOUCH_ICON_PNG: &[u8] = include_bytes!("../static/apple-touch-icon.png");
+const ICON_192_PNG: &[u8] = include_bytes!("../static/icon-192.png");
+const ICON_512_PNG: &[u8] = include_bytes!("../static/icon-512.png");
+const MANIFEST: &str = include_str!("../static/manifest.webmanifest");
 // Inter (variable, Latin subset), served from here instead of Google Fonts so
 // opening the app never tells a third party who is online. License: static/fonts/OFL.txt.
 const INTER_WOFF2: &[u8] = include_bytes!("../static/fonts/inter.woff2");
@@ -128,6 +131,19 @@ fn app(rooms: Rooms, ice: Arc<Ice>) -> Router {
         .route(
             "/apple-touch-icon.png",
             get(|| async { icon("image/png", TOUCH_ICON_PNG) }),
+        )
+        // "Add to home screen": the site opens without the browser's bars.
+        .route(
+            "/manifest.webmanifest",
+            get(|| async { icon("application/manifest+json", MANIFEST.as_bytes()) }),
+        )
+        .route(
+            "/icon-192.png",
+            get(|| async { icon("image/png", ICON_192_PNG) }),
+        )
+        .route(
+            "/icon-512.png",
+            get(|| async { icon("image/png", ICON_512_PNG) }),
         )
         .route(
             "/favicon.ico",
@@ -296,6 +312,12 @@ mod tests {
             .await
             .contains("content-type: image/svg+xml"));
         assert!(get("/apple-touch-icon.png")
+            .await
+            .contains("content-type: image/png"));
+        assert!(get("/manifest.webmanifest")
+            .await
+            .contains("content-type: application/manifest+json"));
+        assert!(get("/icon-512.png")
             .await
             .contains("content-type: image/png"));
         assert!(get("/fonts/inter.woff2")

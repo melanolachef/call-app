@@ -2,10 +2,13 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>CPX Call</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#000000">
   <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/common.css">
@@ -55,9 +58,9 @@
     .empty { margin: 0; padding: 4px 20px 16px; font-size: 13px; color: var(--muted); }
 
     @media (hover: none) { .room-actions { opacity: 1; } }
-    @media (max-width: 760px) {
-      .top { padding: 14px 16px; }
-      .me-pill span, .get-app { display: none; }
+    @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
+      .top { padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 14px max(16px, env(safe-area-inset-left)); }
+      .me-pill span, #get-app { display: none; }
       .me-pill { padding-right: 4px; }
       .lobby { padding-top: 24px; gap: 22px; }
       .hello h1 { font-size: 32px; }
@@ -72,6 +75,7 @@
     <p class="brand">CPX Call</p>
     <div class="top-end">
       <a class="btn small get-app round" id="get-app" href="https://github.com/melanolachef/call-app/releases/latest/download/CPX-Call-Windows.exe" title="Atalhos de voz que funcionam com o jogo em foco" hidden>Baixar app para Windows</a>
+      <button class="btn small round get-app" id="install" title="Abre sem as barras do navegador, com a tela inteira para a live" hidden>Instalar</button>
       <button class="icon-btn" id="appearance-btn" title="Aparência" aria-label="Aparência"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.4-1.1-.3-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4.3-4-7.7-9-7.7z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/></svg></button>
       <button class="me-pill" id="edit" title="Editar perfil">
         <div class="avatar" id="me-avatar" aria-hidden="true"></div>

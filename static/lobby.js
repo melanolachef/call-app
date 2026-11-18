@@ -171,3 +171,28 @@ window.addEventListener('pageshow', (e) => { // back button from a room
 
 // The Windows app (desktop/) only makes sense on Windows, and not inside itself.
 $('get-app').hidden = !!window.__TAURI__ || !/Windows/.test(navigator.userAgent);
+
+// Phones: "Instalar" puts the site on the home screen, where it opens without
+// the browser's bars (on iPhone that is the only way to watch a stream on the
+// whole display). Android offers the install prompt; iPhone only has the
+// Share menu, so the button explains it.
+const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const touch = matchMedia('(pointer: coarse)').matches;
+const iphone = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  $('install').hidden = installed || !touch;
+});
+$('install').hidden = installed || !iphone;
+$('install').onclick = async () => {
+  if (!installPrompt) {
+    toast('No Safari, toque em Compartilhar e depois em "Adicionar à Tela de Início".', 8000);
+    return;
+  }
+  installPrompt.prompt();
+  const { outcome } = await installPrompt.userChoice;
+  installPrompt = null;
+  if (outcome === 'accepted') $('install').hidden = true;
+};

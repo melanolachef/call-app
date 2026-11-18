@@ -144,7 +144,7 @@ dialog p { margin: 0; }
 
 .toast { position: fixed; left: 50%; bottom: 104px; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 16px; background: var(--glass); backdrop-filter: blur(20px); font-size: 14px; text-align: center; z-index: 10; box-shadow: 0 10px 30px rgb(0 0 0 / .5); }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
   .long { display: none; }
   .short { display: inline; }
   .toast { bottom: 112px; }

@@ -158,8 +158,6 @@ function restartIce(peer) {
   });
 }
 
-// Fullscreen on desktop and Android; iPhone Safari only supports it on the
-// <video> element through its own webkit API. Phones also try landscape.
 function togglePip(video) {
   if (document.pictureInPictureElement === video) {
     document.exitPictureInPicture().catch(() => {});
@@ -168,17 +166,79 @@ function togglePip(video) {
   }
 }
 
-function enterFullscreen(video) {
-  const landscape = () => screen.orientation?.lock?.('landscape').catch(() => {});
-  if (video.requestFullscreen) {
-    video.requestFullscreen().then(landscape, () => video.webkitEnterFullscreen?.());
+// ---------- tela cheia ----------
+
+// The whole screen card goes fullscreen, so the label and the controls stay
+// over the picture. Where the browser can't do that (iPhone Safari only has
+// its own <video> player), the card covers the page instead ("theater"); with
+// the site added to the home screen (manifest.webmanifest) that is the whole
+// display. A phone turned sideways while watching enters theater by itself,
+// like a video app, and leaves it when turned back.
+let theaterCard = null;
+let autoTheater = false;
+const phoneLandscape = matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)');
+
+function isFullscreen(card) {
+  return document.fullscreenElement === card || theaterCard === card;
+}
+
+function toggleFullscreen(card) {
+  if (isFullscreen(card)) {
+    exitFullscreen();
+  } else if (document.fullscreenEnabled && card.requestFullscreen) {
+    card.requestFullscreen({ navigationUI: 'hide' }).then(
+      () => screen.orientation?.lock?.('landscape').catch(() => {}),
+      () => setTheater(card),
+    );
   } else {
-    video.webkitEnterFullscreen?.();
+    setTheater(card);
   }
 }
+
+function exitFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  setTheater(null);
+}
+
+// Only the classes: safe to call from refresh().
+function placeTheater(card, auto = false) {
+  theaterCard?.classList.remove('theater', 'show-ui');
+  theaterCard = card;
+  autoTheater = !!card && auto;
+  card?.classList.add('theater');
+  document.body.classList.toggle('in-theater', !!card);
+}
+
+function setTheater(card, auto = false) {
+  placeTheater(card, auto);
+  refresh();
+  if (card) flashScreenUi(card); // show how to leave
+}
+
 document.addEventListener('fullscreenchange', () => {
-  if (!document.fullscreenElement) screen.orientation?.unlock?.();
+  if (document.fullscreenElement) flashScreenUi(document.fullscreenElement);
+  else screen.orientation?.unlock?.();
+  refresh();
 });
+
+phoneLandscape.addEventListener('change', () => {
+  if (phoneLandscape.matches) {
+    if (theaterCard || document.fullscreenElement) return;
+    const watched = [...peers.values()].find((p) => p.sharing && p.iWatch);
+    if (watched) setTheater(watched.screen.card, true);
+  } else if (autoTheater) {
+    setTheater(null);
+  }
+});
+
+// On touch screens the controls over a fullscreen picture hide; a tap brings
+// them back for a few seconds.
+function flashScreenUi(card) {
+  if (!isFullscreen(card)) return;
+  card.classList.add('show-ui');
+  clearTimeout(card.uiTimer);
+  card.uiTimer = setTimeout(() => card.classList.remove('show-ui'), 3000);
+}
 
 // One volume and mute for every stream you watch, saved in this browser.
 let soundVolume = Math.min(1, Math.max(0, Number(load('volume') || 1)));
