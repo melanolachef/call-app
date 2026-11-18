@@ -56,6 +56,7 @@ const ROOM_JS: &str = concat!(
     include_str!("../static/room/reacoes.js"),
     include_str!("../static/room/lateral.js"),
     include_str!("../static/room/interface.js"),
+    include_str!("../static/room/rede.js"),
     include_str!("../static/room/inicio.js"),
 );
 const LOBBY_JS: &str = include_str!("../static/lobby.js");

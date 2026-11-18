@@ -71,6 +71,16 @@
     #invite { height: 36px; padding: 0 14px; border-radius: 999px; background: var(--card); font-weight: 500; font-size: 14px; }
     #invite svg { width: 16px; height: 16px; }
     #notify-btn { width: 36px; height: 36px; background: var(--card); }
+    /* Ping: signal bars colored by the worst connection; details on hover. */
+    .net { position: relative; width: 36px; height: 36px; border-radius: 50%; background: var(--card); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
+    .net svg { width: 18px; height: 15px; fill: currentColor; stroke: none; }
+    .net.good { color: var(--online); }
+    .net.mid { color: var(--warn); }
+    .net.bad { color: var(--danger); }
+    .net-tip { position: absolute; top: calc(100% + 8px); right: 0; z-index: 8; min-width: 190px; color: var(--text); padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; box-shadow: 0 10px 30px rgb(0 0 0 / .5); opacity: 0; visibility: hidden; transition: opacity .12s; pointer-events: none; }
+    .net:hover .net-tip, .net:focus .net-tip { opacity: 1; visibility: visible; }
+    .net-row { display: flex; justify-content: space-between; gap: 16px; }
+    .net-row strong { font-weight: 600; font-variant-numeric: tabular-nums; }
     #notify-btn[aria-pressed="true"] { color: var(--online); }
 
     .content { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
@@ -237,7 +247,7 @@
     /* ---------- celular ---------- */
     @media (max-width: 760px) {
       .app { display: flex; flex-direction: column; gap: 14px; padding: 20px 16px 100px; }
-      .side, .mode, #home, #notify-btn, #live, .screen-actions .volume, .pip-btn, #react-btn, #deafen, #share svg, .voice-join .short { display: none !important; }
+      .side, .mode, #home, #notify-btn, #live, #net, .screen-actions .volume, .pip-btn, #react-btn, #deafen, #share svg, .voice-join .short { display: none !important; }
       .stage { flex: none; padding: 0; gap: 14px; }
       .stage-head { flex-wrap: wrap; row-gap: 0; }
       .stage-head h1 { flex-basis: calc(100% - 56px); order: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -319,6 +329,10 @@
         <span class="head-end">
           <span class="pill reconnecting" id="reconnecting" role="status" hidden>Reconectando…</span>
           <span class="pill live" id="live" hidden><span class="dot" aria-hidden="true"></span>Ao vivo</span>
+          <span class="net" id="net" tabindex="0" role="img" aria-label="Qualidade da conexão" hidden>
+            <svg viewBox="0 0 20 16" aria-hidden="true"><rect x="1" y="11" width="3.5" height="4" rx="1"/><rect x="6.5" y="7.5" width="3.5" height="7.5" rx="1"/><rect x="12" y="4" width="3.5" height="11" rx="1"/></svg>
+            <span class="net-tip card" id="net-tip" role="tooltip"></span>
+          </span>
           <button class="icon-btn" id="notify-btn" hidden></button>
           <button class="btn" id="invite" title="Copiar convite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg><span class="long">Copiar convite</span><span class="sr-only short">Copiar convite</span></button>
         </span>
