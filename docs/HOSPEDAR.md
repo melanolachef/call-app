@@ -18,6 +18,8 @@ Abra http://localhost:3000.
 | `PORT` | `3000` | Porta HTTP |
 | `MAX_PEERS` | `12` | Pessoas por sala |
 | `TURN_KEY_ID`, `TURN_KEY_API_TOKEN` | (vazias) | TURN da Cloudflare, veja abaixo |
+| `GIF_API_KEY` | (vazia) | Busca de GIFs no chat (KLIPY), veja abaixo |
+| `GIF_API_BASE` | `https://api.klipy.com` | Outro serviço com a API no formato do Tenor |
 
 Exemplo: `PORT=8080 MAX_PEERS=20 cargo run --release`. O arquivo
 [.env.example](../.env.example) lista todas.
@@ -66,6 +68,22 @@ fly secrets set TURN_KEY_ID=<id da chave> TURN_KEY_API_TOKEN=<token da chave>
 O servidor gera credenciais temporárias (24 h) pela API da Cloudflare e as
 entrega em `GET /api/ice`; a chave nunca vai para o navegador. Rodando
 localmente, as mesmas variáveis funcionam.
+
+## GIFs no chat (opcional)
+
+O painel de emojis ganha uma aba **GIFs** quando o servidor tem uma chave do
+[KLIPY](https://klipy.com/developers) (o Tenor encerrou a API pública em junho de
+2026). Crie a chave no painel de parceiros do KLIPY (a de teste permite 100
+chamadas por hora; para mais, peça a de produção no mesmo painel) e configure:
+
+```sh
+fly secrets set GIF_API_KEY=<sua chave>
+```
+
+As buscas passam pelo servidor (`GET /api/gifs?q=…`): a chave fica nele, o
+serviço de GIFs não vê quem busca, e as respostas ficam alguns minutos na
+memória para gastar pouco da cota. Os GIFs em si carregam do CDN do KLIPY.
+Sem a chave, a aba simplesmente não aparece.
 
 ## App para Windows apontando para o seu servidor
 
