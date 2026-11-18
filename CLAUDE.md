@@ -69,8 +69,8 @@ _Atualizado em 2026-11-18._
   recorte de foto, banner e cartão de perfil, README/docs/CI.
 - **Na `development`, ainda não na main:** barra de título do app desenhada
   pela página (#102, exige lançar o app v0.2.0); celular com tela cheia /
-  modo cinema, layout deitado e PWA instalável (#105, falta testar em iPhone e
-  Android reais); menos trabalho contínuo para quem compartilha (#107, a #75
+  modo cinema, layout deitado e PWA instalável (#105, testado num iPhone
+  real; falta Android); menos trabalho contínuo para quem compartilha (#107, a #75
   segue aberta esperando medição); frases fixas no "Boa noite" (#90).
 - **Assinatura do instalador:** falta a inscrição na SignPath (o mantenedor faz).
 - **Branch local `feat/compartilhar-nativo`** (só no Windows principal, ainda
