@@ -138,3 +138,6 @@ window.addEventListener('pageshow', (e) => { // back button from a room
     updateCounts();
   }
 });
+
+// The Windows app (desktop/) only makes sense on Windows, and not inside itself.
+$('get-app').hidden = !!window.__TAURI__ || !/Windows/.test(navigator.userAgent);
