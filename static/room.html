@@ -48,6 +48,17 @@
     .system { padding: 8px 0 2px; font-size: 12px; color: var(--muted); text-align: center; }
     .chat-form { display: flex; gap: 8px; }
     .chat-form input { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border-strong); background: var(--raised); }
+    .msg-text.jumbo { font-size: 34px; line-height: 1.2; }
+    #emoji-btn { flex: none; width: 36px; height: 36px; padding: 0; border-radius: 10px; background: transparent; font-size: 20px; line-height: 1; filter: grayscale(1); opacity: .75; }
+    #emoji-btn:hover, #emoji-btn:focus-visible, #emoji-btn[aria-expanded="true"] { background: var(--raised); filter: none; opacity: 1; }
+    #emoji-btn:disabled { opacity: .35; filter: grayscale(1); }
+    .emoji-pop { position: fixed; z-index: 9; width: min(316px, calc(100vw - 16px)); padding: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+    .emoji-tabs { display: flex; gap: 2px; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid var(--border-strong); }
+    .emoji-tab { width: 34px; height: 30px; border-radius: 8px; background: transparent; font-size: 17px; line-height: 1; opacity: .6; }
+    .emoji-tab[aria-pressed="true"] { background: var(--raised); opacity: 1; }
+    .emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); max-height: 216px; overflow-y: auto; }
+    .emoji-choice { height: 36px; border-radius: 8px; background: transparent; font-size: 22px; line-height: 1; }
+    .emoji-choice:hover, .emoji-choice:focus-visible, .emoji-tab:hover { background: var(--raised); opacity: 1; }
     .badge { min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--live); color: var(--bg); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
     #chat-toggle { display: none; }
     .me { margin-top: auto; padding: 12px; }
@@ -201,6 +212,7 @@
         <ol id="messages" aria-live="polite"></ol>
         <form class="chat-form" id="chat-form">
           <input id="chat-input" maxlength="500" placeholder="Mensagem" autocomplete="off" aria-label="Mensagem para a sala" disabled>
+          <button type="button" id="emoji-btn" title="Emojis" aria-label="Emojis" aria-haspopup="true" aria-expanded="false" disabled>😊</button>
           <button class="btn small primary" id="chat-send" disabled>Enviar</button>
         </form>
       </section>
@@ -266,6 +278,10 @@
 
   <div class="react-pop card" id="react-pop" role="group" aria-label="Reações" hidden></div>
   <div id="react-layer" aria-hidden="true"></div>
+  <div class="emoji-pop card" id="emoji-pop" role="group" aria-label="Emojis" hidden>
+    <div class="emoji-tabs" id="emoji-tabs"></div>
+    <div class="emoji-grid" id="emoji-grid"></div>
+  </div>
 
   <dialog id="voice-settings" aria-labelledby="vs-title">
     <form method="dialog" class="dialog-body">
