@@ -65,17 +65,18 @@ a green test card, so override `getDisplayMedia` to return
 
 _Atualizado em 2026-11-18._
 
-- **No ar (main):** design novo (Claude Design), câmera sob demanda, emojis,
-  app para Windows `app-v0.1.0` (Tauri, tecla de falar global), perfil com
-  recorte de foto, banner e cartão de perfil, README/docs/CI.
-- **Na `development`, ainda não na main:** barra de título do app desenhada
-  pela página (#102, exige lançar o app v0.2.0); celular com tela cheia /
-  modo cinema, layout deitado e PWA instalável (#105, testado num iPhone
-  real; falta Android); menos trabalho contínuo para quem compartilha (#107,
-  a #75 segue aberta esperando medição); frases fixas no "Boa noite" (#90);
-  volume individual por pessoa (#113); soundpad (#112); **design novo**
-  `docs/design/cpx-call-componentes.html` com quem assiste, direto/relay,
-  banner de reconexão e resolução antes de assistir (#115).
+- **No ar (main, publicado em 2026-11-18):** design novo
+  (`docs/design/cpx-call-componentes.html`: quem assiste, direto/relay,
+  reconexão, resolução antes de assistir), caixa de qualidade (resolução, FPS,
+  Fluidez/Nitidez), soundpad, volume individual por pessoa, GIFs no chat
+  (KLIPY via `/api/gifs`, chave em `fly secrets`), celular com tela cheia/modo
+  cinema e PWA, frases no "Boa noite", câmera sob demanda, emojis, perfil com
+  recorte, banner e cartão de perfil.
+- **App Windows `app-v0.2.0`** (release publicado): barra de título desenhada
+  pela página. Quem tem a 0.1.0 precisa reinstalar (sem atualização
+  automática ainda).
+- **Falta testar:** Android real (tela cheia, instalar) e "relay" numa rede
+  que bloqueie P2P.
 - **Assinatura do instalador:** falta a inscrição na SignPath (o mantenedor faz).
 - **Branch local `feat/compartilhar-nativo`** (só no Windows principal, ainda
   não enviada): protótipo `desktop/examples/captura.rs` de captura + H.264 na
