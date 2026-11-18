@@ -75,12 +75,17 @@ function sendVoiceTo(peer) {
   if (sender.track !== track) sender.replaceTrack(track).catch((err) => console.warn(err));
 }
 
+// Everyone's voice at the general volume times their own (mixagem.js).
 function applyVoiceOutput() {
   peers.forEach((peer) => {
     if (!peer.voiceAudio) return;
-    peer.voiceAudio.muted = !voice.joined || voice.deafened || !peer.voiceIn;
-    peer.voiceAudio.volume = voice.volume;
-    if (!peer.voiceAudio.muted) peer.voiceAudio.play().catch(() => {});
+    const prefs = personAudio(peer);
+    const silenced = !voice.joined || voice.deafened || !peer.voiceIn || prefs.muted;
+    const level = silenced ? 0 : voice.volume * prefs.voice;
+    peer.voiceAudio.muted = silenced || level > 1; // above 100%, Web Audio plays it
+    peer.voiceAudio.volume = Math.min(1, level);
+    setVoiceBoost(peer, level);
+    if (!silenced) peer.voiceAudio.play().catch(() => {});
   });
 }
 

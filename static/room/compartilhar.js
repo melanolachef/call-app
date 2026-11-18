@@ -280,6 +280,7 @@ function removePeer(id) {
   if (!peer) return;
   peer.pc.close();
   peer.voiceAnalyser = dropAnalyser(peer.voiceAnalyser);
+  dropVoiceBoost(peer);
   if (document.pictureInPictureElement === peer.screen.video) document.exitPictureInPicture().catch(() => {});
   peer.screen.card.remove();
   peer.voiceAudio?.remove();

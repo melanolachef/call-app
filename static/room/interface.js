@@ -91,6 +91,7 @@ function openPersonCard(person, anchor) {
   $('pc-status').textContent = person.self ? 'Você' : capitalize(person.status[0]);
   $('pc-status').className = `pc-status ${person.self ? '' : person.status[1]}`;
   $('pc-edit').hidden = !person.self;
+  renderPersonAudio(person.self ? null : peers.get(person.id));
   personCard.hidden = false;
   // Beside the clicked row or card, kept inside the window; centered on phones.
   if (mobile.matches) {
@@ -249,6 +250,7 @@ function refresh() {
       paintAvatar($('pc-avatar'), carded.name, carded.id, carded.photo);
       $('pc-name').textContent = carded.name;
       if (!carded.self) $('pc-status').textContent = capitalize(carded.status[0]);
+      renderPersonAudio(carded.self ? null : peers.get(carded.id));
     } else {
       closePersonCard();
     }
@@ -284,7 +286,7 @@ function refresh() {
       failedText: failed ? (peer.retrying ? 'Tentando conectar de novo…' : `Não foi possível conectar com ${name}`) : '',
     });
     peer.screen.retryBtn.hidden = !!peer.retrying;
-    peer.screen.video.volume = soundVolume;
+    peer.screen.video.volume = soundVolume * personAudio(peer).screen;
     peer.screen.video.muted = !peer.iWatch || soundMuted;
   }
   const shown = (localTrack ? 1 : 0) + list.filter((p) => p.sharing).length;

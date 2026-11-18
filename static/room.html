@@ -160,6 +160,14 @@
     .pc-status.live { color: var(--live); }
     .pc-status.online { color: var(--online); }
     .pc-status.warn { color: var(--warn); }
+    .pc-audio { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-strong); display: flex; flex-direction: column; gap: 10px; }
+    .pc-slider { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: 13px; color: var(--soft); }
+    .pc-slider output { font-variant-numeric: tabular-nums; color: var(--muted); }
+    .pc-slider input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+    .pc-audio-actions { display: flex; align-items: center; gap: 12px; }
+    .pc-audio-actions .link { padding: 0; }
+    #pc-mute[aria-pressed="true"] { background: var(--danger-bg); color: var(--danger); }
+    .pc-note { margin: 0; font-size: 12px; color: var(--faint); }
     #pc-edit { margin-top: 12px; }
     #pc-close { position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; background: rgb(0 0 0 / .5); color: #fff; z-index: 1; }
 
@@ -414,6 +422,17 @@
       <strong id="pc-name"></strong>
       <span class="pc-status" id="pc-status"></span>
       <button class="btn small" id="pc-edit" hidden>Editar perfil</button>
+      <div class="pc-audio" id="pc-audio" hidden>
+        <label class="pc-slider"><span>Volume da voz</span><output id="pc-voice-value">100%</output>
+          <input type="range" id="pc-voice-volume" min="0" max="2" step="0.05" aria-label="Volume da voz só para você"></label>
+        <label class="pc-slider" id="pc-screen-row"><span>Som da transmissão</span><output id="pc-screen-value">100%</output>
+          <input type="range" id="pc-screen-volume" min="0" max="1" step="0.05" aria-label="Som da transmissão só para você"></label>
+        <div class="pc-audio-actions">
+          <button class="btn small" id="pc-mute" aria-pressed="false">Silenciar a voz para mim</button>
+          <button class="btn small link" id="pc-audio-reset">Restaurar</button>
+        </div>
+        <p class="pc-note">Só você ouve a diferença.</p>
+      </div>
     </div>
   </div>
   <div class="emoji-pop card" id="emoji-pop" role="group" aria-label="Emojis" hidden>
