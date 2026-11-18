@@ -24,7 +24,9 @@ function hudItem(room) {
   const count = hudCounts[room.id];
   const text = el('span', 'hud-count', count === undefined ? '' : count === 0 ? 'vazia' : `${count} ${count === 1 ? 'pessoa' : 'pessoas'}`);
   if (count > 0 && !current) text.classList.add('online');
-  link.append(el('span', 'hud-name ellipsis', displayRoomName(room.id)), text);
+  link.append(el('span', 'hud-name ellipsis', displayRoomName(room.id)));
+  if (room.home) link.append(el('span', 'tag', 'fixa'));
+  link.append(text);
   const li = el('li');
   li.append(link);
   return li;
@@ -75,11 +77,21 @@ async function invite() {
   try {
     await navigator.clipboard.writeText(`${text} ${url}`);
     toast('Convite copiado. É só colar na conversa.');
+    // The button itself confirms, as in the design ("✓ Copiado").
+    const button = $('invite');
+    button.textContent = '✓ Copiado';
+    button.classList.add('copied');
+    clearTimeout(button.resetTimer);
+    button.resetTimer = setTimeout(() => {
+      button.textContent = 'Copiar';
+      button.classList.remove('copied');
+    }, 2000);
   } catch {
     window.prompt('Copie o convite:', `${text} ${url}`); // clipboard needs HTTPS
   }
 }
 $('invite').onclick = invite;
+$('invite-bar').onclick = invite;
 
 const notice = $('notice');
 const RELOAD = { label: 'Entrar de novo', run: () => location.reload() };

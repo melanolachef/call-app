@@ -1,13 +1,13 @@
 // ---------- interface ----------
 
-// "agora", "42 min", "1 h 05 min": how long you have been in the room.
-function elapsed(since) {
-  const minutes = Math.floor((Date.now() - since) / 60_000);
-  if (minutes < 1) return 'agora';
-  if (minutes < 60) return `${minutes} min`;
-  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`;
+// "00:42:10": how long you have been in the call (top bar).
+function clock(since) {
+  const seconds = Math.max(0, Math.floor((Date.now() - since) / 1000));
+  return [seconds / 3600, (seconds % 3600) / 60, seconds % 60].map((n) => String(Math.floor(n)).padStart(2, '0')).join(':');
 }
 
+// A shared screen: a header (who, quality, buttons) over the picture. Not
+// watched yet, the card shrinks to a row with "Assistir" (see room.html).
 function buildScreen() {
   const card = el('div', 'screen');
   card.hidden = true;
@@ -33,10 +33,9 @@ function buildScreen() {
     retryBtn,
   );
   frame.append(video, waiting, failed);
-  // Over the picture: "● Tela de Rafa" bottom-left, details bottom-right,
-  // the controls top-right (shown on hover).
-  const pill = el('span', 'pill glass screen-label');
-  const hint = el('span', 'pill glass screen-info');
+  const head = el('div', 'screen-head');
+  const pill = el('span', 'screen-label');
+  const hint = el('span', 'screen-info');
   const soundBtn = el('button', 'btn small sound-btn');
   const volume = el('input', 'volume');
   volume.type = 'range';
@@ -52,11 +51,23 @@ function buildScreen() {
   video.addEventListener('leavepictureinpicture', () => (pipBtn.textContent = 'Janela flutuante'));
   const unwatchBtn = el('button', 'btn small');
   unwatchBtn.append(el('span', 'long', 'Parar de assistir'), el('span', 'short', 'Parar'));
-  const actions = el('div', 'screen-actions glass');
+  const actions = el('div', 'screen-actions');
   actions.append(soundBtn, volume, pipBtn, fullBtn, unwatchBtn);
-  card.append(frame, pill, hint, actions);
+  head.append(pill, hint, actions);
+  card.append(head, frame);
   $('screens').append(card);
   return { card, video, waiting, waitingText, watchBtn, failed, failedText, retryBtn, pill, hint, soundBtn, volume, pipBtn, fullBtn, unwatchBtn };
+}
+
+// Top bar: one little block per seat (MAX_PEERS on the server), then "4/12".
+function renderSeats(count) {
+  const seats = $('seats');
+  if (seats.childElementCount !== maxPeers) seats.replaceChildren(...Array.from({ length: maxPeers }, () => el('i')));
+  [...seats.children].forEach((seat, i) => seat.classList.toggle('on', i < count));
+  const online = $('online');
+  online.replaceChildren();
+  if (!count) return;
+  online.append(el('b', null, String(count)), `/${maxPeers}`);
 }
 
 function peerStatus(peer) {
@@ -156,10 +167,19 @@ function personRow(person) {
   const text = el('div', 'person-text');
   const name = el('span', 'person-name');
   name.append(el('span', 'ellipsis', person.name));
+  if (person.self) name.append(el('span', 'you', 'você'));
   if (person.voiceIn) name.append(voiceIcon(person));
-  const [status, cls] = person.self && !person.status[0].startsWith('compartilhando') ? ['Você', ''] : person.status;
-  text.append(name, el('span', `person-status ellipsis ${cls}`, capitalize(status)));
+  const [status, cls] = person.status;
+  text.append(name, el('span', `person-status ellipsis ${cls}`, status));
   row.append(avatar, text);
+  if (person.p2p === 'off') {
+    row.append(el('span', 'p2p-off', 'sem P2P'));
+  } else if (person.p2p) {
+    const bars = el('span', `p2p q${person.p2p}`);
+    bars.title = person.p2p === 3 ? 'Conexão direta, rápida' : person.p2p === 2 ? 'Conexão direta, média' : 'Conexão lenta';
+    bars.append(el('i'), el('i'), el('i'));
+    row.append(bars);
+  }
   li.append(row);
   return li;
 }
@@ -213,6 +233,8 @@ function showScreen(screen, { visible, watching, label, hint, waitingText = '', 
     document.exitPictureInPicture().catch(() => {});
   }
   screen.card.hidden = !visible;
+  screen.card.classList.toggle('watching', visible && watching && !failedText);
+  screen.card.classList.toggle('idle', visible && !watching);
   screen.video.hidden = !watching || !!failedText;
   screen.waiting.hidden = watching || !!failedText;
   if (screen.failed) {
@@ -226,17 +248,26 @@ function showScreen(screen, { visible, watching, label, hint, waitingText = '', 
   if (visible && watching && screen.video.paused) screen.video.play().catch(() => {});
 }
 
+// Yours, in the people list: what you are doing for the room right now.
+function myStatus(list) {
+  if (localTrack) return ['compartilhando', 'live'];
+  const watched = list.filter((p) => p.iWatch && p.sharing).map(displayName);
+  if (watched.length) return [`assistindo ${watched.join(', ')}`, 'online'];
+  return voice.joined ? ['na voz', 'online'] : ['na sala', ''];
+}
+
 function refresh() {
   const list = [...peers.values()].sort((a, b) => a.id - b.id);
   const me = {
     self: true, id: myId, name: myNick, photo: myPhoto,
-    status: localTrack ? ['compartilhando', 'live'] : voice.joined ? ['na voz', 'online'] : ['na sala', 'online'],
+    status: myStatus(list),
     voiceIn: voice.joined, voiceMuted: voice.muted || voice.deafened, speaking: voice.speaking,
     camVideo: cam.track ? myCamVideo : null, camOn: !!cam.track,
     bannerColor: validBannerColor(load('bannerColor')), bannerImage: validBannerImage(load('bannerImage')),
   };
   const others = list.map((p) => ({
     id: p.id, name: displayName(p), photo: p.photo, status: peerStatus(p),
+    p2p: p.pc.connectionState === 'failed' ? 'off' : p.p2p ?? 0,
     voiceIn: p.voiceIn, voiceMuted: p.voiceMuted, speaking: p.speaking,
     camVideo: camLive(p) ? p.camVideo : null, camOn: p.camOn,
     bannerColor: p.bannerColor || '', bannerImage: p.bannerImage || '',
@@ -256,8 +287,7 @@ function refresh() {
     }
   }
 
-  $('online').textContent = people.length ? `${people.length}/${maxPeers}` : '';
-  $('people-count').textContent = people.length ? `${people.length} ${people.length === 1 ? 'pessoa' : 'pessoas'} · ` : '';
+  renderSeats(people.length);
   $('people').replaceChildren(...people.map(personRow));
   $('tiles').replaceChildren(...people.map(personTile));
   $('tiles').classList.toggle('no-cams', !people.some((p) => p.camOn));
@@ -278,10 +308,10 @@ function refresh() {
     showScreen(peer.screen, {
       visible: peer.sharing,
       watching: peer.iWatch,
-      label: `Tela de ${name}`,
+      label: name,
       hint: failed ? '' : peer.iWatch ? [peer.quality, peer.hasAudio ? '' : 'sem som'].filter(Boolean).join(' · ') : '',
       sound: peer.iWatch && peer.hasAudio && !failed,
-      waitingText: `${name} está compartilhando a tela`,
+      waitingText: `${name} está compartilhando`,
       canUnwatch: peer.iWatch && !failed,
       failedText: failed ? (peer.retrying ? 'Tentando conectar de novo…' : `Não foi possível conectar com ${name}`) : '',
     });

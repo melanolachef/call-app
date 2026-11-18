@@ -19,6 +19,12 @@ async function measureRtt(pc) {
   return rtt;
 }
 
+// Bars for the people list: 3 under 80 ms, 2 under 200 ms, 1 above. A
+// failed connection shows "sem P2P" instead (interface.js).
+function p2pLevel(rtt) {
+  return rtt === null ? 0 : rtt < 80 ? 3 : rtt < 200 ? 2 : 1;
+}
+
 const PING_EVERY_MS = 2000;
 const PING_SHARING_EVERY_MS = 10_000;
 let lastPing = 0;
@@ -30,13 +36,20 @@ async function updatePing() {
   if (localTrack && !looking && Date.now() - lastPing < PING_SHARING_EVERY_MS) return;
   lastPing = Date.now();
   const rows = [];
+  let changed = false;
   for (const peer of [...peers.values()].sort((a, b) => a.id - b.id)) {
     let rtt = null;
     try {
       rtt = await measureRtt(peer.pc);
     } catch { /* closed meanwhile */ }
     if (rtt !== null) rows.push({ name: displayName(peer), rtt });
+    const level = p2pLevel(rtt);
+    if (level !== (peer.p2p ?? 0)) {
+      peer.p2p = level;
+      changed = true;
+    }
   }
+  if (changed) refresh();
   net.hidden = rows.length === 0;
   if (!rows.length) return;
   const worst = Math.max(...rows.map((r) => r.rtt));
