@@ -16,6 +16,67 @@ function greeting(hour = new Date().getHours()) {
   return 'Boa noite';
 }
 
+// A light line under the greeting (#90). A fixed list, written by hand: no
+// API, no key, no cost, nothing about the person leaves the browser. A few
+// lines only fit some hours; the same line doesn't show twice in a row.
+const TAGLINES = {
+  any: [
+    'Abra uma sala e mande o link para a galera.',
+    'Bora juntar o grupo?',
+    'A sala está pronta. Falta só a galera.',
+    'Quem chamar primeiro escolhe o jogo.',
+    'Hoje a ranked sai. Confia.',
+    'Uma partida rápida. Só uma. Juro.',
+    'Compartilha a tela que a gente torce daqui.',
+    'O lag de hoje é culpa de quem?',
+    'Microfone no mudo é o novo "tô ouvindo".',
+    'Alguém viu o fone de quem sempre some?',
+    'Aperta o botão e chama o time.',
+    'Sem fila, sem anúncio, só a galera.',
+    'Quem perder paga o lanche.',
+    'O bonde está esperando você.',
+    'Cola na call que a resenha já começou.',
+    'Hoje é dia de carregar o time.',
+    'Bora ver quem trava primeiro.',
+    'Sala aberta, desculpa fechada.',
+    'O tutorial acabou. Agora é com vocês.',
+    'Mais uma e a gente para. Talvez.',
+    'GG antes de começar já é atitude.',
+    'Pega a água, ajeita a cadeira e vem.',
+    'Seu lugar na call está guardado.',
+    'Todo mundo é pro até a primeira morte.',
+    'A estratégia de hoje: improvisar.',
+  ],
+  morning: [
+    'Café na mão e controle na outra.',
+    'Cedo demais para jogar? Nunca.',
+    'Primeira partida do dia conta dobrado.',
+  ],
+  afternoon: [
+    'A tarde pede uma partidinha.',
+    'Intervalo merecido: chama a galera.',
+    'Ainda dá tempo de subir de elo hoje.',
+  ],
+  night: [
+    'A noite é longa e a fila é curta.',
+    'Só mais uma antes de dormir. Sei.',
+    'Amanhã você acorda cedo. Hoje não.',
+    'Horário nobre da jogatina.',
+  ],
+};
+
+function pickTagline(hour = new Date().getHours()) {
+  const period = hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'night';
+  const pool = [...TAGLINES.any, ...TAGLINES[period]];
+  const last = load('tagline');
+  const options = pool.filter((line) => line !== last);
+  const line = options[Math.floor(Math.random() * options.length)];
+  save('tagline', line);
+  return line;
+}
+
+$('tagline').textContent = pickTagline();
+
 function renderProfile() {
   paintAvatar($('me-avatar'), nick || '?', 1, photo);
   $('me-nick').textContent = nick || 'Escolher nick';
