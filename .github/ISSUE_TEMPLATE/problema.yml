@@ -1,0 +1,46 @@
+name: Problema
+description: Algo não funciona como deveria
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por avisar! Falhas de segurança **não** vão aqui: veja o [SECURITY.md](https://github.com/melanolachef/call-app/blob/main/SECURITY.md).
+  - type: textarea
+    id: oque
+    attributes:
+      label: O que aconteceu?
+      description: E o que você esperava que acontecesse.
+    validations:
+      required: true
+  - type: textarea
+    id: passos
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. Entrei numa sala com 3 pessoas
+        2. Liguei a câmera
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: onde
+    attributes:
+      label: Onde
+      multiple: true
+      options:
+        - Navegador no computador
+        - App para Windows
+        - Celular
+    validations:
+      required: true
+  - type: input
+    id: navegador
+    attributes:
+      label: Navegador e sistema
+      placeholder: Chrome 131 no Windows 11, app 0.1.0…
+  - type: textarea
+    id: extra
+    attributes:
+      label: Mais detalhes
+      description: Prints, mensagens do Console (F12) ou de chrome://webrtc-internals, quantas pessoas estavam na sala, VPN/4G…

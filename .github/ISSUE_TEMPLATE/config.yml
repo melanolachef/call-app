@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Falha de segurança
+    url: https://github.com/melanolachef/call-app/security/advisories/new
+    about: Reporte de forma privada, sem abrir uma issue pública.
