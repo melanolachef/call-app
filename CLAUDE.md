@@ -108,4 +108,6 @@ _Atualizado em 2026-11-18._
    conexões P2P sobreviverem ao celular ir para segundo plano (seletor de
    fotos) e ao 4G instável. Esperando o relato de quem viu o problema.
 6. Ideias registradas: canais fixos do servidor iguais para todos (estilo
-   servidor do Discord) e contas opcionais (Google + Neon).
+   servidor do Discord) e contas opcionais (Google + Neon). Para devs: quadro
+   colaborativo estilo Excalidraw (#127), código no chat (#128), cartões do
+   GitHub (#129) e apontar sobre a tela compartilhada (#130).
