@@ -1,0 +1,6 @@
+# Text files are stored with LF; binaries are never touched.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.woff2 binary
+*.y4m binary
