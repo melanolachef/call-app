@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote",
+  "description": "A página do CPX Call (no servidor ou rodando localmente) só pode chamar os comandos do próprio app.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://cpx-call.fly.dev/*", "http://localhost:3000/*"]
+  },
+  "permissions": ["allow-set-ptt-key"]
+}

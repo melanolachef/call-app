@@ -194,6 +194,7 @@ function refresh() {
   $('me-status').className = me.status[1];
   renderVoiceUi();
   renderCameraUi();
+  syncDesktopKeys();
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
   $('share-short').textContent = localTrack ? 'Parar' : 'Tela';
