@@ -10,10 +10,16 @@ let counts = {}; // room id -> people in it now, from /api/rooms
 
 // ---------- perfil ----------
 
+function greeting(hour = new Date().getHours()) {
+  if (hour >= 5 && hour < 12) return 'Bom dia';
+  if (hour >= 12 && hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
 function renderProfile() {
   paintAvatar($('me-avatar'), nick || '?', 1, photo);
-  $('me-nick').textContent = nick;
-  $('edit').textContent = nick ? 'Editar' : 'Escolher nick';
+  $('me-nick').textContent = nick || 'Escolher nick';
+  $('greeting').textContent = nick ? `${greeting()}, ${nick}.` : `${greeting()}.`;
 }
 
 $('appearance-btn').onclick = openAppearance;
@@ -59,50 +65,71 @@ $('join-form').onsubmit = (e) => {
 const ago = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' });
 function timeAgo(at) {
   const minutes = Math.round((Date.now() - at) / 60_000);
-  if (minutes < 1) return 'agora há pouco';
-  if (minutes < 60) return ago.format(-minutes, 'minute');
-  if (minutes < 24 * 60) return ago.format(-Math.round(minutes / 60), 'hour');
-  return ago.format(-Math.round(minutes / (24 * 60)), 'day');
+  if (minutes < 1) return 'Agora há pouco';
+  const text = minutes < 60 ? ago.format(-minutes, 'minute')
+    : minutes < 24 * 60 ? ago.format(-Math.round(minutes / 60), 'hour')
+      : ago.format(-Math.round(minutes / (24 * 60)), 'day');
+  return `Visitada ${text}`; // "Visitada ontem", "Visitada há 3 horas"
 }
 
+// Right side of a row: "● 3 agora" in green, or "Vazia".
 function peopleText(id) {
-  if (!(id in counts)) return ['…', 'muted'];
+  if (!(id in counts)) return ['', ''];
   const n = counts[id];
-  if (n === 0) return ['ninguém agora', 'muted'];
-  return [`● ${n} ${n === 1 ? 'pessoa' : 'pessoas'} agora`, 'online'];
+  return n === 0 ? ['Vazia', ''] : [`${n} agora`, 'online'];
+}
+
+const SVG = (paths) => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`; // fixed markup only
+const ICON_HOME = SVG('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>');
+const ICON_PIN = SVG('<path d="M12 17v5M8 3h8l-1 6 3 3v2H6v-2l3-3z"/>');
+const ICON_X = SVG('<path d="M18 6L6 18M6 6l12 12"/>');
+
+function iconButton(svg, label, pressed) {
+  const button = el('button', 'ghost');
+  button.innerHTML = svg;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  if (pressed !== undefined) button.setAttribute('aria-pressed', String(pressed));
+  return button;
 }
 
 function roomItem(room) {
   const name = displayRoomName(room.id);
-  const li = el('li', 'room-item');
+  const li = el('li');
+  const row = el('div', 'room-item');
   const link = el('a', 'room-link');
   link.href = `/room/${room.id}`;
-  const icon = el('span', 'room-icon', room.home ? '★' : '#');
-  icon.style.background = colorFor(room.id);
+  const icon = el('span', 'room-icon');
   icon.setAttribute('aria-hidden', 'true');
+  if (room.home) icon.innerHTML = ICON_HOME;
+  else icon.textContent = Array.from(name)[0] ?? '#';
   const text = el('span', 'room-text');
+  const when = room.home ? 'Sua sala fixa' : `${room.pinned ? 'Fixada · ' : ''}${timeAgo(room.at)}`;
+  text.append(el('strong', 'ellipsis', name), el('span', 'room-meta ellipsis', when));
   const [people, cls] = peopleText(room.id);
-  const meta = el('span', 'room-meta');
-  const when = room.home ? 'sempre aqui' : `${room.pinned ? 'fixada · ' : ''}${timeAgo(room.at)}`;
-  meta.append(el('span', cls, people), ` · ${when}`);
-  text.append(el('strong', 'ellipsis', name), meta);
-  link.append(icon, text);
+  const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  chevron.setAttribute('viewBox', '0 0 24 24');
+  chevron.setAttribute('class', 'chevron');
+  chevron.innerHTML = '<path d="M9 6l6 6-6 6"/>';
+  link.append(icon, text, el('span', `room-count ${cls}`, people), chevron);
+  row.append(link);
 
-  const pin = el('button', 'btn small ghost', room.pinned ? 'Desafixar' : 'Fixar');
-  pin.setAttribute('aria-pressed', String(!!room.pinned));
-  pin.setAttribute('aria-label', `${room.pinned ? 'Desafixar' : 'Fixar'} ${name}`);
-  pin.onclick = () => {
-    saveRooms(loadRooms().map((r) => (r.id === room.id ? { ...r, pinned: !r.pinned } : r)));
-    renderRooms();
-  };
-  const remove = el('button', 'btn small ghost', 'Remover');
-  remove.setAttribute('aria-label', `Tirar ${name} da lista`);
-  remove.onclick = () => {
-    saveRooms(loadRooms().filter((r) => r.id !== room.id));
-    renderRooms();
-  };
-  li.append(link);
-  if (!room.home) li.append(pin, remove); // the fixed room can't be pinned or removed
+  if (!room.home) { // the fixed room can't be pinned or removed
+    const actions = el('span', 'room-actions');
+    const pin = iconButton(ICON_PIN, `${room.pinned ? 'Desafixar' : 'Fixar'} ${name}`, !!room.pinned);
+    pin.onclick = () => {
+      saveRooms(loadRooms().map((r) => (r.id === room.id ? { ...r, pinned: !r.pinned } : r)));
+      renderRooms();
+    };
+    const remove = iconButton(ICON_X, `Tirar ${name} da lista`);
+    remove.onclick = () => {
+      saveRooms(loadRooms().filter((r) => r.id !== room.id));
+      renderRooms();
+    };
+    actions.append(pin, remove);
+    row.append(actions);
+  }
+  li.append(row);
   return li;
 }
 
@@ -118,13 +145,11 @@ async function updateCounts() {
   const fresh = await fetchRoomCounts(ids);
   if (!fresh) return; // offline: keep the last numbers
   counts = fresh;
-  $('rooms-updated').textContent = 'atualiza sozinho';
   renderRooms();
 }
 
 // ---------- início ----------
 
-$('example-url').textContent = `${location.host}/room/churrasco-k3f9x2`;
 renderProfile();
 if (nick) ensureHomeRoom(nick);
 renderRooms();

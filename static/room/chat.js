@@ -22,8 +22,14 @@ function setChatEnabled(on) {
   if (!on) setEmojiPicker(false);
 }
 
+// Wide screens dock the chat (it can be collapsed); medium screens open it as
+// a drawer; phones show it inline under the call.
+const wide = matchMedia('(min-width: 1200px)');
+
 function chatVisible() {
-  return !document.hidden && (!mobile.matches || document.body.classList.contains('chat-open'));
+  if (document.hidden) return false;
+  if (wide.matches) return !document.body.classList.contains('chat-collapsed');
+  return mobile.matches || document.body.classList.contains('chat-open');
 }
 
 function updateUnread() {
@@ -62,17 +68,12 @@ function addMessage({ authorId, name, photo, text, self = false }) {
   lastAuthor = authorId;
   lastAt = now;
 
-  const li = el('li', grouped ? 'msg grouped' : 'msg');
-  if (!grouped) {
-    const head = el('div', 'msg-head');
-    const avatar = el('div', 'avatar');
-    avatar.setAttribute('aria-hidden', 'true');
-    paintAvatar(avatar, name, authorId, photo);
-    const time = el('time', null, new Date(now).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
-    head.append(avatar, el('strong', 'ellipsis', self ? `${name} (você)` : name), time);
-    li.append(head);
-  }
+  // Bubbles: yours on the right in the accent color; the others' on the left,
+  // with the name above the first one of a run.
+  const li = el('li', `msg${self ? ' self' : ''}${grouped ? ' grouped' : ''}`);
+  if (!grouped && !self) li.append(el('span', 'msg-name', name));
   const body = el('p', isJumbo(text) ? 'msg-text jumbo' : 'msg-text');
+  body.title = new Date(now).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   body.append(linkify(text));
   li.append(body);
   appendToChat(li);
@@ -99,14 +100,21 @@ $('chat-form').onsubmit = (e) => {
   messagesEl.scrollTop = messagesEl.scrollHeight; // always follow your own message
 };
 
-$('chat-toggle').onclick = () => {
-  document.body.classList.add('chat-open');
+function setChatShown(shown) {
+  if (wide.matches) {
+    document.body.classList.toggle('chat-collapsed', !shown);
+    save('chat-collapsed', shown ? '' : '1');
+  } else {
+    document.body.classList.toggle('chat-open', shown);
+  }
+  $('chat-toggle').setAttribute('aria-label', chatVisible() ? 'Esconder chat' : 'Mostrar chat');
   updateUnread();
-  chatInput.focus();
-};
-$('chat-close').onclick = () => {
-  document.body.classList.remove('chat-open');
-};
+  if (shown && !mobile.matches) chatInput.focus();
+}
+$('chat-toggle').onclick = () => setChatShown(!chatVisible() || (mobile.matches && !document.body.classList.contains('chat-open')));
+$('chat-close').onclick = () => setChatShown(false);
+document.body.classList.toggle('chat-collapsed', load('chat-collapsed') === '1');
+wide.addEventListener('change', updateUnread);
 document.addEventListener('visibilitychange', updateUnread);
 mobile.addEventListener('change', updateUnread);
 
