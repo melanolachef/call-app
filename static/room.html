@@ -60,6 +60,17 @@
     .net-row { display: flex; justify-content: space-between; gap: 16px; }
     .net-row strong { font: 500 12px var(--mono); }
 
+    /* Reconnecting: what is going on and when it tries again. */
+    .reconnect { position: relative; flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 12px 14px 16px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card); overflow: hidden; }
+    .rc-icon { flex: none; width: 18px; height: 18px; color: var(--live); stroke-width: 2.2; animation: rc-spin 1.2s linear infinite; }
+    @keyframes rc-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .rc-icon { animation: none; } }
+    .rc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+    .rc-text strong { font-size: 14px; font-weight: 500; }
+    .rc-text span { color: var(--muted); }
+    .rc-text b { color: var(--text); font-weight: 500; }
+    .rc-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--live); }
+
     /* ---------- lateral ---------- */
     .side-block { flex: none; display: flex; flex-direction: column; gap: 8px; }
     .side-block > h2 { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -85,6 +96,7 @@
     .p2p.q3 i, .p2p.q2 i:nth-child(-n+2) { background: var(--online); }
     .p2p.q1 i:nth-child(1) { background: var(--danger); }
     .p2p-off { flex: none; font: 11px var(--mono); color: var(--danger); }
+    .p2p-kind { flex: none; min-width: 6ch; text-align: right; font: 11px var(--mono); color: var(--faint); }
     .hud-room { display: flex; align-items: center; gap: 8px; padding: 10px 12px; color: var(--text); text-decoration: none; font-size: 14px; }
     .hud-room:hover { background: rgb(255 255 255 / .03); }
     .hud-room[aria-current="page"] { font-weight: 600; }
@@ -121,6 +133,12 @@
     .screen-label { flex: none; display: flex; align-items: center; gap: 10px; max-width: 40%; font-size: 13px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .screen-label::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--live); }
     .screen-info { min-width: 0; font: 12px var(--mono); color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .screen-viewers { margin-left: auto; flex: none; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .viewer-faces { display: flex; }
+    .viewer-faces .avatar { width: 20px; height: 20px; border-radius: var(--r-sm); border: 2px solid var(--card); font-size: 10px; }
+    .viewer-faces .avatar + .avatar { margin-left: -4px; }
+    .screen-viewers + .screen-actions, .screen-viewers[hidden] + .screen-actions { margin-left: 0; }
+    .screen-viewers[hidden] + .screen-actions { margin-left: auto; }
     .screen-actions { margin-left: auto; flex: none; display: flex; align-items: center; gap: 6px; }
     .screen-actions .btn { height: 26px; padding: 0 10px; border-radius: 5px; font-size: 12px; font-weight: 500; background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
     .screen-actions .btn:hover { background: var(--raised); filter: none; }
@@ -137,7 +155,10 @@
     .screen.idle .frame { flex-direction: row; justify-content: flex-start; background: var(--card); }
     .screen.idle .frame::before { content: ''; flex: none; align-self: stretch; width: 160px; opacity: .7; background: conic-gradient(from 90deg at 50% 50%, #2B2F3A 0 25%, #353A48 0 50%, #2B2F3A 0 75%, #232733 0) 0 0 / 20px 20px; }
     .screen.idle .waiting { flex: 1; flex-direction: row; justify-content: space-between; padding: 0 12px 0 16px; gap: 16px; text-align: left; color: var(--text); font-weight: 600; }
-    .screen.idle .waiting > span::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 2px; background: var(--live); }
+    .waiting-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .waiting-hint { font: 400 12px var(--mono); color: var(--muted); }
+    .waiting-hint:empty { display: none; }
+    .screen.idle .waiting-title::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 2px; background: var(--live); }
     .screen.idle .failed { flex-direction: row; text-align: left; }
 
     /* Fullscreen (the whole card) and theater (the card covering the page,
@@ -344,7 +365,7 @@
       #screens { flex: none; }
       .screen:not(.idle):not(.theater) { flex: none; height: 260px; }
       .screen-head { padding-left: 10px; gap: 8px; }
-      .screen-info { display: none; }
+      .screen-info, .screen-viewers, .p2p-kind { display: none; }
       .screen.idle { height: 64px; }
       .screen.idle .frame::before { display: none; }
       .screen.idle .waiting { padding: 0 8px 0 12px; font-size: 13px; }
@@ -443,6 +464,15 @@
     </aside>
 
     <main class="stage">
+      <div class="reconnect" id="reconnect" role="status" hidden>
+        <svg class="rc-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+        <div class="rc-text">
+          <strong>Sem conexão com o servidor</strong>
+          <span>Tentando de novo em <b class="mono" id="rc-when"></b> · tentativa <span id="rc-attempt"></span></span>
+        </div>
+        <button class="btn small ghost" id="rc-now">Tentar agora</button>
+        <span class="rc-bar" id="rc-bar" aria-hidden="true"></span>
+      </div>
       <div class="content" id="content">
         <section id="screens" aria-label="Telas compartilhadas"></section>
         <section id="tiles" aria-label="Participantes"></section>

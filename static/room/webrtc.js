@@ -1,5 +1,13 @@
 // ---------- WebRTC ----------
 
+// Only what we show, validated: "720p · 30 fps · Jogo".
+function cleanShareInfo(data) {
+  const height = Number.isInteger(data.height) && data.height > 0 && data.height <= 4320 ? data.height : null;
+  const fps = Number.isInteger(data.fps) && data.fps > 0 && data.fps <= 240 ? data.fps : null;
+  const mode = data.mode === 'texto' ? 'Texto' : data.mode === 'jogo' ? 'Jogo' : null;
+  return { height, fps, mode };
+}
+
 function createPeer(id, initiator) {
   const pc = new RTCPeerConnection({ iceServers });
   const peer = {
@@ -58,7 +66,9 @@ function createPeer(id, initiator) {
 
   send(id, profileMsg());
   sendBannerImage(id);
-  if (localTrack) send(id, { sharing: true, audio: !!localAudio });
+  if (localTrack) send(id, shareInfo());
+  const watching = myWatching();
+  if (watching.length) send(id, { watching });
   if (voice.joined) send(id, { voice: voiceState() });
   if (cam.track) send(id, { camera: true });
   refresh();
@@ -152,6 +162,7 @@ async function handleSignal(peer, data) {
     const started = !!data.sharing && !peer.sharing;
     peer.sharing = !!data.sharing;
     peer.hasAudio = peer.sharing && !!data.audio;
+    peer.shareInfo = peer.sharing ? cleanShareInfo(data) : null;
     if (!peer.sharing) peer.iWatch = false; // a new share starts unwatched
     if (started) {
       addSystem(`${displayName(peer)} começou a compartilhar a tela`);
@@ -190,6 +201,11 @@ async function handleSignal(peer, data) {
     sendCameraTo(peer);
   } else if ('restart' in data) {
     if (myId > peer.id) restartIce(peer); // they asked us to redo the connection
+  } else if ('watching' in data) {
+    peer.watching = Array.isArray(data.watching)
+      ? data.watching.filter((id) => Number.isInteger(id)).slice(0, 16)
+      : [];
+    refresh();
   } else if ('watch' in data) {
     // Ignore a request that crossed with us stopping the share.
     const viewersBefore = viewerCount();
