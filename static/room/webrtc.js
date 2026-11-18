@@ -4,7 +4,7 @@
 function cleanShareInfo(data) {
   const height = Number.isInteger(data.height) && data.height > 0 && data.height <= 4320 ? data.height : null;
   const fps = Number.isInteger(data.fps) && data.fps > 0 && data.fps <= 240 ? data.fps : null;
-  const mode = data.mode === 'texto' ? 'Texto' : data.mode === 'jogo' ? 'Jogo' : null;
+  const mode = data.mode === 'texto' ? 'Nitidez' : data.mode === 'jogo' ? 'Fluidez' : null;
   return { height, fps, mode };
 }
 
@@ -174,6 +174,8 @@ async function handleSignal(peer, data) {
     if (text) addMessage({ authorId: peer.id, name: displayName(peer), photo: peer.photo, text });
   } else if ('reaction' in data) {
     handleReaction(peer, data);
+  } else if ('gif' in data) {
+    handleGif(peer, data);
   } else if ('sound' in data) {
     handleSound(peer, data);
   } else if ('voice' in data) {

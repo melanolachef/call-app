@@ -342,7 +342,7 @@ function refresh() {
     visible: !!localTrack,
     watching: previewOn,
     label: 'Sua tela',
-    hint: `${viewers === 0 ? 'ninguém assistindo' : viewers === 1 ? '1 pessoa assistindo' : `${viewers} pessoas assistindo`} · ${localAudio ? 'com som' : 'sem som'}${shareMode === 'jogo' && (currentCaps().fps < 30 || currentCaps().maxHeight < 720) ? ` · ${currentCaps().maxHeight}p ${currentCaps().fps} FPS (ajuste automático)` : ''}`,
+    hint: `${viewers === 0 ? 'ninguém assistindo' : viewers === 1 ? '1 pessoa assistindo' : `${viewers} pessoas assistindo`} · ${localAudio ? 'com som' : 'sem som'}${currentCaps().fps < quality.fps || currentCaps().maxHeight < quality.height ? ` · ${currentCaps().maxHeight}p ${currentCaps().fps} FPS (ajuste automático)` : ''}`,
     waitingText: 'Sua tela está indo para quem clicar em Assistir. A prévia fica escondida para poupar o PC.',
     viewers: list.filter((p) => p.watchesMe).map(personOf),
     canUnwatch: previewOn,
@@ -389,8 +389,7 @@ function refresh() {
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
   $('share-short').textContent = localTrack ? 'Parar' : 'Compartilhar';
   $('share').classList.toggle('sharing', !!localTrack);
-  $('mode-jogo').setAttribute('aria-pressed', String(shareMode === 'jogo'));
-  $('mode-texto').setAttribute('aria-pressed', String(shareMode === 'texto'));
+
 }
 
 

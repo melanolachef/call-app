@@ -68,7 +68,7 @@ function appendToChat(item) {
   if (nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-function addMessage({ authorId, name, photo, text, self = false }) {
+function addMessage({ authorId, name, photo, text = '', gif = null, self = false }) {
   const now = Date.now();
   const grouped = authorId === lastAuthor && now - lastAt < GROUP_MS;
   lastAuthor = authorId;
@@ -86,16 +86,27 @@ function addMessage({ authorId, name, photo, text, self = false }) {
     head.append(el('span', 'ellipsis', self ? `${name}` : name), el('span', 'msg-time', time));
     li.append(avatar, head);
   }
-  const body = el('p', isJumbo(text) ? 'msg-text jumbo' : 'msg-text');
-  body.title = time;
-  body.append(linkify(text));
-  li.append(body);
+  if (gif) {
+    // Sized before it loads, so the chat doesn't jump when it arrives.
+    const img = el('img', 'msg-gif');
+    img.src = gif.url;
+    img.alt = gif.title || 'GIF';
+    img.title = gif.title ? `${gif.title} · ${time}` : time;
+    img.referrerPolicy = 'no-referrer';
+    if (gif.w && gif.h) img.style.aspectRatio = `${gif.w} / ${gif.h}`;
+    li.append(img);
+  } else {
+    const body = el('p', isJumbo(text) ? 'msg-text jumbo' : 'msg-text');
+    body.title = time;
+    body.append(linkify(text));
+    li.append(body);
+  }
   appendToChat(li);
 
   if (!self) {
     unread += 1;
     updateUnread();
-    notify(name, text, 'chat');
+    notify(name, gif ? 'mandou um GIF' : text, 'chat');
   }
 }
 

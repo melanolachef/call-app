@@ -1,5 +1,6 @@
 //! Screen sharing between friends: serves the pages and relays WebRTC signaling.
 
+mod gifs;
 mod ice;
 mod rooms;
 mod signaling;
@@ -8,12 +9,13 @@ use std::{error::Error, sync::Arc};
 
 use axum::{
     extract::{FromRef, Path, RawQuery, State},
-    http::header,
+    http::{header, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
     routing::get,
     Router,
 };
 
+use gifs::{GifError, Gifs};
 use ice::Ice;
 use rooms::{valid_room_id, Rooms};
 
@@ -22,6 +24,13 @@ use rooms::{valid_room_id, Rooms};
 struct AppState {
     rooms: Rooms,
     ice: Arc<Ice>,
+    gifs: Arc<Gifs>,
+}
+
+impl FromRef<AppState> for Arc<Gifs> {
+    fn from_ref(state: &AppState) -> Self {
+        state.gifs.clone()
+    }
 }
 
 impl FromRef<AppState> for Rooms {
@@ -53,6 +62,7 @@ const ROOM_JS: &str = concat!(
     include_str!("../static/room/ptt.js"),
     include_str!("../static/room/chat.js"),
     include_str!("../static/room/emojis.js"),
+    include_str!("../static/room/gifs.js"),
     include_str!("../static/room/notificacoes.js"),
     include_str!("../static/room/reacoes.js"),
     include_str!("../static/room/soundpad.js"),
@@ -105,11 +115,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "desligado"
         }
     );
-    axum::serve(listener, app(Rooms::new(max_peers), ice)).await?;
+    let gifs = Gifs::from_env();
+    if !gifs.enabled() {
+        println!("GIFs desligados (defina GIF_API_KEY para ligar a busca)");
+    }
+    axum::serve(listener, app_with(Rooms::new(max_peers), ice, gifs)).await?;
     Ok(())
 }
 
+#[cfg(test)]
 fn app(rooms: Rooms, ice: Arc<Ice>) -> Router {
+    app_with(rooms, ice, Gifs::disabled())
+}
+
+fn app_with(rooms: Rooms, ice: Arc<Ice>, gifs: Arc<Gifs>) -> Router {
     Router::new()
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
@@ -159,10 +178,11 @@ fn app(rooms: Rooms, ice: Arc<Ice>) -> Router {
         )
         .route("/api/rooms", get(room_counts))
         .route("/api/ice", get(ice_servers))
+        .route("/api/gifs", get(gif_search))
         .route("/ws/{id}", get(signaling::ws_handler))
         // For the hosting platform's health checks.
         .route("/health", get(|| async { "ok" }))
-        .with_state(AppState { rooms, ice })
+        .with_state(AppState { rooms, ice, gifs })
 }
 
 async fn room_page(Path(id): Path<String>) -> Response {
@@ -224,6 +244,60 @@ async fn room_counts(State(rooms): State<Rooms>, RawQuery(query): RawQuery) -> R
         serde_json::Value::Object(counts).to_string(),
     )
         .into_response()
+}
+
+/// `GET /api/gifs?q=gato&pos=24` -> `{"results": [...], "next": "48"}`;
+/// without `q`, what's trending. 404 when GIFs are off (no key), 503 when
+/// the GIF service doesn't answer.
+async fn gif_search(State(gifs): State<Arc<Gifs>>, RawQuery(query): RawQuery) -> Response {
+    let query = query.unwrap_or_default();
+    let param = |name: &str| {
+        query
+            .split('&')
+            .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
+            .map(percent_decode)
+            .unwrap_or_default()
+    };
+    let (status, body) = match gifs.search(&param("q"), &param("pos")).await {
+        Ok(results) => (StatusCode::OK, results.to_string()),
+        Err(GifError::Disabled) => (StatusCode::NOT_FOUND, r#"{"error":"off"}"#.to_owned()),
+        Err(GifError::Unavailable) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            r#"{"error":"unavailable"}"#.to_owned(),
+        ),
+    };
+    (
+        status,
+        [
+            (header::CONTENT_TYPE, "application/json"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        body,
+    )
+        .into_response()
+}
+
+/// `a+b%C3%A3` -> `a bã` (form-style query values), lossy on bad bytes.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = bytes
+            .get(i + 1..i + 3)
+            .and_then(|pair| std::str::from_utf8(pair).ok())
+            .and_then(|pair| u8::from_str_radix(pair, 16).ok());
+        match (bytes[i], hex) {
+            (b'+', _) => out.push(b' '),
+            (b'%', Some(byte)) => {
+                out.push(byte);
+                i += 2;
+            }
+            (byte, _) => out.push(byte),
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// `GET /api/ice` -> `{"iceServers": [...]}` for `RTCPeerConnection`.
@@ -406,6 +480,75 @@ mod tests {
             }),
         );
         (format!("http://{}", start_app(router).await), calls)
+    }
+
+    /// A Tenor-style GIF API that counts its calls and checks the key.
+    async fn fake_gif_api() -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = calls.clone();
+        let router = Router::new().route(
+            "/v2/{kind}",
+            get(move |Path(kind): Path<String>, RawQuery(query): RawQuery| {
+                let counter = counter.clone();
+                async move {
+                    counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let query = query.unwrap_or_default();
+                    assert!(query.contains("key=gif-key"));
+                    let title = if kind == "search" {
+                        assert!(query.contains("q=gato+pulando") || query.contains("q=gato%20pulando"));
+                        "gato pulando"
+                    } else {
+                        "em alta"
+                    };
+                    json!({ "results": [{ "id": "7", "content_description": title, "media_formats": {
+                        "gif": { "url": "https://static.klipy.com/x.gif", "dims": [320, 180] } } }], "next": "24" })
+                    .to_string()
+                }
+            }),
+        );
+        (format!("http://{}", start_app(router).await), calls)
+    }
+
+    #[tokio::test]
+    async fn gif_endpoint_off_without_key() {
+        let addr = start_server().await;
+        let (head, _) = http_get(&addr, "/api/gifs?q=gato").await;
+        assert!(head.starts_with("HTTP/1.1 404"));
+    }
+
+    #[tokio::test]
+    async fn gif_endpoint_searches_and_caches() {
+        let (api, calls) = fake_gif_api().await;
+        let addr = start_app(app_with(
+            Rooms::default(),
+            Ice::stun_only(),
+            Gifs::with_key("gif-key", &api),
+        ))
+        .await;
+        let (_, trending) = http_get(&addr, "/api/gifs").await;
+        assert_eq!(trending["results"][0]["title"], "em alta");
+        let (_, first) = http_get(&addr, "/api/gifs?q=Gato+pulando").await;
+        let (_, second) = http_get(&addr, "/api/gifs?q=gato%20pulando").await;
+        assert_eq!(first["results"][0]["title"], "gato pulando");
+        assert_eq!(
+            first["results"][0]["gif"]["url"],
+            "https://static.klipy.com/x.gif"
+        );
+        assert_eq!(first["next"], "24");
+        assert_eq!(first, second);
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "the same search (any case/encoding) is answered from memory"
+        );
+    }
+
+    #[test]
+    fn percent_decoding() {
+        assert_eq!(percent_decode("gato+pulando%21"), "gato pulando!");
+        assert_eq!(percent_decode("p%C3%A3o"), "pão");
+        assert_eq!(percent_decode("100%"), "100%");
+        assert_eq!(percent_decode("%zz"), "%zz");
     }
 
     #[tokio::test]
