@@ -44,7 +44,7 @@ registro de quem entrou.
 | **Chat** | Mensagens em balões, emojis e reações que flutuam pela tela. Nada fica salvo. |
 | **Block e salas** | Seu **Block** é uma sala fixa com link que nunca muda; as salas por onde você passa ficam na lista, com quem está em cada uma agora. |
 | **Amigos** | Troque **códigos de amigo** (sem conta) e veja em que call cada um está agora, com um clique para entrar. Dá para ficar **invisível**. |
-| **Do seu jeito** | Nick, foto, cor de destaque, tema e fundo, tudo salvo só no seu navegador. |
+| **Do seu jeito** | Nick, foto (ou um GIF animado), banner, cor de destaque, tema e fundo, tudo salvo só no seu navegador. |
 | **App para Windows** | A mesma sala numa janela própria, com a tecla de falar e o Ctrl+Shift+M funcionando **com o jogo em foco**. |
 
 ## Como usar

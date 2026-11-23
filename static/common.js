@@ -36,10 +36,30 @@ function cleanNick(value) {
   return Array.from(String(value ?? '').trim()).slice(0, 32).join('');
 }
 
-// Only inline images are accepted: a remote URL would let a participant
-// track everyone else's IP when their browser fetches it.
+// GIFs (chat, photo, banner) come only from the GIF service's CDN.
+const GIF_HOSTS = ['klipy.com', 'klipy.co'];
+
+function gifUrlOk(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && GIF_HOSTS.some((host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`));
+  } catch {
+    return false;
+  }
+}
+
+// A GIF as photo or banner: an https URL on the GIF service, made only of
+// characters that are safe inside CSS url("").
+function profileGif(value) {
+  return value.length <= 300 && /^https:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~/-]+\.gif$/.test(value) && gifUrlOk(value);
+}
+
+// Inline images, or a GIF from the GIF service. Any other remote URL would
+// let a participant track everyone else's IP when their browser fetches it.
 function validPhoto(value) {
-  return typeof value === 'string' && value.length <= MAX_PHOTO &&
+  if (typeof value !== 'string') return '';
+  if (profileGif(value)) return value;
+  return value.length <= MAX_PHOTO &&
     /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(value) ? value : '';
 }
 
@@ -54,7 +74,7 @@ function initials(name) {
 
 function paintAvatar(node, name, id, photo) {
   node.textContent = photo ? '' : initials(name || '?');
-  // Safe inside url(""): validPhoto() only lets base64 characters through.
+  // Safe inside url(""): validPhoto() only lets base64 or plain URL characters through.
   // Without a photo, the CSS grey gradient shows.
   node.style.backgroundImage = photo ? `url("${photo}")` : '';
 }
@@ -72,13 +92,15 @@ function validBannerColor(value) {
 }
 
 function validBannerImage(value) {
-  return typeof value === 'string' && value.length <= MAX_BANNER_IMAGE &&
+  if (typeof value !== 'string') return '';
+  if (profileGif(value)) return value;
+  return value.length <= MAX_BANNER_IMAGE &&
     /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(value) ? value : '';
 }
 
 // Image first, then color, else the default gradient from the CSS.
 function paintBanner(node, color, image) {
-  // Safe inside url(""): validBannerImage() only lets base64 characters through.
+  // Safe inside url(""): validBannerImage() only lets base64 or plain URL characters through.
   node.style.backgroundImage = image ? `url("${image}")` : color ? 'none' : '';
   node.style.backgroundColor = color || '';
 }
@@ -107,6 +129,7 @@ document.body.insertAdjacentHTML('beforeend', `
             <span class="avatar-badge" aria-hidden="true">${ICON_CAMERA}</span>
           </button>
           <button type="button" class="btn small" id="photo-pick">Adicionar foto</button>
+          <button type="button" class="btn small" id="photo-gif" hidden>GIF</button>
           <button type="button" class="btn small" id="photo-remove">Remover</button>
           <input type="file" id="photo-input" accept="image/*" hidden>
         </div>
@@ -146,6 +169,22 @@ document.body.insertAdjacentHTML('beforeend', `
       <div class="actions">
         <button type="button" class="btn small" id="crop-cancel">Cancelar</button>
         <button type="button" class="btn small primary" id="crop-apply">Aplicar</button>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="gif-picker" aria-labelledby="gp-title">
+    <div class="dialog-body">
+      <div class="heading">
+        <h2 id="gp-title">Escolher GIF</h2>
+        <span class="muted" id="gp-hint"></span>
+      </div>
+      <input class="input gif-search" id="gp-search" maxlength="50" placeholder="Buscar GIFs" autocomplete="off" aria-label="Buscar GIFs">
+      <div class="gif-grid" id="gp-grid"></div>
+      <p class="gif-status" id="gp-status" role="status"></p>
+      <button type="button" class="btn small ghost" id="gp-more" hidden>Mais</button>
+      <div class="gp-foot">
+        <span class="gif-credit">via KLIPY</span>
+        <button type="button" class="btn small" id="gp-cancel">Cancelar</button>
       </div>
     </div>
   </dialog>
@@ -378,6 +417,14 @@ function renderBannerChoices() {
   else image.innerHTML = ICON_PLUS;
   image.onclick = () => $('banner-input').click();
   const choices = [...BANNER_COLORS.map((c) => bannerSwatch(c, 'Cor do banner')), custom, image];
+  if (gifsEnabled) {
+    const gif = el('button', 'swatch swatch-gif', 'GIF');
+    gif.type = 'button';
+    gif.title = 'GIF';
+    gif.setAttribute('aria-label', 'Usar um GIF no banner');
+    gif.onclick = pickBannerGif;
+    choices.push(gif);
+  }
   if (draftBannerColor || draftBannerImage) {
     const none = el('button', 'swatch swatch-none');
     none.type = 'button';
@@ -416,6 +463,117 @@ async function pickImage(input, opts, apply) {
     toast('Não deu para usar essa imagem');
   }
 }
+
+// ---------- GIF como foto ou banner ----------
+
+// Same search as the chat (/api/gifs). Only the GIF's URL is kept and sent:
+// the small version for the photo, the full one for the banner.
+let gifsEnabled = false;
+const gifsOn = fetch('/api/gifs?probe=1', { method: 'HEAD' })
+  .then((response) => response.status !== 404)
+  .catch(() => false);
+gifsOn.then((on) => {
+  gifsEnabled = on;
+  $('photo-gif').hidden = !on;
+  if (on && $('profile').open) renderBannerChoices();
+});
+
+const GIF_SEARCH_DELAY_MS = 400;
+const picker = { kind: 'photo', query: null, next: '', loading: false, seq: 0, timer: 0, resolve: null };
+
+async function loadPickerGifs(query, more) {
+  if (picker.loading && more) return;
+  picker.loading = true;
+  if (!more) {
+    picker.seq++;
+    picker.query = query;
+    picker.next = '';
+    $('gp-grid').replaceChildren();
+  }
+  const seq = picker.seq;
+  $('gp-status').textContent = 'Carregando…';
+  try {
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    if (more && picker.next) params.set('pos', picker.next);
+    const response = await fetch(`/api/gifs?${params}`);
+    if (!response.ok) throw new Error(String(response.status));
+    const data = await response.json();
+    if (seq !== picker.seq) return; // a newer search started meanwhile
+    picker.next = data.next || '';
+    $('gp-grid').append(...(data.results || []).map(pickerChoice).filter(Boolean));
+    $('gp-status').textContent = $('gp-grid').childElementCount ? '' : 'Nenhum GIF encontrado.';
+  } catch {
+    if (seq === picker.seq) $('gp-status').textContent = 'Os GIFs não responderam agora. Tente de novo daqui a pouco.';
+  } finally {
+    if (seq === picker.seq) picker.loading = false;
+    $('gp-more').hidden = !picker.next || !$('gp-grid').childElementCount;
+  }
+}
+
+function pickerChoice(item) {
+  const preview = item.preview?.url;
+  const url = picker.kind === 'photo' ? preview : item.gif?.url;
+  if (typeof url !== 'string' || !profileGif(url) || typeof preview !== 'string' || !gifUrlOk(preview)) return null;
+  const button = el('button', 'gif-choice');
+  button.type = 'button';
+  button.title = item.title || 'GIF';
+  button.setAttribute('aria-label', `Escolher GIF${item.title ? `: ${item.title}` : ''}`);
+  const img = el('img');
+  img.src = preview;
+  img.alt = '';
+  img.loading = 'lazy';
+  img.referrerPolicy = 'no-referrer';
+  button.append(img);
+  button.onclick = () => finishGifPicker(url);
+  return button;
+}
+
+// Resolves with the chosen GIF's URL, or '' if closed.
+function openGifPicker(kind) {
+  picker.kind = kind;
+  $('gp-title').textContent = kind === 'photo' ? 'GIF como foto' : 'GIF no banner';
+  $('gp-hint').textContent = kind === 'photo' ? 'Aparece animado no seu perfil, para quem está na sala.' : 'Aparece no topo do seu cartão de perfil.';
+  $('gp-search').value = '';
+  $('gp-grid').classList.toggle('wide', kind === 'banner');
+  loadPickerGifs('', false);
+  $('gif-picker').showModal();
+  return new Promise((resolve) => (picker.resolve = resolve));
+}
+
+function finishGifPicker(url) {
+  const resolve = picker.resolve;
+  picker.resolve = null;
+  if ($('gif-picker').open) $('gif-picker').close();
+  resolve?.(url || '');
+}
+
+async function pickPhotoGif() {
+  const url = await openGifPicker('photo');
+  if (url) {
+    draftPhoto = url;
+    updateProfilePreview();
+  }
+}
+
+async function pickBannerGif() {
+  const url = await openGifPicker('banner');
+  if (url) {
+    draftBannerImage = url;
+    draftBannerColor = '';
+    updateProfilePreview();
+  }
+}
+
+$('gp-search').oninput = () => {
+  clearTimeout(picker.timer);
+  const query = $('gp-search').value.trim();
+  picker.timer = setTimeout(() => loadPickerGifs(query, false), GIF_SEARCH_DELAY_MS);
+};
+$('gp-more').onclick = () => loadPickerGifs(picker.query ?? '', true);
+$('gp-cancel').onclick = () => finishGifPicker('');
+$('gif-picker').onclose = () => finishGifPicker('');
+$('photo-gif').onclick = pickPhotoGif;
 
 $('nick-input').oninput = () => paintAvatar($('preview-avatar'), cleanNick($('nick-input').value), profileColorId, draftPhoto);
 $('photo-pick').onclick = () => $('photo-input').click();

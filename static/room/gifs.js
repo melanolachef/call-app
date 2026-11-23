@@ -5,18 +5,7 @@
 // searches). Picking one sends it to the room as a chat message
 // { gif: { url, w, h, title } }; it shows up animated for everyone, loaded
 // from the GIF service's CDN. Without a key on the server the tab is hidden.
-const GIF_HOSTS = ['klipy.com', 'klipy.co']; // where received GIFs may come from
-const GIF_SEARCH_DELAY_MS = 400;
 const gifState = { on: false, query: null, next: '', loading: false, timer: 0 };
-
-function gifUrlOk(url) {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' && GIF_HOSTS.some((host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`));
-  } catch {
-    return false;
-  }
-}
 
 // What goes over the wire, and what we accept from others: only these
 // fields, an https URL on the GIF service, sane sizes.
@@ -111,10 +100,8 @@ $('gif-search').oninput = () => {
 };
 $('gif-more').onclick = () => loadGifs(gifState.query ?? '', true);
 
-// Is the server set up for GIFs? (404 = no key: hide the tab.)
-fetch('/api/gifs?probe=1', { method: 'HEAD' })
-  .then((response) => {
-    gifState.on = response.status !== 404;
-    $('emoji-mode').hidden = !gifState.on;
-  })
-  .catch(() => {});
+// Is the server set up for GIFs? (common.js asks; no key: hide the tab.)
+gifsOn.then((on) => {
+  gifState.on = on;
+  $('emoji-mode').hidden = !on;
+});

@@ -78,6 +78,7 @@ _Atualizado em 2026-11-23._
 - **Na development (falta publicar):** amigos sem conta (#132): código de
   amigo por aparelho, `/api/friends`, presença só em memória
   (`src/presence.rs`), invisível, "Usar em outro aparelho" para o app.
+  GIF como foto de perfil e banner (#135), com o seletor do KLIPY no diálogo.
 - **Produção sem TURN:** `/api/ice` só entrega STUN (faltam `TURN_KEY_ID` e
   `TURN_KEY_API_TOKEN` em `fly secrets`). Quem está em CGNAT/4G ou rede que
   bloqueia UDP fica em "falha na conexão · sem P2P".
