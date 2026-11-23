@@ -2,6 +2,7 @@
 
 mod gifs;
 mod ice;
+mod presence;
 mod rooms;
 mod signaling;
 
@@ -17,6 +18,7 @@ use axum::{
 
 use gifs::{GifError, Gifs};
 use ice::Ice;
+use presence::{normalize_code, Presence};
 use rooms::{valid_room_id, Rooms};
 
 /// What the handlers share: the rooms and the ICE (STUN/TURN) configuration.
@@ -25,6 +27,13 @@ struct AppState {
     rooms: Rooms,
     ice: Arc<Ice>,
     gifs: Arc<Gifs>,
+    presence: Presence,
+}
+
+impl FromRef<AppState> for Presence {
+    fn from_ref(state: &AppState) -> Self {
+        state.presence.clone()
+    }
 }
 
 impl FromRef<AppState> for Arc<Gifs> {
@@ -72,6 +81,7 @@ const ROOM_JS: &str = concat!(
     include_str!("../static/room/inicio.js"),
 );
 const LOBBY_JS: &str = include_str!("../static/lobby.js");
+const AMIGOS_JS: &str = include_str!("../static/amigos.js");
 const COMMON_JS: &str = include_str!("../static/common.js");
 const COMMON_CSS: &str = include_str!("../static/common.css");
 const THEME_JS: &str = include_str!("../static/theme.js");
@@ -87,6 +97,8 @@ const MONO_WOFF2: &[u8] = include_bytes!("../static/fonts/jetbrains-mono.woff2")
 
 /// Most rooms the lobby may ask about in one request.
 const MAX_COUNT_IDS: usize = 30;
+/// Friends one browser can ask about at once.
+const MAX_FRIEND_CODES: usize = 64;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -134,6 +146,7 @@ fn app_with(rooms: Rooms, ice: Arc<Ice>, gifs: Arc<Gifs>) -> Router {
         .route("/room/{id}", get(room_page))
         .route("/room.js", get(|| async { javascript(ROOM_JS) }))
         .route("/lobby.js", get(|| async { javascript(LOBBY_JS) }))
+        .route("/amigos.js", get(|| async { javascript(AMIGOS_JS) }))
         .route("/common.js", get(|| async { javascript(COMMON_JS) }))
         .route("/theme.js", get(|| async { javascript(THEME_JS) }))
         .route(
@@ -179,10 +192,16 @@ fn app_with(rooms: Rooms, ice: Arc<Ice>, gifs: Arc<Gifs>) -> Router {
         .route("/api/rooms", get(room_counts))
         .route("/api/ice", get(ice_servers))
         .route("/api/gifs", get(gif_search))
+        .route("/api/friends", get(friends))
         .route("/ws/{id}", get(signaling::ws_handler))
         // For the hosting platform's health checks.
         .route("/health", get(|| async { "ok" }))
-        .with_state(AppState { rooms, ice, gifs })
+        .with_state(AppState {
+            rooms,
+            ice,
+            gifs,
+            presence: Presence::default(),
+        })
 }
 
 async fn room_page(Path(id): Path<String>) -> Response {
@@ -242,6 +261,56 @@ async fn room_counts(State(rooms): State<Rooms>, RawQuery(query): RawQuery) -> R
             (header::CACHE_CONTROL, "no-store"),
         ],
         serde_json::Value::Object(counts).to_string(),
+    )
+        .into_response()
+}
+
+/// `GET /api/friends?codes=7K3F9X2A,QW12ER34` ->
+/// `{"7K3F9X2A": {"nick":"Rafa","room":"churrasco-k3f9x2","count":3,"secs":420}, "QW12ER34": null}`:
+/// where each friend is now (null: not in a room, or invisible). Only answers
+/// for codes you already have; there is no listing.
+async fn friends(
+    State(presence): State<Presence>,
+    State(rooms): State<Rooms>,
+    RawQuery(query): RawQuery,
+) -> Response {
+    let query = query.unwrap_or_default();
+    let mut codes: Vec<String> = query
+        .split('&')
+        .filter_map(|pair| pair.strip_prefix("codes="))
+        .flat_map(|list| list.split(','))
+        .filter_map(normalize_code)
+        .take(MAX_FRIEND_CODES)
+        .collect();
+    codes.dedup();
+    let found = presence.lookup(&codes);
+    let room_ids: Vec<&str> = found
+        .iter()
+        .filter_map(|(_, seen)| seen.as_ref().map(|s| s.room.as_str()))
+        .collect();
+    let counts: std::collections::HashMap<&str, usize> =
+        rooms.counts(&room_ids).into_iter().collect();
+    let body: serde_json::Map<String, serde_json::Value> = found
+        .iter()
+        .map(|(code, seen)| {
+            let value = match seen {
+                Some(s) => serde_json::json!({
+                    "nick": s.nick,
+                    "room": s.room,
+                    "count": counts.get(s.room.as_str()).copied().unwrap_or(0),
+                    "secs": s.secs,
+                }),
+                None => serde_json::Value::Null,
+            };
+            (code.clone(), value)
+        })
+        .collect();
+    (
+        [
+            (header::CONTENT_TYPE, "application/json"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        serde_json::Value::Object(body).to_string(),
     )
         .into_response()
 }
@@ -386,6 +455,7 @@ mod tests {
             .contains("content-type: text/javascript"));
         assert!(get("/common.js").await.contains("text/javascript"));
         assert!(get("/lobby.js").await.contains("text/javascript"));
+        assert!(get("/amigos.js").await.contains("text/javascript"));
         assert!(get("/theme.js").await.contains("text/javascript"));
         assert!(get("/common.css").await.contains("content-type: text/css"));
         assert!(get("/favicon.svg")
@@ -507,6 +577,52 @@ mod tests {
             }),
         );
         (format!("http://{}", start_app(router).await), calls)
+    }
+
+    #[tokio::test]
+    async fn friends_see_where_you_are_while_connected() {
+        let secret = "ab".repeat(32);
+        let code = presence::friend_code(&secret);
+        let addr = start_server().await;
+        let mut rafa = connect(&addr, "churrasco-k3f9x2").await;
+        recv(&mut rafa).await; // welcome
+        let mut bia = connect(&addr, "churrasco-k3f9x2").await;
+        recv(&mut bia).await;
+        send(
+            &mut rafa,
+            json!({ "presence": { "secret": secret, "nick": "Rafa" } }),
+        )
+        .await;
+
+        let path = format!(
+            "/api/friends?codes={},ZZZZZZZZ,invalid",
+            code.to_lowercase()
+        );
+        let mut seen = Value::Null;
+        for _ in 0..50 {
+            (_, seen) = http_get(&addr, &path).await;
+            if !seen[&code].is_null() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert_eq!(seen[&code]["nick"], "Rafa");
+        assert_eq!(seen[&code]["room"], "churrasco-k3f9x2");
+        assert_eq!(seen[&code]["count"], 2);
+        assert!(seen["ZZZZZZZZ"].is_null(), "unknown code: nobody there");
+        assert!(seen.get("invalid").is_none(), "not a code: ignored");
+
+        send(&mut rafa, json!({ "presence": null })).await; // invisible
+        let mut gone = false;
+        for _ in 0..50 {
+            let (_, now) = http_get(&addr, &path).await;
+            if now[&code].is_null() {
+                gone = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(gone, "invisible: hidden from friends");
     }
 
     #[tokio::test]
