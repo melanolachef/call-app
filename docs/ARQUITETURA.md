@@ -32,14 +32,22 @@ flowchart LR
 - **Estado:** salas só na memória (`HashMap` atrás de um `Mutex`), criadas na
   primeira entrada e apagadas quando a última pessoa sai. Até 12 pessoas por
   sala (`MAX_PEERS`).
+- **Amigos (presença):** cada navegador guarda um segredo aleatório; o código de
+  amigo é o SHA-256 dele (40 bits em base32, `XXXX-XXXX`). Na sala, a página
+  manda `{"presence": {secret, nick}}` pelo WebSocket (ou `null` se invisível);
+  o servidor recalcula o código e guarda "esse código está nesta sala" só em
+  memória, enquanto a conexão existe. `GET /api/friends?codes=A,B` responde
+  onde cada código está agora. Quem só conhece o código não consegue se passar
+  pelo dono.
 
 ## Mapa do código
 
 | Caminho | O que tem |
 |---|---|
-| [src/main.rs](../src/main.rs) | Rotas, páginas e arquivos embutidos no binário, `/api/rooms`, `/api/ice`, testes de ponta a ponta |
+| [src/main.rs](../src/main.rs) | Rotas, páginas e arquivos embutidos no binário, `/api/rooms`, `/api/ice`, `/api/friends`, testes de ponta a ponta |
 | [src/rooms.rs](../src/rooms.rs) | Salas em memória: entrar, sair, repassar, contar |
 | [src/signaling.rs](../src/signaling.rs) | O WebSocket de cada participante, com ping a cada 25 s |
+| [src/presence.rs](../src/presence.rs) | Amigos: código de amigo e quem está em que sala, só em memória |
 | [src/ice.rs](../src/ice.rs) | Credenciais de TURN da Cloudflare, em cache por 12 h |
 | [static/](../static/) | Páginas (`index.html` = início, `room.html` = sala), estilos e scripts comuns |
 | [static/room/](../static/room/) | O script da sala, um arquivo por assunto (veja abaixo) |

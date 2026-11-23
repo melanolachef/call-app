@@ -63,7 +63,7 @@ a green test card, so override `getDisplayMedia` to return
 
 ## Estado atual
 
-_Atualizado em 2026-11-18._
+_Atualizado em 2026-11-23._
 
 - **No ar (main, publicado em 2026-11-18):** design novo
   (`docs/design/cpx-call-componentes.html`: quem assiste, direto/relay,
@@ -75,6 +75,12 @@ _Atualizado em 2026-11-18._
 - **App Windows `app-v0.2.0`** (release publicado): barra de título desenhada
   pela página. Quem tem a 0.1.0 precisa reinstalar (sem atualização
   automática ainda).
+- **Na development (falta publicar):** amigos sem conta (#132): código de
+  amigo por aparelho, `/api/friends`, presença só em memória
+  (`src/presence.rs`), invisível, "Usar em outro aparelho" para o app.
+- **Produção sem TURN:** `/api/ice` só entrega STUN (faltam `TURN_KEY_ID` e
+  `TURN_KEY_API_TOKEN` em `fly secrets`). Quem está em CGNAT/4G ou rede que
+  bloqueia UDP fica em "falha na conexão · sem P2P".
 - **Falta testar:** Android real (tela cheia, instalar) e "relay" numa rede
   que bloqueie P2P.
 - **Assinatura do instalador:** falta a inscrição na SignPath (o mantenedor faz).
@@ -108,4 +114,6 @@ _Atualizado em 2026-11-18._
    conexões P2P sobreviverem ao celular ir para segundo plano (seletor de
    fotos) e ao 4G instável. Esperando o relato de quem viu o problema.
 6. Ideias registradas: canais fixos do servidor iguais para todos (estilo
-   servidor do Discord) e contas opcionais (Google + Neon).
+   servidor do Discord) e contas opcionais (Google + Neon). Para devs: quadro
+   colaborativo estilo Excalidraw (#127), código no chat (#128), cartões do
+   GitHub (#129) e apontar sobre a tela compartilhada (#130).
