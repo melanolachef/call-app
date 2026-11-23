@@ -4,7 +4,7 @@
 // pick floats up over the room for everyone. They go through the same signaling
 // relay as the chat (nothing stored), so the server needs no change. Only emojis
 // from this list are ever shown, whatever arrives.
-const REACTIONS = ['👍', '👎', '❤️', '😂', '😮', '😢', '👏', '🔥', '🎉', '🙏', '👀', '🤔'];
+const REACTIONS = ['👍', '👎', '❤️', '😂', '😮', '😢', '👏', '🔥', '🎉', '🙏', '👀', '🤔', '💀'];
 const REACT_COOLDOWN_MS = 250; // yours: no flooding by holding the mouse down
 const REACT_PEER_GAP_MS = 150; // theirs: ignore anyone sending faster than a human can
 const REACT_MAX_FLOATING = 30;
@@ -40,15 +40,22 @@ function handleReaction(peer, data) {
   floatReaction(displayName(peer), data.reaction);
 }
 
-function setReactPicker(open) {
+// Opens over the bar button, or beside another one (the rail over a
+// fullscreen picture on phones).
+function setReactPicker(open, anchor = reactBtn) {
   reactPop.hidden = !open;
-  reactBtn.setAttribute('aria-expanded', String(open));
+  reactBtn.setAttribute('aria-expanded', String(open && anchor === reactBtn));
   if (!open) return;
-  const rect = reactBtn.getBoundingClientRect();
+  const rect = anchor.getBoundingClientRect();
   const width = reactPop.offsetWidth;
-  const left = Math.min(Math.max(8, rect.left + rect.width / 2 - width / 2), innerWidth - width - 8);
-  reactPop.style.left = `${left}px`;
-  reactPop.style.bottom = `${innerHeight - rect.top + 10}px`;
+  if (anchor === reactBtn) {
+    const left = Math.min(Math.max(8, rect.left + rect.width / 2 - width / 2), innerWidth - width - 8);
+    reactPop.style.left = `${left}px`;
+    reactPop.style.bottom = `${innerHeight - rect.top + 10}px`;
+  } else {
+    reactPop.style.left = `${Math.max(8, rect.left - width - 10)}px`;
+    reactPop.style.bottom = `${Math.max(8, innerHeight - rect.bottom)}px`;
+  }
 }
 
 for (const emoji of REACTIONS) {
@@ -64,7 +71,7 @@ for (const emoji of REACTIONS) {
 
 reactBtn.onclick = () => setReactPicker(reactPop.hidden);
 document.addEventListener('pointerdown', (e) => {
-  if (!reactPop.hidden && !reactPop.contains(e.target) && !reactBtn.contains(e.target)) setReactPicker(false);
+  if (!reactPop.hidden && !reactPop.contains(e.target) && !reactBtn.contains(e.target) && !e.target.closest('.react-anchor')) setReactPicker(false);
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !reactPop.hidden) {

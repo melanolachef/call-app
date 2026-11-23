@@ -79,6 +79,12 @@ _Atualizado em 2026-11-23._
   amigo por aparelho, `/api/friends`, presença só em memória
   (`src/presence.rs`), invisível, "Usar em outro aparelho" para o app.
   GIF como foto de perfil e banner (#135), com o seletor do KLIPY no diálogo.
+- **Design mobile novo (branch `feat/design-mobile`, PR aberto):**
+  `docs/design/cpx-call-mobile.html` implementado só no layout de celular
+  (computador igual): sala com abas Palco/Chat/Sons, barra de voz, carrossel
+  de telas, folha de sons com reações, trilho deitado em tela cheia
+  (`static/room/celular.js`); início com amigos em cartões e "Nova sala" /
+  "Colar convite" fixos. Falta testar em celular real (iPhone e Android).
 - **Produção sem TURN:** `/api/ice` só entrega STUN (faltam `TURN_KEY_ID` e
   `TURN_KEY_API_TOKEN` em `fly secrets`). Quem está em CGNAT/4G ou rede que
   bloqueia UDP fica em "falha na conexão · sem P2P".
@@ -115,11 +121,7 @@ _Atualizado em 2026-11-23._
 4. **Clipes no app** (#103, estudo): buffer dos últimos ~30 s já codificados
    em RAM sobre o pipeline da fase 1, tecla → MP4 pelo Media Foundation.
    Medir o custo com jogo rodando antes; se pesar, abandonar.
-5. **Para mais tarde — tolerância a queda no servidor (#78):** ao cair o
-   WebSocket, segurar o lugar da pessoa ~20 s antes do `peer-left`, para as
-   conexões P2P sobreviverem ao celular ir para segundo plano (seletor de
-   fotos) e ao 4G instável. Esperando o relato de quem viu o problema.
-6. Ideias registradas: canais fixos do servidor iguais para todos (estilo
+5. Ideias registradas: canais fixos do servidor iguais para todos (estilo
    servidor do Discord) e contas opcionais (Google + Neon). Para devs: quadro
    colaborativo estilo Excalidraw (#127), código no chat (#128), cartões do
    GitHub (#129) e apontar sobre a tela compartilhada (#130).

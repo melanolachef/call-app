@@ -228,9 +228,27 @@ function personTile(person) {
   const text = el('div', 'tile-text');
   const name = el('strong', 'ellipsis', person.self && mobile.matches ? 'Você' : person.name);
   if (person.voiceIn) name.append(voiceIcon(person));
-  text.append(name, el('span', `status ${status[1]}`, status[0]));
-  tile.append(avatar, text);
+  // Phones (docs/design/cpx-call-mobile.html): voice people as big faces with
+  // a short word under the name, the others as rows ("na sala, fora da voz").
+  const [shortText, shortCls] = shortStatus(person);
+  tile.classList.toggle('away', !person.voiceIn);
+  tile.classList.toggle('muted', !!person.voiceIn && !!person.voiceMuted);
+  text.append(name, el('span', `status ${status[1]}`, status[0]), el('span', `m-status ellipsis ${shortCls}`, shortText), el('span', 'm-talk', 'falando'));
+  const badge = el('span', 'mute-badge');
+  badge.setAttribute('aria-hidden', 'true');
+  badge.innerHTML = ICONS.micOff; // fixed markup
+  tile.append(avatar, text, badge);
+  if (person.p2p === 'off') tile.append(el('span', 'p2p-off', 'sem P2P'));
   return tile;
+}
+
+// The word under a face on phones.
+function shortStatus(person) {
+  const live = person.self ? !!localTrack : person.status[1] === 'live';
+  if (live) return ['na tela', 'live'];
+  if (person.voiceIn) return person.voiceMuted ? ['mudo', ''] : ['na voz', ''];
+  if (!person.self && person.status[0] !== 'na sala') return person.status;
+  return ['na sala, fora da voz', ''];
 }
 
 // `watching` false shows the "Assistir" placeholder instead of the video.
@@ -393,6 +411,7 @@ function refresh() {
   renderCameraUi();
   if (!soundPop.hidden) renderSoundpad(); // "entre na voz" hint follows the voice
   syncDesktopKeys();
+  renderMobile(people);
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
   $('share-short').textContent = localTrack ? 'Parar' : 'Compartilhar';

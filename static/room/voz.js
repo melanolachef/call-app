@@ -223,6 +223,7 @@ const micClick = () => {
 };
 $('mic').onclick = micClick;
 $('me-mic').onclick = micClick;
+$('rail-mic').onclick = micClick;
 $('deafen').onclick = () => setDeafened(!voice.deafened);
 $('me-deafen').onclick = () => setDeafened(!voice.deafened);
 document.addEventListener('keydown', (e) => { // Ctrl+Shift+M, like Discord
@@ -282,7 +283,7 @@ function renderVoiceUi() {
   $('voice-join').hidden = voice.joined;
   for (const id of ['mic', 'deafen', 'voice-leave']) $(id).hidden = !voice.joined;
   $('me-voice').hidden = !voice.joined;
-  for (const id of ['mic', 'me-mic']) {
+  for (const id of ['mic', 'me-mic', 'rail-mic']) {
     const button = $(id);
     const label = silent ? 'Ligar microfone' : 'Silenciar microfone';
     button.innerHTML = silent ? ICONS.micOff : ICONS.mic;

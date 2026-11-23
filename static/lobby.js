@@ -83,6 +83,13 @@ function renderProfile() {
   $('greeting').textContent = nick ? `${greeting()}, ${nick}.` : `${greeting()}.`;
 }
 
+// "2 amigos em call agora." replaces the line under the greeting while any are.
+const tagline = $('tagline').textContent;
+function renderTagline() {
+  const n = Object.values(friendPresence).filter(Boolean).length;
+  $('tagline').textContent = n ? `${n} ${n === 1 ? 'amigo' : 'amigos'} em call agora.` : tagline;
+}
+
 $('appearance-btn').onclick = openAppearance;
 $('edit').onclick = () => openProfileDialog({
   title: nick ? 'Editar perfil' : 'Como seus amigos vão te ver?',
@@ -137,7 +144,7 @@ function timeAgo(at) {
 function peopleText(id) {
   if (!(id in counts)) return ['', ''];
   const n = counts[id];
-  return n === 0 ? ['Vazia', ''] : [`${n} agora`, 'online'];
+  return n === 0 ? [mobile.matches ? 'vazia' : 'Vazia', ''] : [`${n} agora`, 'online'];
 }
 
 const SVG = (paths) => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`; // fixed markup only
@@ -182,10 +189,12 @@ function roomItem(room) {
   else if (room.pinned) title.append(el('span', 'tag', 'fixada'));
   const meta = el('span', 'room-meta ellipsis');
   meta.append(el('span', 'mono', room.id));
-  if (!room.home) meta.append(` · ${timeAgo(room.at)}`);
+  if (!room.home) meta.append(el('span', 'm-hide', ` · ${timeAgo(room.at)}`));
   text.append(title, meta);
   const [people, cls] = peopleText(room.id);
-  link.append(icon, text, presence(counts[room.id]), el('span', `room-count ${cls}`, people), el('span', 'room-enter', 'Entrar'));
+  const chevron = el('span', 'm-only');
+  chevron.innerHTML = '<svg class="chevron m-only" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+  link.append(icon, text, presence(counts[room.id]), el('span', `room-count ${cls}`, people), el('span', 'room-enter', 'Entrar'), chevron.firstChild);
   row.append(link);
 
   if (!room.home) { // the fixed room can't be pinned or removed
@@ -242,17 +251,22 @@ function friendItem(friend) {
   icon.setAttribute('aria-hidden', 'true');
   icon.textContent = initials(friendLabel(friend));
   icon.style.background = colorFor(friend.code);
+  icon.classList.toggle('live', !!seen);
   const text = el('span', 'room-text');
   text.append(el('strong', 'ellipsis', friendLabel(friend)));
   const status = el('span', `friend-status ellipsis${seen ? ' online' : ''}`);
   if (seen) {
-    status.append('em ', el('b', null, displayRoomName(seen.room)), ` · ${seen.count} ${seen.count === 1 ? 'pessoa' : 'pessoas'} · ${friendSince(seen.secs)}`);
+    status.append('em ', el('b', null, displayRoomName(seen.room)), el('span', 'm-hide', ` · ${seen.count} ${seen.count === 1 ? 'pessoa' : 'pessoas'} · ${friendSince(seen.secs)}`));
   } else {
     status.textContent = 'fora de call';
   }
   text.append(status);
   link.append(icon, text);
-  if (seen) link.append(el('span', 'room-enter', 'Entrar'));
+  if (seen) {
+    const enter = el('span', 'room-enter', 'Entrar');
+    enter.append(el('span', 'm-only', '\u00a0junto'));
+    link.append(enter);
+  }
   row.append(link);
   const actions = el('span', 'room-actions');
   const remove = iconButton(ICON_X, `Tirar ${friendLabel(friend)} dos amigos`);
@@ -281,6 +295,7 @@ async function updateFriends() {
   const fresh = await fetchFriendPresence(list.map((f) => f.code));
   if (!fresh) return; // offline: keep what we had
   friendPresence = fresh;
+  renderTagline();
   // A friend added without a name takes the nick they use.
   let named = false;
   for (const friend of list) {
@@ -308,6 +323,59 @@ window.addEventListener('friends-changed', () => {
   history.replaceState(null, '', location.pathname);
   openFriendsDialog(friend);
 })();
+
+// ---------- celular: Nova sala, Colar convite, Editar ----------
+
+// Phones (same test as the room): the two forms become buttons at the bottom.
+const mobile = matchMedia('(max-width: 760px), (max-height: 500px) and (pointer: coarse)');
+let mobileOk = null;
+
+function askMobile(title, placeholder, okLabel, onOk) {
+  $('m-dialog-title').textContent = title;
+  $('m-input').value = '';
+  $('m-input').placeholder = placeholder;
+  $('m-ok').textContent = okLabel;
+  mobileOk = onOk;
+  $('m-dialog').showModal();
+}
+$('m-form').onsubmit = (e) => {
+  e.preventDefault();
+  if (mobileOk?.($('m-input').value) !== false) $('m-dialog').close();
+};
+$('m-cancel').onclick = () => $('m-dialog').close();
+
+$('m-new').onclick = () => askMobile('Nova sala', 'Nome (opcional)', 'Criar sala', (name) => {
+  location.assign(`/room/${newRoomId(name)}`);
+});
+
+function joinInvite(text) {
+  const id = parseRoom(text);
+  if (id) {
+    location.assign(`/room/${id}`);
+    return true;
+  }
+  toast('Esse link não parece um convite do CPX Call.');
+  return false;
+}
+// Reads the clipboard when the browser lets it; otherwise asks for the link.
+$('m-paste').onclick = async () => {
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch { /* no permission: ask */ }
+  if (text && parseRoom(text) && text.includes('/room/')) {
+    joinInvite(text);
+    return;
+  }
+  askMobile('Entrar com convite', 'Cole o link ou o código', 'Entrar', (value) => joinInvite(value));
+};
+
+$('rooms-edit').onclick = () => {
+  const on = document.body.classList.toggle('editing');
+  $('rooms-edit').setAttribute('aria-pressed', String(on));
+  $('rooms-edit').textContent = on ? 'Pronto' : 'Editar';
+};
+mobile.addEventListener('change', renderRooms);
 
 // ---------- início ----------
 

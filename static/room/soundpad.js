@@ -158,11 +158,16 @@ function handleSound(peer, data) {
 function renderSoundpad() {
   const grid = $('sound-grid');
   grid.replaceChildren(...soundpad.list.map((sound) => {
-    const item = el('div', 'sound-item');
-    const play = el('button', 'sound-play ellipsis', sound.name);
+    const playing = soundpad.playing?.id === sound.id;
+    const item = el('div', playing ? 'sound-item playing' : 'sound-item');
+    const play = el('button', 'sound-play ellipsis');
+    // The name, then (phones) its length or "tocando" with a progress line.
+    const seconds = soundSeconds(sound);
+    play.append(el('span', 'sound-name', sound.name), el('span', 'sound-meta', playing ? 'tocando' : fmtLength(seconds)));
+    play.style.setProperty('--dur', `${seconds}s`);
     play.type = 'button';
     play.title = `Tocar "${sound.name}" para a sala`;
-    play.classList.toggle('playing', soundpad.playing?.id === sound.id);
+    play.classList.toggle('playing', playing);
     play.onclick = () => (soundpad.playing?.id === sound.id ? stopSound() : playSound(sound));
     const edit = el('button', 'sound-edit');
     edit.type = 'button';
@@ -182,9 +187,25 @@ function renderSoundpad() {
   soundBtn.classList.toggle('playing', !!soundpad.playing);
 }
 
+function soundSeconds(sound) {
+  return (sound.pcm?.byteLength ?? 0) / 2 / (sound.rate || SOUND_RATE);
+}
+
+// "0:03"
+function fmtLength(seconds) {
+  const s = Math.max(1, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
 function setSoundPicker(open) {
   soundPop.hidden = !open;
   soundBtn.setAttribute('aria-expanded', String(open));
+  // Phones: the panel is the "Sons" tab, a sheet over the room (celular.js).
+  if (mobile.matches) {
+    syncSoundTab(open);
+    if (open) renderSoundpad();
+    return;
+  }
   if (!open) return;
   renderSoundpad();
   const rect = soundBtn.getBoundingClientRect();
@@ -197,7 +218,7 @@ soundBtn.onclick = () => setSoundPicker(soundPop.hidden);
 $('sound-stop').onclick = stopSound;
 $('sound-add').onclick = () => $('sound-file').click();
 document.addEventListener('pointerdown', (e) => {
-  if (!soundPop.hidden && !soundPop.contains(e.target) && !soundBtn.contains(e.target) && !soundEditor.open) setSoundPicker(false);
+  if (!soundPop.hidden && !soundPop.contains(e.target) && !soundBtn.contains(e.target) && !e.target.closest('#tabbar') && !soundEditor.open) setSoundPicker(false);
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !soundPop.hidden && !soundEditor.open) {
