@@ -95,12 +95,17 @@ _Atualizado em 2026-11-23._
 
 1. **Fase 1 do app nativo ("o mais Rust possível"):** ao clicar em
    "Compartilhar tela" dentro do app, o Rust captura e codifica (protótipo
-   acima) e envia com `webrtc-rs` numa conexão extra por pessoa que assiste,
+   acima) e envia com `str0m` (proposta do estudo em docs/nativo) numa conexão extra por pessoa que assiste,
    sinalizada pelo mesmo WebSocket (a página faz a ponte). Quem assiste não
    muda. Ajuste pendente: encoder AMF em VBR de baixa latência (CBR enche o
    vídeo de NAL de preenchimento).
    Depois: voz em Rust (cpal + Opus), e por fim interface nativa (Slint ou
    egui + wgpu) no lugar do WebView2.
+   **Linux (#141) vem por esse caminho:** o WebKitGTK do Ubuntu/Pop não tem
+   WebRTC, então o app Tauri não serve lá; o cliente nativo é escrito para
+   Windows e Linux desde o início (parte comum: WebRTC, sinalização, voz,
+   interface; por sistema: captura/encoder e atalhos globais). Estudo de
+   todas as fases em [docs/nativo/](docs/nativo/).
 2. **Segurança / ECA Digital** (discussão em aberto): a ANPD suspendeu o vídeo
    do Discord no Brasil em ago/2026 porque a plataforma não vê as transmissões.
    Proposta: fechar o acesso ao grupo (login do Google + lista), moderação pelo
