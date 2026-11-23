@@ -158,8 +158,10 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Banner behind a card on the stage: the image darkened, or the color blended in.
+const darkBanner = (url) => `linear-gradient(rgb(0 0 0 / .45), rgb(0 0 0 / .62)), url("${url}") center / cover no-repeat`;
 function tileBackground(person) {
-  if (person.bannerImage) return `linear-gradient(rgb(0 0 0 / .45), rgb(0 0 0 / .62)), url("${person.bannerImage}") center / cover no-repeat`;
+  if (person.bannerImage && profileGif(person.bannerImage)) return ''; // still/animated: setGif()
+  if (person.bannerImage) return darkBanner(person.bannerImage);
   if (person.bannerColor) return `color-mix(in srgb, ${person.bannerColor} 42%, var(--card))`;
   return '';
 }
@@ -202,6 +204,12 @@ function personTile(person) {
   clickable(tile, person);
   const background = tileBackground(person);
   if (background) tile.style.setProperty('--tile-bg', background);
+  if (person.bannerImage && profileGif(person.bannerImage)) {
+    // Stage cards aren't 3:1: keep the framing's focus, filled with cover.
+    const gif = splitGif(person.bannerImage);
+    const at = gif.size ? `${gif.x}% ${gif.y}%` : 'center';
+    setGif(tile, gif.url, (url) => `linear-gradient(rgb(0 0 0 / .45), rgb(0 0 0 / .62)), url("${url}") ${at} / cover no-repeat`, 'gif-bg');
+  }
   tile.classList.toggle('is-live', person.status[1] === 'live');
   // Shown in the strip under a shared screen as soon as the camera is on: the
   // video is only requested once the card is visible, so it can't wait for it.
@@ -220,9 +228,27 @@ function personTile(person) {
   const text = el('div', 'tile-text');
   const name = el('strong', 'ellipsis', person.self && mobile.matches ? 'Você' : person.name);
   if (person.voiceIn) name.append(voiceIcon(person));
-  text.append(name, el('span', `status ${status[1]}`, status[0]));
-  tile.append(avatar, text);
+  // Phones (docs/design/cpx-call-mobile.html): voice people as big faces with
+  // a short word under the name, the others as rows ("na sala, fora da voz").
+  const [shortText, shortCls] = shortStatus(person);
+  tile.classList.toggle('away', !person.voiceIn);
+  tile.classList.toggle('muted', !!person.voiceIn && !!person.voiceMuted);
+  text.append(name, el('span', `status ${status[1]}`, status[0]), el('span', `m-status ellipsis ${shortCls}`, shortText), el('span', 'm-talk', 'falando'));
+  const badge = el('span', 'mute-badge');
+  badge.setAttribute('aria-hidden', 'true');
+  badge.innerHTML = ICONS.micOff; // fixed markup
+  tile.append(avatar, text, badge);
+  if (person.p2p === 'off') tile.append(el('span', 'p2p-off', 'sem P2P'));
   return tile;
+}
+
+// The word under a face on phones.
+function shortStatus(person) {
+  const live = person.self ? !!localTrack : person.status[1] === 'live';
+  if (live) return ['na tela', 'live'];
+  if (person.voiceIn) return person.voiceMuted ? ['mudo', ''] : ['na voz', ''];
+  if (!person.self && person.status[0] !== 'na sala') return person.status;
+  return ['na sala, fora da voz', ''];
 }
 
 // `watching` false shows the "Assistir" placeholder instead of the video.
@@ -385,6 +411,7 @@ function refresh() {
   renderCameraUi();
   if (!soundPop.hidden) renderSoundpad(); // "entre na voz" hint follows the voice
   syncDesktopKeys();
+  renderMobile(people);
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
   $('share-short').textContent = localTrack ? 'Parar' : 'Compartilhar';
