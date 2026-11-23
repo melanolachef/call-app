@@ -71,14 +71,69 @@
     .empty { margin: 0; padding: 4px 20px 16px; font-size: 13px; color: var(--muted); }
 
     @media (hover: none) { .room-actions { opacity: 1; } }
+
+    /* ---------- celular (docs/design/cpx-call-mobile.html, "Início") ----------
+       Friends as a row of cards, the rooms as a plain list, and the two
+       actions fixed at the bottom. */
+    .m-only, .m-actions, #rooms-edit { display: none; }
     @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
-      .top { padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 14px max(16px, env(safe-area-inset-left)); }
+      .m-only { display: inline; }
+      .m-hide, .grid, #appearance-btn { display: none !important; }
+      .top { padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left)); }
+      .top .brand { font-size: 16px; }
+      .top .logo { width: 28px; height: 28px; }
       .me-pill span, #get-app { display: none; }
-      .me-pill { padding-right: 4px; }
-      .lobby { padding-top: 24px; gap: 22px; }
-      .hello h1 { font-size: 32px; }
+      .me-pill { height: auto; padding: 0; border: 0; background: none; }
+      .me-pill .avatar { width: 32px; height: 32px; font-size: 13px; }
+      .lobby { width: auto; padding: 12px max(16px, env(safe-area-inset-right)) calc(150px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); gap: 24px; }
+      .hello { gap: 4px; }
+      .hello h1 { font-size: 28px; }
       .hello p { font-size: 15px; }
-      .grid { grid-template-columns: minmax(0, 1fr); }
+      .section-title { font-size: 13px; font-weight: 600; color: var(--muted); }
+      .rooms { gap: 10px; }
+      .rooms .section-title, .section-head { padding-left: 0; }
+      .section-head .btn { height: 28px; }
+
+      /* Amigos: cards side by side, swiped sideways. */
+      .friends > .card { border: 0; background: none; }
+      #friends { display: flex; gap: 10px; padding: 0; margin: 0 calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left))); padding: 0 16px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 16px; scrollbar-width: none; }
+      #friends::-webkit-scrollbar { display: none; }
+      #friends li, #friends li + li { flex: none; width: 150px; margin: 0; border: 0; scroll-snap-align: start; }
+      #friends li + li .room-item { margin-left: 0; }
+      .friend-item { height: 100%; padding: 0; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card); }
+      .friend-item .room-link { height: 100%; flex-direction: column; align-items: stretch; gap: 10px; padding: 10px 12px 12px; }
+      .friend-item .room-icon { width: 44px; height: 44px; font-size: 17px; }
+      .friend-item .room-icon.live { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--online); margin: 2px 0 0 2px; }
+      .friend-item .room-text strong { font-size: 15px; }
+      .friend-status { font-size: 13px; }
+      .friend-status b { font-weight: 400; color: inherit; }
+      .friend-item .room-enter { margin: auto 0 0; padding: 0; height: 34px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-md); background: var(--raised-2); font-size: 14px; font-weight: 500; }
+      .friend-item .room-actions { right: 6px; top: 8px; transform: none; padding: 0; background: none; }
+      #friends-empty { padding: 0; }
+
+      /* Suas salas: name over the code, who is there, a chevron. */
+      #rooms { padding: 0; }
+      #rooms li + li { margin-left: 16px; }
+      #rooms li + li .room-item { margin-left: -16px; }
+      .room-item { padding-right: 14px; }
+      .room-link { gap: 10px; padding: 14px 4px 14px 16px; }
+      #rooms .room-icon, #rooms .room-enter { display: none; }
+      .room-text strong { font-size: 16px; font-weight: 500; }
+      .room-meta { font: 12px var(--mono); }
+      .presence { gap: 0; }
+      .presence i { width: 22px; height: 22px; border: 2px solid var(--card); border-radius: 5px; }
+      .presence i + i { margin-left: -6px; }
+      .room-count { font-size: 14px; }
+      .chevron.m-only { display: block; width: 16px; height: 16px; }
+      #rooms-edit { display: inline-flex; }
+      .room-actions { right: 40px; }
+      body:not(.editing) .room-actions { display: none; }
+      #rooms li + li .room-actions { right: 40px; }
+
+      /* Nova sala / Colar convite, always at hand. */
+      .m-actions { display: flex; flex-direction: column; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 14px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); border-top: 1px solid var(--line); background: var(--bg); }
+      .m-actions .btn { height: 50px; font-size: 16px; }
+      .m-actions .btn.ghost { box-shadow: inset 0 0 0 1px var(--border); }
     }
   </style>
 </head>
@@ -131,13 +186,32 @@
     </section>
 
     <section class="rooms" aria-labelledby="rooms-title">
-      <h2 class="section-title" id="rooms-title">Suas salas</h2>
+      <div class="section-head">
+        <h2 class="section-title" id="rooms-title">Suas salas</h2>
+        <button class="btn small ghost" id="rooms-edit" aria-pressed="false">Editar</button>
+      </div>
       <div class="card">
         <ul id="rooms" aria-labelledby="rooms-title"></ul>
         <p class="empty" id="rooms-empty">As salas por onde você passar ficam aqui, com quem está nelas agora.</p>
       </div>
     </section>
   </main>
+
+  <div class="m-actions">
+    <button class="btn primary" id="m-new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova sala</button>
+    <button class="btn ghost" id="m-paste"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>Colar convite</button>
+  </div>
+
+  <dialog id="m-dialog" aria-labelledby="m-dialog-title">
+    <form method="dialog" class="dialog-body" id="m-form">
+      <h2 id="m-dialog-title"></h2>
+      <input class="input" id="m-input" autocomplete="off">
+      <div class="actions">
+        <button type="button" class="btn ghost" id="m-cancel">Cancelar</button>
+        <button class="btn primary" id="m-ok"></button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="/common.js"></script>
   <script src="/amigos.js"></script>

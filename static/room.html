@@ -376,64 +376,235 @@
       .brand { width: auto; }
     }
 
-    /* ---------- celular (em pé ou deitado; o mesmo teste em chat.js) ---------- */
+    /* ---------- celular (docs/design/cpx-call-mobile.html) ----------
+       Phones get tabs (Palco, Chat, Sons), a voice bar over the tab bar and,
+       lying down, a rail of buttons over the picture. The pieces below are
+       hidden on wider screens. */
+    .m-only, .tabbar, .screens-head, .screens-dots, #voice-title, .room-sub, .vb-info, #dock-hangup, .chat-voice, .chat-quick, .sheet-react, .brand .back, .m-status, .m-talk, .mute-badge, .tile .p2p-off, .sound-meta, .rail, .rail-chat { display: none; }
+    .room-title { display: contents; }
+
     @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
-      .app { display: flex; flex-direction: column; gap: 12px; height: auto; min-height: 100dvh; padding: 0 max(16px, env(safe-area-inset-right)) 96px max(16px, env(safe-area-inset-left)); }
-      .topbar { margin: 0 calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left))); padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); gap: 10px; }
-      .side, .quality-btn, #notify-btn, #live, #net, .seats, .top-end .vsep, #timer, .screen-actions .volume, .pip-btn, #react-btn, #sound-btn, #deafen, #share svg, #invite-bar, .ctl-sep, .chat-note { display: none !important; }
-      .room-link { flex: 1; }
-      .stage { flex: none; padding: 0; gap: 12px; }
-      .content { flex: none; }
-      #screens { flex: none; }
-      .screen:not(.idle):not(.theater) { flex: none; height: 260px; }
+      :root { --tabbar-h: calc(60px + env(safe-area-inset-bottom)); }
+      .m-only { display: inline; }
+      .m-hide { display: none; }
+      .app { display: flex; flex-direction: column; height: auto; min-height: 100dvh; padding: 0 max(16px, env(safe-area-inset-right)) calc(var(--tabbar-h) + 96px) max(16px, env(safe-area-inset-left)); }
+      .side, .quality-btn, #notify-btn, #live, #net, .seats, .top-end .vsep, #timer, #online, .screen-actions .volume, .pip-btn, #react-btn, #sound-btn, #invite-bar, .ctl-sep, .chat-head, #chat-toggle, #leave, .screen-viewers, .p2p-kind { display: none !important; }
+
+      /* Top bar: back, the room's name over "-k3f9x2 · 4/12 · 00:42:10", Convidar. */
+      .topbar { flex: none; min-height: 64px; margin: 0 calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left))); padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(6px, env(safe-area-inset-left)); gap: 6px; }
+      .brand { width: auto; padding: 8px; }
+      .brand .logo, .brand span:last-child { display: none; }
+      .brand .back { display: block; width: 22px; height: 22px; stroke-width: 2.2; }
+      .room-link { flex: 1; height: auto; gap: 10px; align-items: center; border: 0; background: none; overflow: visible; }
+      .room-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+      .room-id { padding: 0; font-family: inherit; font-size: 17px; font-weight: 700; }
+      .room-id b { font-weight: 700; }
+      .room-id span { display: none; }
+      .room-sub { display: block; margin: 0; font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #sub-timer:empty { display: none; }
+      #sub-timer::before { content: ' · '; }
+      #invite { height: 40px; padding: 0 14px; gap: 8px; border: 1px solid var(--border); border-radius: var(--r-md); background: transparent; display: inline-flex; align-items: center; font-size: 15px; font-weight: 500; }
+      #invite svg { width: 17px; height: 17px; }
+
+      /* ----- Palco ----- */
+      .stage { flex: none; padding: 16px 0 0; gap: 16px; }
+      .content { flex: none; gap: 12px; }
+      .content.has-screens .screens-head { display: flex; align-items: baseline; justify-content: space-between; }
+      .screens-head h2, #voice-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+      .screens-head span { font: 12px var(--mono); color: var(--faint); }
+      #screens { flex: none; flex-direction: row; gap: 12px; margin: 0 -16px; padding: 0 16px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 16px; scrollbar-width: none; overscroll-behavior-x: contain; }
+      #screens::-webkit-scrollbar { display: none; }
+      #screens > .screen:not(.theater) { flex: 0 0 100%; height: 232px; scroll-snap-align: start; }
+      #screens.multi > .screen:not(.theater) { flex-basis: calc(100% - 28px); }
+      #screens > .screen.idle:not(.theater) { height: 210px; }
       .screen-head { padding-left: 10px; gap: 8px; }
-      .screen-info, .screen-viewers, .p2p-kind { display: none; }
-      .screen.idle { height: 64px; }
+      .screen-info { display: none; }
+      .screens-dots { justify-content: center; gap: 6px; }
+      .content.has-screens .screens-dots.multi { display: flex; }
+      .screens-dots i { width: 6px; height: 3px; border-radius: 1px; background: var(--raised-2); transition: width .15s; }
+      .screens-dots i.on { width: 16px; background: var(--text); }
+      /* Not watched yet: the checkered card, "Assistir" in the middle. */
+      .screen.idle { flex-direction: column; }
+      .screen.idle .frame { flex-direction: column; justify-content: center; background: conic-gradient(from 90deg at 50% 50%, var(--chk-a) 0 25%, var(--chk-b) 0 50%, var(--chk-a) 0 75%, var(--chk-c) 0) 0 0 / 66px 66px; --chk-a: color-mix(in srgb, var(--online) 9%, var(--card)); --chk-b: color-mix(in srgb, var(--online) 5%, var(--frame)); --chk-c: color-mix(in srgb, var(--online) 3%, var(--bg)); }
       .screen.idle .frame::before { display: none; }
-      .screen.idle .waiting { padding: 0 8px 0 12px; font-size: 13px; }
-      /* The people: a row of avatars, the sharer framed in yellow. */
-      #tiles, .content.has-screens #tiles, .content.has-screens #tiles.no-cams { flex: none; display: flex; height: auto; gap: 16px; padding: 12px 14px; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card); }
-      .content.has-screens #tiles .tile:not(.cam-on) { display: flex; }
-      #tiles .tile, .content.has-screens #tiles .tile { flex: none; width: auto; border: 0; background: none; border-radius: 0; gap: 6px; overflow: visible; }
-      .tile .avatar { width: 44px; height: 44px; border-radius: 8px; font-size: 16px; }
-      .tile.is-live .avatar { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--live); }
+      .screen.idle .waiting { flex: none; flex-direction: column; justify-content: center; align-items: center; gap: 12px; padding: 16px; text-align: center; font-size: 15px; }
+      .screen.idle .waiting-text { display: contents; }
+      .screen.idle .waiting-hint { order: 2; font-size: 11px; color: var(--muted); }
+      .screen.idle .waiting .btn { height: 44px; padding: 0 28px; font-size: 16px; }
+      .screen.idle .failed { flex-direction: column; text-align: center; }
+      #empty { text-align: left; }
+
+      /* People: who is in the voice as big faces, the rest as rows below. */
+      .content > #voice-title { display: block; }
+      #tiles, .content.has-screens #tiles, .content.has-screens #tiles.no-cams { flex: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: auto; gap: 16px 8px; height: auto; padding: 0; overflow: visible; border: 0; background: none; align-content: start; }
+      #tiles .tile, .content.has-screens #tiles .tile, .content.has-screens #tiles .tile:not(.cam-on) { display: flex; width: auto; flex-direction: column; justify-content: flex-start; gap: 8px; padding: 2px 0 0; border: 0; border-radius: 0; overflow: visible; background: none !important; }
+      .tile .avatar { width: 60px; height: 60px; border-radius: 10px; font-size: 22px; }
       .tile.speaking::after { display: none; }
-      .tile.speaking .avatar, .tile.speaking .cam-video { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--online); }
+      .tile.speaking .avatar, .tile.speaking .cam-video { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--online); }
+      .tile.is-live .avatar, .tile.is-live .cam-video { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--live); }
       .tile .status { display: none; }
-      .tile strong { font-size: 12px; font-weight: 400; max-width: 64px; }
+      .tile strong { font-size: 14px; font-weight: 600; max-width: 100%; }
       .tile strong .voice-icon { display: none; }
-      .tile.has-cam .cam-video, .tile.has-cam .cam-video.mirror { position: static; width: 44px; height: 44px; border-radius: 8px; }
-      .tile.has-cam .tile-text { padding: 0; background: none; color: inherit; align-items: center; }
-      .chat, body.chat-collapsed .chat { display: flex; flex: 1; min-height: 260px; margin: 0; }
-      body.chat-open .chat { position: fixed; inset: 0; z-index: 7; border-radius: 0; border: 0; padding-top: env(safe-area-inset-top); }
-      body.chat-open #chat-close { display: inline-flex; }
-      #chat-close { display: none; margin-left: auto; }
-      .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding: 8px max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); background: var(--bg); }
-      .controls { width: 100%; justify-content: space-between; }
-      .controls #share { flex: 1; min-width: 0; padding: 0 12px; }
-      .ctl.wide.voice-join { padding: 0; width: 44px; }
-      /* Phones can't share a screen: the big white button joins the voice instead. */
-      .no-share #share { display: none; }
-      .no-share .ctl.wide.voice-join { flex: 1; width: auto; padding: 0 16px; background: var(--primary); color: var(--on-primary); }
-      .no-share .voice-join .long { display: inline !important; }
-      .no-share .voice-join .short { display: none !important; }
+      .m-status { display: block; }
+      .speaking .m-status { display: none; }
+      .speaking .m-talk { display: block; color: var(--online); }
+      .tile .m-status, .tile .m-talk { font-size: 13px; color: var(--muted); }
+      .tile .m-status.live { color: var(--live); }
+      .tile .m-status.online, .tile.speaking .m-talk { color: var(--online); }
+      .tile.muted .mute-badge { display: flex; position: absolute; top: 46px; left: calc(50% + 16px); width: 20px; height: 20px; align-items: center; justify-content: center; border-radius: 5px; background: var(--bg); color: var(--danger); }
+      .mute-badge svg { width: 13px; height: 13px; stroke-width: 2.2; }
+      .tile.has-cam { justify-content: flex-start; }
+      .tile.has-cam .cam-video, .tile.has-cam .cam-video.mirror { position: static; flex: none; width: 60px; height: 60px; border-radius: 10px; }
+      .tile.has-cam .tile-text { padding: 0; background: none; color: inherit; align-items: center; align-self: auto; }
+      .tile.has-cam .tile-text .status { color: inherit; }
+      #tiles .tile.away { grid-column: 1 / -1; order: 1; flex-direction: row; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card) !important; }
+      .tile.away .avatar, .tile.away.has-cam .cam-video { width: 36px; height: 36px; border-radius: var(--r-md); font-size: 14px; }
+      .tile.away .tile-text { flex: 1; align-items: flex-start; text-align: left; }
+      .tile.away strong { font-size: 15px; font-weight: 500; }
+      .tile.away .p2p-off { display: block; font-size: 12px; }
+      .tile.away .mute-badge { display: none; }
+
+      /* Voice bar over the tabs: faces, "Na voz · 3", mic, fone, câmera, sair. */
+      .dock { position: fixed; left: 0; right: 0; bottom: var(--tabbar-h); z-index: 6; padding: 8px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left)); border: 0; background: var(--bg); }
+      .controls { width: 100%; gap: 6px; padding: 8px; border-radius: 12px; }
+      .vb-info { display: flex; flex: 1; min-width: 0; align-items: center; gap: 12px; padding-left: 4px; }
+      .vb-faces { flex: none; display: flex; }
+      .vb-faces:empty { display: none; }
+      .vb-faces .avatar { width: 30px; height: 30px; border-radius: 6px; font-size: 11px; border: 2px solid var(--card); }
+      .vb-faces .avatar + .avatar { margin-left: -9px; }
+      .vb-text { min-width: 0; display: flex; flex-direction: column; }
+      .vb-text strong { font-size: 15px; font-weight: 600; }
+      .vb-sub { font-size: 13px; color: var(--muted); }
+      .vb-sub .m-status, .vb-sub .m-talk { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ctl { height: 44px; min-width: 44px; padding: 0; border-radius: var(--r-lg); }
+      .ctl svg { width: 20px; height: 20px; }
+      #mic, #deafen, #cam-btn { background: var(--raised); }
+      #mic:not([aria-pressed="true"]) { background: var(--primary); color: var(--on-primary); }
+      #dock-hangup { display: inline-flex; background: var(--danger); color: #fff; }
+      #dock-hangup svg { width: 24px; height: 24px; }
+      .ctl.wide.voice-join { flex: none; padding: 0 18px; background: var(--primary); color: var(--on-primary); }
+      .voice-join .long { display: inline !important; }
+      .voice-join .short { display: none !important; }
+      .controls #share { flex: none; width: 44px; padding: 0; background: var(--raised); color: var(--text); }
+      .controls #share.sharing { background: var(--live); color: #000; }
+      #share .long, #share .short { display: none !important; }
+      @media (max-width: 400px) { .vb-faces { display: none; } }
+
+      /* ----- Chat: the whole space between the top bar and the tabs ----- */
+      .chat, body.chat-collapsed .chat { display: none; }
+      body[data-tab="chat"] .app { height: 100dvh; min-height: 0; padding-bottom: var(--tabbar-h); }
+      body[data-tab="chat"] .stage, body[data-tab="chat"] .dock { display: none; }
+      body[data-tab="chat"] .chat { display: flex; flex: 1; min-height: 0; margin: 0 calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left))); border: 0; border-radius: 0; background: none; }
+      .chat-voice { flex: none; display: flex; align-items: center; gap: 10px; padding: 0 8px 0 16px; height: 48px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--online) 9%, var(--bg)); font-size: 15px; }
+      .chat-voice.off { background: var(--card); }
+      .cv-dot { flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--online); }
+      .chat-voice.off .cv-dot { background: var(--faint); }
+      .cv-text { flex: 1; min-width: 0; display: flex; gap: 4px; white-space: nowrap; overflow: hidden; }
+      .cv-text .m-status, .cv-text .m-talk { overflow: hidden; text-overflow: ellipsis; }
+      .chat-voice.off .cv-text { color: var(--muted); }
+      #cv-btn { flex: none; height: 36px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--r-md); background: transparent; color: var(--muted); font-size: 15px; }
+      #cv-btn svg { width: 18px; height: 18px; }
+      #cv-btn.danger { color: var(--danger); }
+      .chat-voice.off #cv-btn { color: var(--text); background: var(--primary); color: var(--on-primary); font-weight: 600; font-size: 14px; }
+      #messages { padding: 16px; gap: 16px; }
+      .msg { grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; }
+      .msg .avatar { width: 28px; height: 28px; border-radius: var(--r-md); font-size: 11px; }
+      .msg-head { font-size: 14px; }
+      .msg.grouped { margin-top: -12px; }
+      .msg-text { font-size: 16px; }
+      .system { font-size: 13px; }
+      .chat-quick { flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 12px 16px 0; border-top: 1px solid var(--border); }
+      .chat-quick button { height: 40px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card); font-size: 20px; line-height: 1; }
+      .chat-quick button:disabled { opacity: .4; }
+      .chat-form { gap: 8px; padding: 10px 16px 12px; border-top: 0; }
+      .chat-box { height: auto; gap: 8px; border: 0; background: none; }
+      .chat-box:focus-within { border-color: transparent; }
+      .chat-box input { height: 44px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card); font-size: 16px; }
+      .chat-box input:focus { border-color: var(--muted); }
+      #emoji-btn { order: -1; width: 44px; height: 44px; margin: 0; border: 1px solid var(--border); border-radius: var(--r-lg); font-size: 20px; }
+      #chat-send { height: 44px; padding: 0 16px; border-radius: var(--r-lg); background: var(--primary); color: var(--on-primary); font-size: 16px; }
+
+      /* ----- Sons: a sheet from the bottom, the room dimmed behind it ----- */
+      .sound-pop { position: fixed; left: 0 !important; right: 0; bottom: var(--tabbar-h) !important; width: auto; max-height: calc(100dvh - var(--tabbar-h) - 72px); overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 10px max(16px, env(safe-area-inset-right)) 20px max(16px, env(safe-area-inset-left)); border-width: 1px 0 0; border-radius: 14px 14px 0 0; box-shadow: 0 0 0 100vmax rgb(0 0 0 / .62); }
+      .sound-pop > * { grid-column: 1 / -1; }
+      .sound-pop::before { content: ''; grid-column: 1 / -1; justify-self: center; width: 36px; height: 4px; border-radius: 2px; background: var(--raised-2); }
+      .sheet-react { display: flex; flex-direction: column; gap: 10px; }
+      .sheet-react h3, .sound-head h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--muted); }
+      .sheet-react-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+      .sheet-react-grid button { height: 52px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card); font-size: 26px; line-height: 1; }
+      .sound-head { display: contents; }
+      .sound-head h2 { grid-column: 1 / -1; order: 1; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 8px; }
+      .sound-head h2::after { content: 'todo mundo na voz ouve'; font-size: 13px; font-weight: 400; color: var(--faint); }
+      .sound-grid { order: 2; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; max-height: none; overflow: visible; }
+      .sound-item { position: relative; min-height: 72px; border-radius: var(--r-lg); background: var(--card); overflow: hidden; }
+      .sound-item.playing { border-color: var(--live); }
+      .sound-play { position: relative; height: auto; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--r-lg); font-size: 15px; font-weight: 500; white-space: normal; }
+      .sound-play.playing { color: var(--text); box-shadow: none; }
+      .sound-name { max-width: 100%; padding-right: 12px; font-size: 14px; overflow-wrap: break-word; }
+      .sound-meta { display: block; font: 12px var(--mono); color: var(--faint); }
+      .sound-play.playing .sound-meta { color: var(--live); }
+      .sound-play.playing::after { content: ''; position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--live); animation: sound-progress var(--dur, 3s) linear forwards; }
+      @keyframes sound-progress { to { width: 100%; } }
+      .sound-edit { position: absolute; top: 2px; right: 2px; width: 28px; height: 28px; border: 0; border-radius: var(--r-md); }
+      .sound-empty { order: 3; }
+      #sound-add { order: 4; height: 48px; border: 1px dashed var(--border); border-radius: var(--r-lg); background: none; font-size: 15px; font-weight: 500; }
+      #sound-add svg { width: 18px; height: 18px; }
+      #sound-stop { order: 5; height: 48px; padding: 0 20px; border-radius: var(--r-lg); color: var(--danger); font-size: 15px; font-weight: 500; }
+      #sound-stop:disabled { color: var(--faint); }
+      .sound-hint { order: 6; }
+
+      /* Tabs at the bottom; the white line marks the open one. */
+      .tabbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; height: var(--tabbar-h); padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); border-top: 1px solid var(--line); background: var(--bg); }
+      .tabbar button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: none; color: var(--faint); font-size: 12px; font-weight: 500; }
+      .tabbar svg { width: 22px; height: 22px; }
+      .tabbar button[aria-selected="true"] { color: var(--text); font-weight: 600; }
+      .tabbar button[aria-selected="true"]::before { content: ''; position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: var(--text); }
+      .tabbar .badge { position: absolute; top: 6px; left: calc(50% + 4px); }
     }
-    /* Phone sideways (and not in theater): the picture gets the height, and
-       the control bar stays compact in the middle instead of spanning it. */
+    /* Phone sideways (and not in theater): the picture gets the height. */
     @media (max-height: 500px) and (pointer: coarse) and (orientation: landscape) {
-      .screen:not(.idle):not(.theater) { height: calc(100dvh - 150px); }
-      .controls { width: auto; }
-      .controls #share, .no-share .ctl.wide.voice-join { flex: none; }
+      #screens > .screen:not(.idle):not(.theater) { height: calc(100dvh - 150px); }
+    }
+
+    /* ---------- assistindo deitado: o rótulo, o chat e os botões por cima ---------- */
+    @media (pointer: coarse) {
+      .screen.theater .screen-head, .screen:fullscreen .screen-head { top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); right: auto; height: 36px; padding: 0 12px; border-radius: var(--r-lg); background: rgb(11 11 12 / .8); }
+      .screen.theater .screen-actions, .screen:fullscreen .screen-actions, .screen.theater .screen-viewers, .screen:fullscreen .screen-viewers { display: none !important; }
+      .screen.theater .screen-info, .screen:fullscreen .screen-info { display: inline; }
+      .screen.theater .screen-label, .screen:fullscreen .screen-label { max-width: none; }
+      .screen .rail { display: flex; position: absolute; z-index: 2; top: 50%; right: max(12px, env(safe-area-inset-right)); transform: translateY(-50%); flex-direction: column; gap: 6px; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: rgb(22 22 24 / .92); transition: opacity .3s; }
+      .rail button { width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-lg); background: transparent; color: var(--text); }
+      .rail svg { width: 22px; height: 22px; }
+      .rail #rail-mic:not([aria-pressed="true"]) { background: var(--primary); color: var(--on-primary); }
+      .rail #rail-mic[aria-pressed="true"] { background: var(--danger-bg); color: var(--danger); }
+      .rail #rail-chat-btn[aria-pressed="true"] { background: var(--raised-2); }
+      .screen:not(.show-ui) .rail { opacity: 0; pointer-events: none; }
+      body.rail-chat-open .screen .rail { opacity: 1; pointer-events: auto; }
+      .screen .rail-chat { display: flex; position: absolute; z-index: 2; left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); width: min(46%, 380px); flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none; }
+      #rail-msgs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+      #rail-msgs li { max-width: 100%; padding: 6px 10px; border-radius: var(--r-md); background: rgb(11 11 12 / .8); color: var(--soft); font-size: 14px; overflow-wrap: anywhere; animation: rail-fade 9s forwards; }
+      #rail-msgs li:last-child { color: var(--text); }
+      #rail-msgs b { color: var(--text); font-weight: 600; }
+      @keyframes rail-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+      body.rail-chat-open #rail-msgs li { animation: none; }
+      #rail-form { display: none; width: 100%; gap: 6px; pointer-events: auto; }
+      body.rail-chat-open #rail-form { display: flex; }
+      #rail-input:focus { outline: none; border-color: var(--muted); }
+      #rail-input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: rgb(11 11 12 / .9); color: var(--text); font-size: 16px; }
+      #rail-form .btn { height: 40px; }
     }
   </style>
 </head>
-<body>
+<body data-tab="palco">
   <div class="app">
     <header class="topbar">
-      <a class="brand" href="/" id="home" title="Voltar ao início"><span class="logo" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span>CPX Call</span></a>
+      <a class="brand" href="/" id="home" title="Voltar ao início" aria-label="Voltar ao início"><svg class="back" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span class="logo" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span>CPX Call</span></a>
       <div class="room-link">
-        <h1 class="room-id" id="room-tag"></h1>
-        <button id="invite" title="Copiar o convite da sala">Copiar</button>
+        <div class="room-title">
+          <h1 class="room-id" id="room-tag"></h1>
+          <p class="room-sub mono"><span id="sub-info"></span><span id="sub-timer"></span></p>
+        </div>
+        <button id="invite" title="Copiar o convite da sala"><svg class="m-only" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg><span class="m-hide" id="invite-desk">Copiar</span><span class="m-only" id="invite-mob">Convidar</span></button>
       </div>
       <span class="top-end">
         <span class="pill reconnecting" id="reconnecting" role="status" hidden>Reconectando…</span>
@@ -501,7 +672,10 @@
         <span class="rc-bar" id="rc-bar" aria-hidden="true"></span>
       </div>
       <div class="content" id="content">
+        <div class="screens-head"><h2>Telas</h2><span id="screens-pos"></span></div>
         <section id="screens" aria-label="Telas compartilhadas"></section>
+        <div class="screens-dots" id="screens-dots" aria-hidden="true"></div>
+        <h2 id="voice-title"></h2>
         <section id="tiles" aria-label="Participantes"></section>
         <p id="empty"><span id="empty-hint">Ninguém está compartilhando. Clique em "Compartilhar tela" para mostrar a sua; duplo clique numa tela abre em tela cheia.</span></p>
       </div>
@@ -513,7 +687,13 @@
         <p class="chat-note">não fica salvo</p>
         <button class="btn small ghost" id="chat-close">Fechar</button>
       </div>
+      <div class="chat-voice" id="chat-voice">
+        <span class="cv-dot" aria-hidden="true"></span>
+        <span class="cv-text" id="cv-text"></span>
+        <button type="button" id="cv-btn"></button>
+      </div>
       <ol id="messages" aria-live="polite"></ol>
+      <div class="chat-quick" id="chat-quick" role="group" aria-label="Mandar um emoji"></div>
       <form class="chat-form" id="chat-form">
         <div class="chat-box">
           <input id="chat-input" maxlength="500" placeholder="Mensagem" autocomplete="off" aria-label="Mensagem para a sala" disabled>
@@ -525,6 +705,10 @@
 
     <footer class="dock">
       <div class="controls" id="controls">
+        <div class="vb-info">
+          <span class="vb-faces" id="vb-faces" aria-hidden="true"></span>
+          <span class="vb-text"><strong class="ellipsis" id="vb-title"></strong><span class="vb-sub" id="vb-sub"></span></span>
+        </div>
         <button class="ctl wide voice-join" id="voice-join"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="long">Entrar na voz</span><span class="short sr-only">Entrar na voz</span></button>
         <button class="ctl" id="mic" hidden></button>
         <button class="ctl" id="deafen" hidden></button>
@@ -542,8 +726,26 @@
         <button class="ctl" id="chat-toggle" title="Chat" aria-label="Mostrar chat"><span class="long" aria-hidden="true">Chat</span><svg class="short" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span class="badge" id="chat-badge" hidden></span></button>
         <span class="ctl-sep" aria-hidden="true"></span>
         <button class="ctl" id="leave" title="Sair da sala">Sair</button>
+        <button class="ctl" id="dock-hangup" title="Sair da voz" aria-label="Sair da voz" hidden></button>
       </div>
     </footer>
+  </div>
+
+  <nav class="tabbar" id="tabbar" role="tablist" aria-label="Sala">
+    <button type="button" role="tab" data-tab="palco" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Palco</button>
+    <button type="button" role="tab" data-tab="chat" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Chat<span class="badge" id="tab-badge" hidden></span></button>
+    <button type="button" role="tab" data-tab="sons" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>Sons</button>
+  </nav>
+
+  <div class="rail" id="rail" role="group" aria-label="Controles">
+    <button type="button" id="rail-mic" hidden></button>
+    <button type="button" id="rail-react" class="react-anchor" title="Reagir" aria-label="Reagir"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/></svg></button>
+    <button type="button" id="rail-chat-btn" title="Chat" aria-label="Chat" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></button>
+    <button type="button" id="rail-exit" title="Sair da tela cheia" aria-label="Sair da tela cheia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
+  </div>
+  <div class="rail-chat" id="rail-chat">
+    <ol id="rail-msgs" aria-hidden="true"></ol>
+    <form id="rail-form"><input id="rail-input" maxlength="500" placeholder="Mensagem" autocomplete="off" aria-label="Mensagem para a sala"><button class="btn primary small">Enviar</button></form>
   </div>
 
   <div class="react-pop card" id="react-pop" role="group" aria-label="Reações" hidden></div>
@@ -557,10 +759,14 @@
     <p class="q-note">Vale na hora, também durante a transmissão. Se o PC apertar, a qualidade baixa sozinha a partir daqui.</p>
   </div>
   <div class="sound-pop card" id="sound-pop" role="group" aria-labelledby="sound-title" hidden>
+    <div class="sheet-react">
+      <h3>Reagir na tela de quem está compartilhando</h3>
+      <div class="sheet-react-grid" id="sheet-react"></div>
+    </div>
     <div class="sound-head">
-      <h2 id="sound-title">Sons</h2>
+      <h2 id="sound-title"><span class="m-hide">Sons</span><span class="m-only">Soundpad</span></h2>
       <button type="button" class="btn small ghost" id="sound-stop" disabled>Parar</button>
-      <button type="button" class="btn small" id="sound-add">Adicionar</button>
+      <button type="button" class="btn small" id="sound-add"><svg class="m-only" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Adicionar<span class="m-only"> som</span></span></button>
     </div>
     <div class="sound-grid" id="sound-grid"></div>
     <p class="sound-empty" id="sound-empty">Adicione um som: um .mp3, .wav, .ogg ou até um vídeo .mp4 (fica só o áudio). Até 15 s cada.</p>

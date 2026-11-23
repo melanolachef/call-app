@@ -20,7 +20,7 @@ function isTyping(target) {
 
 function pttChanged() {
   applyTrackEnabled();
-  for (const id of ['mic', 'me-mic']) $(id).classList.toggle('talking', voice.pttHeld);
+  for (const id of ['mic', 'me-mic', 'rail-mic']) $(id).classList.toggle('talking', voice.pttHeld);
   updateSpeaking();
 }
 
@@ -58,7 +58,7 @@ window.addEventListener('blur', () => pttUp(true));
 document.addEventListener('visibilitychange', () => { if (document.hidden) pttUp(true); });
 
 // The mic buttons work as "hold to talk" too (phones have no keyboard).
-for (const id of ['mic', 'me-mic']) {
+for (const id of ['mic', 'me-mic', 'rail-mic']) {
   const button = $(id);
   button.addEventListener('pointerdown', () => pttDown());
   for (const type of ['pointerup', 'pointerleave', 'pointercancel']) button.addEventListener(type, () => pttUp());

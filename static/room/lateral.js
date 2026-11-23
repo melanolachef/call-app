@@ -121,11 +121,13 @@ async function invite() {
     toast('Convite copiado. É só colar na conversa.');
     // The button itself confirms, as in the design ("✓ Copiado").
     const button = $('invite');
-    button.textContent = '✓ Copiado';
+    $('invite-desk').textContent = '✓ Copiado';
+    $('invite-mob').textContent = '✓ Copiado';
     button.classList.add('copied');
     clearTimeout(button.resetTimer);
     button.resetTimer = setTimeout(() => {
-      button.textContent = 'Copiar';
+      $('invite-desk').textContent = 'Copiar';
+      $('invite-mob').textContent = 'Convidar';
       button.classList.remove('copied');
     }, 2000);
   } catch {

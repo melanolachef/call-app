@@ -79,6 +79,12 @@ _Atualizado em 2026-11-23._
   amigo por aparelho, `/api/friends`, presença só em memória
   (`src/presence.rs`), invisível, "Usar em outro aparelho" para o app.
   GIF como foto de perfil e banner (#135), com o seletor do KLIPY no diálogo.
+- **Design mobile novo (branch `feat/design-mobile`, PR aberto):**
+  `docs/design/cpx-call-mobile.html` implementado só no layout de celular
+  (computador igual): sala com abas Palco/Chat/Sons, barra de voz, carrossel
+  de telas, folha de sons com reações, trilho deitado em tela cheia
+  (`static/room/celular.js`); início com amigos em cartões e "Nova sala" /
+  "Colar convite" fixos. Falta testar em celular real (iPhone e Android).
 - **Produção sem TURN:** `/api/ice` só entrega STUN (faltam `TURN_KEY_ID` e
   `TURN_KEY_API_TOKEN` em `fly secrets`). Quem está em CGNAT/4G ou rede que
   bloqueia UDP fica em "falha na conexão · sem P2P".

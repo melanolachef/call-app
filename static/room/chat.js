@@ -20,6 +20,7 @@ function setChatEnabled(on) {
   chatInput.disabled = !on;
   $('chat-send').disabled = !on;
   $('emoji-btn').disabled = !on;
+  document.querySelectorAll('#chat-quick button').forEach((button) => (button.disabled = !on));
   if (!on) setEmojiPicker(false);
 }
 
@@ -30,13 +31,16 @@ const wide = matchMedia('(min-width: 1200px)');
 function chatVisible() {
   if (document.hidden) return false;
   if (wide.matches) return !document.body.classList.contains('chat-collapsed');
-  return mobile.matches || document.body.classList.contains('chat-open');
+  if (mobile.matches) return document.body.dataset.tab === 'chat';
+  return document.body.classList.contains('chat-open');
 }
 
 function updateUnread() {
   if (chatVisible()) unread = 0;
   $('chat-badge').hidden = unread === 0;
   $('chat-badge').textContent = String(unread);
+  $('tab-badge').hidden = unread === 0;
+  $('tab-badge').textContent = String(unread);
   document.title = unread ? `(${unread}) CPX Call` : 'CPX Call';
 }
 
@@ -102,6 +106,7 @@ function addMessage({ authorId, name, photo, text = '', gif = null, self = false
     li.append(body);
   }
   appendToChat(li);
+  mirrorToRail(name, gif ? 'mandou um GIF' : text);
 
   if (!self) {
     unread += 1;
@@ -115,14 +120,19 @@ function addSystem(text) {
   appendToChat(el('li', 'system', text));
 }
 
-$('chat-form').onsubmit = (e) => {
-  e.preventDefault();
-  const text = cleanChat(chatInput.value);
-  if (!text || chatInput.disabled) return;
+// Also used by the quick emojis and the chat over a fullscreen picture (phones).
+function sendChatText(value) {
+  const text = cleanChat(value);
+  if (!text || chatInput.disabled) return false;
   peers.forEach((peer) => send(peer.id, { chat: text }));
   addMessage({ authorId: myId, name: myNick, photo: myPhoto, text, self: true });
-  chatInput.value = '';
   messagesEl.scrollTop = messagesEl.scrollHeight; // always follow your own message
+  return true;
+}
+
+$('chat-form').onsubmit = (e) => {
+  e.preventDefault();
+  if (sendChatText(chatInput.value)) chatInput.value = '';
 };
 
 function setChatShown(shown) {
