@@ -88,6 +88,7 @@ const THEME_JS: &str = include_str!("../static/theme.js");
 const FAVICON_SVG: &str = include_str!("../static/favicon.svg");
 const TOUCH_ICON_PNG: &[u8] = include_bytes!("../static/apple-touch-icon.png");
 const ICON_192_PNG: &[u8] = include_bytes!("../static/icon-192.png");
+const ICON_MASKABLE_PNG: &[u8] = include_bytes!("../static/icon-maskable-512.png");
 const ICON_512_PNG: &[u8] = include_bytes!("../static/icon-512.png");
 const MANIFEST: &str = include_str!("../static/manifest.webmanifest");
 // Inter (variable, Latin subset), served from here instead of Google Fonts so
@@ -179,6 +180,11 @@ fn app_with(rooms: Rooms, ice: Arc<Ice>, gifs: Arc<Gifs>) -> Router {
         .route(
             "/icon-512.png",
             get(|| async { icon("image/png", ICON_512_PNG) }),
+        )
+        // Android crops this one to a circle or squircle: the westie sits in the middle.
+        .route(
+            "/icon-maskable-512.png",
+            get(|| async { icon("image/png", ICON_MASKABLE_PNG) }),
         )
         .route(
             "/favicon.ico",
@@ -468,6 +474,9 @@ mod tests {
             .await
             .contains("content-type: application/manifest+json"));
         assert!(get("/icon-512.png")
+            .await
+            .contains("content-type: image/png"));
+        assert!(get("/icon-maskable-512.png")
             .await
             .contains("content-type: image/png"));
         assert!(get("/fonts/jetbrains-mono.woff2")
