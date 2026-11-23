@@ -212,3 +212,10 @@ html.app-titlebar { --titlebar-h: 32px; }
 #gp-grid.wide .gif-choice { height: 80px; }
 .gp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .swatch-gif { font-size: 10px; font-weight: 700; color: var(--muted); background: var(--raised); }
+
+/* A GIF photo or banner (setGif in common.js): its first frame, standing
+   still, until someone hovers it or opens the profile. */
+[data-gif] { background-image: var(--gif-still, none); }
+[data-gif]:hover, :hover > [data-gif], .tile:hover [data-gif], #person-card [data-gif], #profile [data-gif] { background-image: var(--gif-anim); }
+[data-gif-bg] { --tile-bg: var(--gif-bg-still, var(--card)); }
+[data-gif-bg]:hover { --tile-bg: var(--gif-bg-anim); }

@@ -158,8 +158,10 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Banner behind a card on the stage: the image darkened, or the color blended in.
+const darkBanner = (url) => `linear-gradient(rgb(0 0 0 / .45), rgb(0 0 0 / .62)), url("${url}") center / cover no-repeat`;
 function tileBackground(person) {
-  if (person.bannerImage) return `linear-gradient(rgb(0 0 0 / .45), rgb(0 0 0 / .62)), url("${person.bannerImage}") center / cover no-repeat`;
+  if (person.bannerImage && profileGif(person.bannerImage)) return ''; // still/animated: setGif()
+  if (person.bannerImage) return darkBanner(person.bannerImage);
   if (person.bannerColor) return `color-mix(in srgb, ${person.bannerColor} 42%, var(--card))`;
   return '';
 }
@@ -202,6 +204,12 @@ function personTile(person) {
   clickable(tile, person);
   const background = tileBackground(person);
   if (background) tile.style.setProperty('--tile-bg', background);
+  if (person.bannerImage && profileGif(person.bannerImage)) {
+    // Stage cards aren't 3:1: keep the framing's focus, filled with cover.
+    const gif = splitGif(person.bannerImage);
+    const at = gif.size ? `${gif.x}% ${gif.y}%` : 'center';
+    setGif(tile, gif.url, (url) => `linear-gradient(rgb(0 0 0 / .45), rgb(0 0 0 / .62)), url("${url}") ${at} / cover no-repeat`, 'gif-bg');
+  }
   tile.classList.toggle('is-live', person.status[1] === 'live');
   // Shown in the strip under a shared screen as soon as the camera is on: the
   // video is only requested once the card is visible, so it can't wait for it.

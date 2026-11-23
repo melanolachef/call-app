@@ -50,8 +50,28 @@ function gifUrlOk(url) {
 
 // A GIF as photo or banner: an https URL on the GIF service, made only of
 // characters that are safe inside CSS url("").
+// An optional "#p=x,y,size" keeps how it was framed in the cropper (see
+// cropGif): background position in % and width in % of the box.
+const GIF_CROP = /#p=(\d{1,3}(?:\.\d)?),(\d{1,3}(?:\.\d)?),(\d{1,5}(?:\.\d)?)$/;
+
 function profileGif(value) {
-  return value.length <= 300 && /^https:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~/-]+\.gif$/.test(value) && gifUrlOk(value);
+  return value.length <= 340 && /^https:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~/-]+\.gif(#p=[0-9.,]+)?$/.test(value) &&
+    (!value.includes('#') || GIF_CROP.test(value)) && gifUrlOk(value);
+}
+
+// "https://….gif#p=20,35,160" -> { url, x: 20, y: 35, size: 160 } (no crop: nulls).
+function splitGif(value) {
+  const match = value.match(GIF_CROP);
+  const url = value.replace(/#.*$/, '');
+  if (!match) return { url, x: null, y: null, size: null };
+  const [x, y, size] = match.slice(1).map(Number);
+  return { url, x: Math.min(100, x), y: Math.min(100, y), size: Math.max(100, size) };
+}
+
+// Where a GIF is framed inside its box (inline styles; '' = the CSS default).
+function frameGif(node, gif) {
+  node.style.backgroundSize = gif?.size ? `${gif.size}% auto` : '';
+  node.style.backgroundPosition = gif?.size ? `${gif.x}% ${gif.y}%` : '';
 }
 
 // Inline images, or a GIF from the GIF service. Any other remote URL would
@@ -72,11 +92,70 @@ function initials(name) {
   return chars.join('').toUpperCase();
 }
 
+// ---------- GIFs parados ----------
+
+// A GIF as photo or banner moves only when someone looks at it: on hover and
+// in the open profile card or dialog (common.css). Elsewhere its first frame
+// stands still, so a room full of animated avatars doesn't keep the GPU busy
+// while people game. The first frame is drawn once per GIF on a canvas (the
+// GIF service allows it: CORS *) and kept in memory.
+const GIF_STILL_MAX = 600; // px wide: enough for a banner
+const gifStills = new Map(); // url -> Promise<data URL, or '' if it failed>
+
+function gifStill(url) {
+  if (!gifStills.has(url)) {
+    gifStills.set(url, new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.referrerPolicy = 'no-referrer';
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, GIF_STILL_MAX / img.naturalWidth);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+          // For an animated image, drawImage uses its first frame.
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/webp', 0.85));
+        } catch {
+          resolve('');
+        }
+      };
+      img.onerror = () => resolve('');
+      img.src = url;
+    }));
+  }
+  return gifStills.get(url);
+}
+
+// Puts a GIF on `node` as two CSS variables, `--{name}-still` and
+// `--{name}-anim`, marked by `data-{name}`; the CSS picks one. `format` turns a
+// URL into the CSS value. If the still can't be made, it just animates.
+function setGif(node, url, format, name = 'gif') {
+  const key = name === 'gif' ? 'gif' : 'gifBg';
+  if (!url) {
+    delete node.dataset[key];
+    node.style.removeProperty(`--${name}-still`);
+    node.style.removeProperty(`--${name}-anim`);
+    return;
+  }
+  if (node.dataset[key] === url) return;
+  node.dataset[key] = url;
+  node.style.setProperty(`--${name}-anim`, format(url));
+  node.style.removeProperty(`--${name}-still`);
+  gifStill(url).then((still) => {
+    if (node.dataset[key] === url) node.style.setProperty(`--${name}-still`, format(still || url));
+  });
+}
+
 function paintAvatar(node, name, id, photo) {
   node.textContent = photo ? '' : initials(name || '?');
   // Safe inside url(""): validPhoto() only lets base64 or plain URL characters through.
   // Without a photo, the CSS grey gradient shows.
-  node.style.backgroundImage = photo ? `url("${photo}")` : '';
+  const gif = photo && profileGif(photo) ? splitGif(photo) : null;
+  setGif(node, gif?.url || '', (url) => `url("${url}")`);
+  frameGif(node, gif);
+  node.style.backgroundImage = photo && !gif ? `url("${photo}")` : '';
 }
 
 // ---------- banner (como no Discord) ----------
@@ -101,7 +180,10 @@ function validBannerImage(value) {
 // Image first, then color, else the default gradient from the CSS.
 function paintBanner(node, color, image) {
   // Safe inside url(""): validBannerImage() only lets base64 or plain URL characters through.
-  node.style.backgroundImage = image ? `url("${image}")` : color ? 'none' : '';
+  const gif = image && profileGif(image) ? splitGif(image) : null;
+  setGif(node, gif?.url || '', (url) => `url("${url}")`);
+  frameGif(node, gif);
+  node.style.backgroundImage = image && !gif ? `url("${image}")` : color ? 'none' : '';
   node.style.backgroundColor = color || '';
 }
 
@@ -308,6 +390,19 @@ $('cropper').oncancel = (e) => {
 $('crop-apply').onclick = () => {
   const { opts, frame } = crop;
   const s = cropScale();
+  if (opts.gif) {
+    // The GIF stays animated: keep where its first frame was placed, as CSS
+    // background position (%) and width (% of the box).
+    const shownW = crop.bitmap.width * s;
+    const shownH = crop.bitmap.height * s;
+    const visW = frame.w / shownW;
+    const visH = frame.h / shownH;
+    const pos = (start, vis) => (vis < 0.999 ? Math.min(100, Math.max(0, (start / (1 - vis)) * 100)) : 50);
+    const x = pos((frame.x - crop.x) / shownW, visW);
+    const y = pos((frame.y - crop.y) / shownH, visH);
+    finishCrop(`${opts.gif}#p=${x.toFixed(1)},${y.toFixed(1)},${(100 / visW).toFixed(1)}`);
+    return;
+  }
   const canvas = document.createElement('canvas');
   canvas.width = opts.width;
   canvas.height = opts.height;
@@ -329,7 +424,7 @@ $('crop-apply').onclick = () => {
 // Opens the cropper for `file`; resolves to a JPEG data URL, or null if cancelled.
 // opts: { title, aspect (width/height), round, width, height, max (characters) }
 async function cropImage(file, opts) {
-  const bitmap = await createImageBitmap(file); // throws for files that aren't images
+  const bitmap = await createImageBitmap(file); // throws for files that aren't images (a GIF: its first frame)
   crop.bitmap = bitmap;
   crop.opts = opts;
   crop.zoom = 1;
@@ -350,6 +445,9 @@ async function cropImage(file, opts) {
 }
 
 // ---------- diálogo de perfil ----------
+
+const PHOTO_CROP = { title: 'Ajustar foto', aspect: 1, round: true, width: 192, height: 192, max: MAX_PHOTO };
+const BANNER_CROP = { title: 'Ajustar banner', aspect: 3, round: false, width: 600, height: 200, max: MAX_BANNER_IMAGE };
 
 let draftPhoto = ''; // what the profile dialog is editing, saved only on "Salvar"
 let draftBannerColor = '';
@@ -548,18 +646,34 @@ function finishGifPicker(url) {
   resolve?.(url || '');
 }
 
+// The same cropper as for photos, on the GIF's first frame. Resolves to
+// "url#p=…", or '' if cancelled or the GIF couldn't be loaded.
+async function cropGif(url, opts) {
+  try {
+    const response = await fetch(url, { referrerPolicy: 'no-referrer' });
+    if (!response.ok) throw new Error(String(response.status));
+    return (await cropImage(await response.blob(), { ...opts, gif: url })) || '';
+  } catch {
+    finishCrop(null);
+    toast('Não deu para abrir esse GIF. Tente outro.');
+    return '';
+  }
+}
+
 async function pickPhotoGif() {
   const url = await openGifPicker('photo');
-  if (url) {
-    draftPhoto = url;
+  const framed = url && await cropGif(url, PHOTO_CROP);
+  if (framed) {
+    draftPhoto = framed;
     updateProfilePreview();
   }
 }
 
 async function pickBannerGif() {
   const url = await openGifPicker('banner');
-  if (url) {
-    draftBannerImage = url;
+  const framed = url && await cropGif(url, BANNER_CROP);
+  if (framed) {
+    draftBannerImage = framed;
     draftBannerColor = '';
     updateProfilePreview();
   }
@@ -582,13 +696,9 @@ $('photo-remove').onclick = () => {
   draftPhoto = '';
   updateProfilePreview();
 };
-$('photo-input').onchange = () => pickImage($('photo-input'),
-  { title: 'Ajustar foto', aspect: 1, round: true, width: 192, height: 192, max: MAX_PHOTO },
-  (url) => (draftPhoto = url));
+$('photo-input').onchange = () => pickImage($('photo-input'), PHOTO_CROP, (url) => (draftPhoto = url));
 $('banner-edit').onclick = () => $('banner-input').click();
-$('banner-input').onchange = () => pickImage($('banner-input'),
-  { title: 'Ajustar banner', aspect: 3, round: false, width: 600, height: 200, max: MAX_BANNER_IMAGE },
-  (url) => {
+$('banner-input').onchange = () => pickImage($('banner-input'), BANNER_CROP, (url) => {
     draftBannerImage = url;
     draftBannerColor = '';
   });
