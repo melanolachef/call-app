@@ -195,3 +195,19 @@ html.app-titlebar { --titlebar-h: 32px; }
   .short { display: inline; }
   .toast { bottom: 112px; }
 }
+
+/* GIFs: the chat panel (room) and the photo/banner picker (both pages). */
+.gif-search { height: 34px; font-size: 13px; }
+.gif-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; max-height: 300px; overflow-y: auto; }
+.gif-choice { height: 96px; padding: 0; border-radius: var(--r-sm); overflow: hidden; background: var(--raised); }
+.gif-choice img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.gif-choice:hover img, .gif-choice:focus-visible img { opacity: .85; }
+.gif-status { margin: 0; font-size: 12px; color: var(--muted); }
+.gif-status:empty { display: none; }
+.gif-credit { margin: 0; font-size: 10px; color: var(--faint); text-align: right; }
+#gif-picker { width: min(460px, calc(100vw - 32px)); }
+#gp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: min(360px, 50vh); }
+#gp-grid.wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#gp-grid.wide .gif-choice { height: 80px; }
+.gp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.swatch-gif { font-size: 10px; font-weight: 700; color: var(--muted); background: var(--raised); }
