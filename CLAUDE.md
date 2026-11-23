@@ -121,11 +121,7 @@ _Atualizado em 2026-11-23._
 4. **Clipes no app** (#103, estudo): buffer dos últimos ~30 s já codificados
    em RAM sobre o pipeline da fase 1, tecla → MP4 pelo Media Foundation.
    Medir o custo com jogo rodando antes; se pesar, abandonar.
-5. **Para mais tarde — tolerância a queda no servidor (#78):** ao cair o
-   WebSocket, segurar o lugar da pessoa ~20 s antes do `peer-left`, para as
-   conexões P2P sobreviverem ao celular ir para segundo plano (seletor de
-   fotos) e ao 4G instável. Esperando o relato de quem viu o problema.
-6. Ideias registradas: canais fixos do servidor iguais para todos (estilo
+5. Ideias registradas: canais fixos do servidor iguais para todos (estilo
    servidor do Discord) e contas opcionais (Google + Neon). Para devs: quadro
    colaborativo estilo Excalidraw (#127), código no chat (#128), cartões do
    GitHub (#129) e apontar sobre a tela compartilhada (#130).
