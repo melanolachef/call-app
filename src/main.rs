@@ -1,5 +1,6 @@
 //! Screen sharing between friends: serves the pages and relays WebRTC signaling.
 
+mod apoio;
 mod gifs;
 mod ice;
 mod presence;
@@ -16,6 +17,7 @@ use axum::{
     Router,
 };
 
+use apoio::Apoio;
 use gifs::{GifError, Gifs};
 use ice::Ice;
 use presence::{normalize_code, Presence};
@@ -28,6 +30,14 @@ struct AppState {
     ice: Arc<Ice>,
     gifs: Arc<Gifs>,
     presence: Presence,
+    /// Pix for voluntary support (`/apoiar`); `None` when `PIX_KEY` isn't set.
+    apoio: Option<Arc<Apoio>>,
+}
+
+impl FromRef<AppState> for Option<Arc<Apoio>> {
+    fn from_ref(state: &AppState) -> Self {
+        state.apoio.clone()
+    }
 }
 
 impl FromRef<AppState> for Presence {
@@ -58,6 +68,7 @@ const DEFAULT_PORT: u16 = 3000;
 
 const INDEX_HTML: &str = include_str!("../static/index.html");
 const ROOM_HTML: &str = include_str!("../static/room.html");
+const APOIAR_HTML: &str = include_str!("../static/apoiar.html");
 // The room script is kept as one file per area under static/room/ and served as a
 // single /room.js (same global scope, same order), so the page loads exactly one script.
 const ROOM_JS: &str = concat!(
@@ -132,19 +143,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if !gifs.enabled() {
         println!("GIFs desligados (defina GIF_API_KEY para ligar a busca)");
     }
-    axum::serve(listener, app_with(Rooms::new(max_peers), ice, gifs)).await?;
+    let apoio = Apoio::from_env();
+    if apoio.is_none() {
+        println!("Apoio desligado (defina PIX_KEY para abrir /apoiar)");
+    }
+    axum::serve(listener, app_with(Rooms::new(max_peers), ice, gifs, apoio)).await?;
     Ok(())
 }
 
 #[cfg(test)]
 fn app(rooms: Rooms, ice: Arc<Ice>) -> Router {
-    app_with(rooms, ice, Gifs::disabled())
+    app_with(rooms, ice, Gifs::disabled(), None)
 }
 
-fn app_with(rooms: Rooms, ice: Arc<Ice>, gifs: Arc<Gifs>) -> Router {
+fn app_with(rooms: Rooms, ice: Arc<Ice>, gifs: Arc<Gifs>, apoio: Option<Arc<Apoio>>) -> Router {
     Router::new()
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
+        .route("/apoiar", get(|| async { Html(APOIAR_HTML) }))
+        .route("/api/apoio", get(apoio_info))
+        .route("/api/apoio/qr.svg", get(apoio_qr))
         .route("/room.js", get(|| async { javascript(ROOM_JS) }))
         .route("/lobby.js", get(|| async { javascript(LOBBY_JS) }))
         .route("/amigos.js", get(|| async { javascript(AMIGOS_JS) }))
@@ -207,7 +225,41 @@ fn app_with(rooms: Rooms, ice: Arc<Ice>, gifs: Arc<Gifs>) -> Router {
             ice,
             gifs,
             presence: Presence::default(),
+            apoio,
         })
+}
+
+/// `GET /api/apoio` -> `{"pix": "000201...", "name": "Lucas"}`, or 404 when
+/// support is off (the lobby then hides its link).
+async fn apoio_info(State(apoio): State<Option<Arc<Apoio>>>) -> Response {
+    let Some(apoio) = apoio else {
+        return (
+            StatusCode::NOT_FOUND,
+            [(header::CONTENT_TYPE, "application/json")],
+            "{}",
+        )
+            .into_response();
+    };
+    (
+        [(header::CONTENT_TYPE, "application/json")],
+        serde_json::json!({ "pix": apoio.payload, "name": apoio.name }).to_string(),
+    )
+        .into_response()
+}
+
+/// The same Pix code as a QR image.
+async fn apoio_qr(State(apoio): State<Option<Arc<Apoio>>>) -> Response {
+    let Some(apoio) = apoio else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    (
+        [
+            (header::CONTENT_TYPE, "image/svg+xml"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        apoio.qr_svg.clone(),
+    )
+        .into_response()
 }
 
 async fn room_page(Path(id): Path<String>) -> Response {
@@ -454,6 +506,7 @@ mod tests {
         };
 
         assert!(get("/").await.starts_with("HTTP/1.1 200"));
+        assert!(get("/apoiar").await.contains("Apoiar o CPX Call"));
         assert!(get("/room/abc123").await.contains("room.js"));
         assert!(get("/room/bad!id").await.starts_with("HTTP/1.1 303"));
         assert!(get("/room.js")
@@ -635,6 +688,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn support_is_off_without_pix_key() {
+        let addr = start_server().await;
+        let (head, _) = http_get(&addr, "/api/apoio").await;
+        assert!(head.starts_with("HTTP/1.1 404"));
+    }
+
+    #[tokio::test]
+    async fn support_gives_the_pix_code_and_its_qr() {
+        let apoio = Apoio::new("cpx@example.com", "Lucas", "Sao Paulo").map(Arc::new);
+        let addr = start_app(app_with(
+            Rooms::default(),
+            Ice::stun_only(),
+            Gifs::disabled(),
+            apoio,
+        ))
+        .await;
+        let (head, body) = http_get(&addr, "/api/apoio").await;
+        assert!(head.starts_with("HTTP/1.1 200"));
+        assert_eq!(body["name"], "Lucas");
+        assert!(body["pix"].as_str().unwrap().starts_with("000201263"));
+    }
+
+    #[tokio::test]
     async fn gif_endpoint_off_without_key() {
         let addr = start_server().await;
         let (head, _) = http_get(&addr, "/api/gifs?q=gato").await;
@@ -648,6 +724,7 @@ mod tests {
             Rooms::default(),
             Ice::stun_only(),
             Gifs::with_key("gif-key", &api),
+            None,
         ))
         .await;
         let (_, trending) = http_get(&addr, "/api/gifs").await;

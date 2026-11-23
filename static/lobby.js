@@ -337,6 +337,11 @@ window.addEventListener('pageshow', (e) => { // back button from a room
   }
 });
 
+// "Apoiar" only when the server has a Pix key (/api/apoio answers).
+fetch('/api/apoio', { cache: 'no-store' }).then((res) => {
+  $('support').hidden = !res.ok;
+}, () => {});
+
 // The Windows app (desktop/) only makes sense on Windows, and not inside itself.
 $('get-app').hidden = !!window.__TAURI__ || !/Windows/.test(navigator.userAgent);
 
