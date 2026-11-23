@@ -102,6 +102,14 @@
     .hud-room[aria-current="page"] { font-weight: 600; }
     .hud-room[aria-current="page"]::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 2px; background: var(--text); }
     .hud-name { min-width: 0; }
+    .side-head { display: flex; align-items: center; justify-content: space-between; }
+    .side-head .btn { height: 22px; padding: 0 8px; font-size: 11px; }
+    .friends-hud-list { list-style: none; margin: 0; padding: 0; }
+    .friends-hud-list li + li .hud-room { box-shadow: inset 0 1px var(--border); }
+    .friend-hud .avatar { width: 24px; height: 24px; border-radius: var(--r-sm); font-size: 11px; }
+    .friend-hud-text { min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+    .friend-hud-room { font-size: 11px; color: var(--online); }
+    .friends-hud-empty { padding: 10px 12px; font-size: 12px; color: var(--faint); }
     .tag { flex: none; padding: 0 5px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 11px; font-weight: 400; color: var(--faint); }
     .hud-count { margin-left: auto; flex: none; font-size: 12px; color: var(--faint); }
     .hud-count.online { color: var(--online); }
@@ -359,11 +367,6 @@
     .select { height: 40px; padding: 0 10px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; }
     .meter { height: 6px; border-radius: 1px; background: var(--raised); overflow: hidden; }
     .meter-fill { width: 0; height: 100%; background: var(--online); transition: width .08s linear; }
-    .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    input[role="switch"] { appearance: none; flex: none; width: 40px; height: 22px; margin: 0; border-radius: var(--r-sm); background: var(--raised-2); position: relative; cursor: pointer; transition: background .15s; }
-    input[role="switch"]::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 2px; background: #fff; transition: left .15s; }
-    input[role="switch"]:checked { background: var(--online); }
-    input[role="switch"]:checked::after { left: 21px; }
 
     /* ---------- telas médias: o chat vira gaveta ---------- */
     @media (max-width: 1199px) {
@@ -459,6 +462,11 @@
       <section class="side-block" aria-labelledby="people-title">
         <h2 id="people-title">Na sala</h2>
         <div class="card"><ul id="people" aria-labelledby="people-title"></ul></div>
+      </section>
+
+      <section class="side-block" id="friends-hud" aria-labelledby="friends-hud-title" hidden>
+        <h2 id="friends-hud-title" class="side-head">Amigos em call <button class="btn small ghost" id="friends-hud-btn" title="Seu código, adicionar amigos, invisível">Amigos</button></h2>
+        <div class="card"><ul id="friends-hud-list" class="friends-hud-list"></ul></div>
       </section>
 
       <section class="side-block" id="hud" aria-labelledby="hud-title">
@@ -657,6 +665,7 @@
   </dialog>
 
   <script src="/common.js"></script>
+  <script src="/amigos.js"></script>
   <script src="/room.js"></script>
 </body>
 </html>

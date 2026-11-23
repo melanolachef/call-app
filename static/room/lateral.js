@@ -55,6 +55,48 @@ $('hud-new').onsubmit = (e) => {
 renderHud();
 updateHudCounts();
 setInterval(updateHudCounts, 15_000);
+
+// ---------- amigos em call (barra lateral) ----------
+
+// Only the friends who are in a call right now, with a link to join. The
+// full list, your code and "adicionar" are in the Amigos box (amigos.js).
+async function updateFriendsHud() {
+  if (!friendsSupported || document.hidden) return;
+  const list = loadFriends();
+  const presence = list.length ? await fetchFriendPresence(list.map((f) => f.code)) : {};
+  if (!presence) return; // offline
+  const online = list.filter((f) => presence[f.code]);
+  $('friends-hud').hidden = false;
+  if (!online.length) {
+    $('friends-hud-list').replaceChildren(el('li', 'friends-hud-empty', list.length ? 'Nenhum amigo em call agora.' : 'Adicione amigos pelo código para ver em que call estão.'));
+    return;
+  }
+  $('friends-hud-list').replaceChildren(...online.map((friend) => {
+    const seen = presence[friend.code];
+    const here = seen.room === roomId;
+    const name = friend.name || cleanFriendName(seen.nick) || formatFriendCode(friend.code);
+    const item = el(here ? 'div' : 'a', 'hud-room friend-hud');
+    if (!here) {
+      item.href = `/room/${seen.room}`;
+      item.onclick = (e) => {
+        if (!okToLeave()) e.preventDefault();
+      };
+    }
+    const face = el('span', 'avatar');
+    face.textContent = initials(name);
+    face.style.background = colorFor(friend.code);
+    const text = el('span', 'friend-hud-text');
+    text.append(el('span', 'ellipsis', name), el('span', 'friend-hud-room ellipsis', here ? 'nesta sala' : `${displayRoomName(seen.room)} · ${seen.count}`));
+    item.append(face, text);
+    const li = el('li');
+    li.append(item);
+    return li;
+  }));
+}
+$('friends-hud-btn').onclick = () => openFriendsDialog();
+updateFriendsHud();
+setInterval(updateFriendsHud, 15_000);
+window.addEventListener('friends-changed', updateFriendsHud);
 window.addEventListener('storage', renderHud); // changed from another tab
 
 // ---------- convidar ----------

@@ -17,8 +17,19 @@ function broadcastProfile() {
     send(peer.id, profileMsg());
     sendBannerImage(peer.id, true);
   });
+  announcePresence(); // friends see the new nick
   refresh();
 }
+
+// Friends (amigos.js): tell the server "the owner of my friend code is in
+// this room", or that I'm invisible. Not relayed to anyone; the server keeps
+// it in memory while this connection is open.
+function announcePresence() {
+  if (ws?.readyState !== WebSocket.OPEN || !friendsSupported) return;
+  const presence = isInvisible() || !myNick ? null : { secret: friendSecret(), nick: myNick };
+  ws.send(JSON.stringify({ presence }));
+}
+window.addEventListener('friends-changed', announcePresence);
 
 function displayName(peer) {
   return peer.nick || `Participante ${peer.id}`;
@@ -187,6 +198,7 @@ function onMessage(ev) {
       shareBtn.disabled = !canShare;
       retryDelay = 1000;
       reconnectAttempt = 0;
+      announcePresence();
       if (!timer) { // keeps counting across reconnections
         const joinedAt = Date.now();
         const tick = () => ($('timer').textContent = clock(joinedAt));

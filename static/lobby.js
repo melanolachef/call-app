@@ -222,6 +222,93 @@ async function updateCounts() {
   renderRooms();
 }
 
+// ---------- amigos ----------
+
+let friendPresence = {}; // code -> { nick, room, count, secs } | null
+
+// Name shown for a friend: what you called them, else their nick (kept
+// from the last time they were seen), else the code.
+function friendLabel(friend) {
+  return friend.name || formatFriendCode(friend.code);
+}
+
+function friendItem(friend) {
+  const seen = friendPresence[friend.code];
+  const li = el('li');
+  const row = el('div', 'room-item friend-item');
+  const link = el(seen ? 'a' : 'div', 'room-link');
+  if (seen) link.href = `/room/${seen.room}`;
+  const icon = el('span', 'room-icon');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = initials(friendLabel(friend));
+  icon.style.background = colorFor(friend.code);
+  const text = el('span', 'room-text');
+  text.append(el('strong', 'ellipsis', friendLabel(friend)));
+  const status = el('span', `friend-status ellipsis${seen ? ' online' : ''}`);
+  if (seen) {
+    status.append('em ', el('b', null, displayRoomName(seen.room)), ` · ${seen.count} ${seen.count === 1 ? 'pessoa' : 'pessoas'} · ${friendSince(seen.secs)}`);
+  } else {
+    status.textContent = 'fora de call';
+  }
+  text.append(status);
+  link.append(icon, text);
+  if (seen) link.append(el('span', 'room-enter', 'Entrar'));
+  row.append(link);
+  const actions = el('span', 'room-actions');
+  const remove = iconButton(ICON_X, `Tirar ${friendLabel(friend)} dos amigos`);
+  remove.onclick = () => {
+    if (window.confirm(`Tirar ${friendLabel(friend)} dos seus amigos?`)) removeFriend(friend.code);
+  };
+  actions.append(remove);
+  row.append(actions);
+  li.append(row);
+  return li;
+}
+
+function renderFriends() {
+  $('friends-section').hidden = !friendsSupported;
+  if (!friendsSupported) return;
+  // In a call first, then by name.
+  const list = loadFriends().sort((a, b) => Number(!!friendPresence[b.code]) - Number(!!friendPresence[a.code])
+    || friendLabel(a).localeCompare(friendLabel(b), 'pt-BR'));
+  $('friends').replaceChildren(...list.map(friendItem));
+  $('friends-empty').hidden = list.length > 0;
+}
+
+async function updateFriends() {
+  if (!friendsSupported || document.hidden) return;
+  const list = loadFriends();
+  const fresh = await fetchFriendPresence(list.map((f) => f.code));
+  if (!fresh) return; // offline: keep what we had
+  friendPresence = fresh;
+  // A friend added without a name takes the nick they use.
+  let named = false;
+  for (const friend of list) {
+    const nickSeen = cleanFriendName(fresh[friend.code]?.nick);
+    if (!friend.name && nickSeen) {
+      friend.name = nickSeen;
+      named = true;
+    }
+  }
+  if (named) saveFriends(list); // re-renders through friends-changed
+  else renderFriends();
+}
+
+$('friends-btn').onclick = () => openFriendsDialog();
+window.addEventListener('friends-changed', () => {
+  renderFriends();
+  updateFriends();
+});
+
+// A friend link (".../?amigo=7K3F9X2A&nome=Rafa"): offer to add them.
+(() => {
+  const params = new URLSearchParams(location.search);
+  const friend = params.get('amigo') ? parseFriendInput(location.href) : null;
+  if (!friend || !friendsSupported) return;
+  history.replaceState(null, '', location.pathname);
+  openFriendsDialog(friend);
+})();
+
 // ---------- início ----------
 
 renderProfile();
@@ -235,7 +322,14 @@ renderRooms();
 updateCounts();
 setInterval(updateCounts, COUNTS_EVERY_MS);
 document.addEventListener('visibilitychange', updateCounts);
-window.addEventListener('storage', renderRooms); // a room opened in another tab
+renderFriends();
+updateFriends();
+setInterval(updateFriends, COUNTS_EVERY_MS);
+document.addEventListener('visibilitychange', updateFriends);
+window.addEventListener('storage', (e) => { // changed in another tab
+  renderRooms();
+  if (e.key === 'friends' || e.key === 'friendSecret') renderFriends();
+});
 window.addEventListener('pageshow', (e) => { // back button from a room
   if (e.persisted) {
     renderRooms();

@@ -43,6 +43,7 @@ registro de quem entrou.
 | **Câmera** | Câmera leve no card de cada pessoa, enviada só para quem está vendo o card. |
 | **Chat** | Mensagens em balões, emojis e reações que flutuam pela tela. Nada fica salvo. |
 | **Block e salas** | Seu **Block** é uma sala fixa com link que nunca muda; as salas por onde você passa ficam na lista, com quem está em cada uma agora. |
+| **Amigos** | Troque **códigos de amigo** (sem conta) e veja em que call cada um está agora, com um clique para entrar. Dá para ficar **invisível**. |
 | **Do seu jeito** | Nick, foto, cor de destaque, tema e fundo, tudo salvo só no seu navegador. |
 | **App para Windows** | A mesma sala numa janela própria, com a tecla de falar e o Ctrl+Shift+M funcionando **com o jogo em foco**. |
 
@@ -72,7 +73,9 @@ qualquer trabalho que não precisa fazer:
 
 O servidor só repassa a conversa inicial entre os navegadores (sinalização
 WebRTC) e as mensagens do chat, sem gravar. As salas existem só na memória e
-somem quando a última pessoa sai. Nick, foto, salas e aparência ficam no seu
+somem quando a última pessoa sai. Para os amigos verem em que call você está, o
+servidor sabe em que sala o seu código de amigo está só enquanto você está nela
+(e nada se você ficar invisível). Nick, foto, salas, amigos e aparência ficam no seu
 navegador. Os logs mostram só o número do participante e o começo do código da
 sala, nunca IP. Até a fonte vem do próprio servidor, para abrir o app não avisar
 terceiros de quem está online.
