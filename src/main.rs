@@ -79,6 +79,8 @@ const DEFAULT_PORT: u16 = 3000;
 const INDEX_HTML: &str = include_str!("../static/index.html");
 const ROOM_HTML: &str = include_str!("../static/room.html");
 const APOIAR_HTML: &str = include_str!("../static/apoiar.html");
+const PRIVACIDADE_HTML: &str = include_str!("../static/privacidade.html");
+const TERMOS_HTML: &str = include_str!("../static/termos.html");
 // The room script is kept as one file per area under static/room/ and served as a
 // single /room.js (same global scope, same order), so the page loads exactly one script.
 const ROOM_JS: &str = concat!(
@@ -192,6 +194,8 @@ fn app_full(
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
         .route("/apoiar", get(|| async { Html(APOIAR_HTML) }))
+        .route("/privacidade", get(|| async { Html(PRIVACIDADE_HTML) }))
+        .route("/termos", get(|| async { Html(TERMOS_HTML) }))
         .route("/api/apoio", get(apoio_info))
         .route("/api/apoio/qr.svg", get(apoio_qr))
         .route("/room.js", get(|| async { javascript(ROOM_JS) }))
@@ -539,6 +543,10 @@ mod tests {
 
         assert!(get("/").await.starts_with("HTTP/1.1 200"));
         assert!(get("/apoiar").await.contains("Apoiar o CPX Call"));
+        assert!(get("/privacidade")
+            .await
+            .contains("cpxcallcontato@gmail.com"));
+        assert!(get("/termos").await.contains("Termos de uso"));
         assert!(get("/room/abc123").await.contains("room.js"));
         assert!(get("/room/bad!id").await.starts_with("HTTP/1.1 303"));
         assert!(get("/room.js")
