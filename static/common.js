@@ -1092,7 +1092,7 @@ $('username-form').onsubmit = async (e) => {
 $('open-appearance').insertAdjacentHTML('afterend', `
   <div class="account-box" id="account-box" hidden>
     <div id="account-out">
-      <p class="muted account-note">Com uma conta você ganha um @usuário e seus amigos em qualquer aparelho. Guardamos só um identificador da sua conta Google, sem e-mail nem foto.</p>
+      <p class="muted account-note">Com uma conta você ganha um @usuário e seus amigos em qualquer aparelho. Guardamos só um identificador da sua conta Google, sem e-mail nem foto (<a href="/privacidade" target="_blank">privacidade</a> · <a href="/termos" target="_blank">termos</a>).</p>
       <a class="btn small" id="account-signin" href="/auth/google">Entrar com Google</a>
     </div>
     <div id="account-in" hidden>
