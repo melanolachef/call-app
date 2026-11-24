@@ -113,7 +113,11 @@ impl Rooms {
 
         // Sent before join() returns, hence before the newcomer's welcome and
         // before any offer it could send: the others always learn of it first.
-        self.broadcast(room_id, &others, &json!({ "type": "peer-joined", "id": id }));
+        self.broadcast(
+            room_id,
+            &others,
+            &json!({ "type": "peer-joined", "id": id }),
+        );
         println!(
             "[sala {}] participante {id} entrou ({count}/{})",
             short(room_id),
@@ -158,7 +162,10 @@ impl Rooms {
                 .and_then(|room| room.peers.remove(&id))
                 .is_some();
             if removed {
-                println!("[sala {}] participante {id} não lia as mensagens: desconectado", short(room_id));
+                println!(
+                    "[sala {}] participante {id} não lia as mensagens: desconectado",
+                    short(room_id)
+                );
             }
         }
     }
@@ -190,7 +197,11 @@ impl Rooms {
             remaining
         };
 
-        self.broadcast(room_id, &remaining, &json!({ "type": "peer-left", "id": id }));
+        self.broadcast(
+            room_id,
+            &remaining,
+            &json!({ "type": "peer-left", "id": id }),
+        );
         println!(
             "[sala {}] participante {id} saiu ({}/{})",
             short(room_id),
@@ -361,7 +372,10 @@ mod tests {
             rooms.relay("r", 2, 1, json!("spam"));
         }
         assert_eq!(rooms.counts(&["r"]), vec![("r", 1)]);
-        assert!(rx2.try_recv().is_err(), "the other participant is untouched");
+        assert!(
+            rx2.try_recv().is_err(),
+            "the other participant is untouched"
+        );
     }
 
     #[test]

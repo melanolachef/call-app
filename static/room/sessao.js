@@ -130,6 +130,12 @@ async function join() {
       showNotice('Sala cheia', `Esta sala já tem ${maxPeers} pessoas. Tente de novo mais tarde ou crie outra.`);
       return;
     }
+    if (serverBusy) {
+      serverBusy = false;
+      clearInterval(timer);
+      showNotice('Servidor cheio', 'Tem muita sala aberta agora. Tente de novo em alguns minutos.');
+      return;
+    }
     if (!reconnecting) addSystem('Conexão perdida. Reconectando…');
     reconnecting = true;
     [...peers.keys()].forEach(removePeer);
@@ -234,6 +240,9 @@ function onMessage(ev) {
     case 'full':
       roomFull = true;
       maxPeers = msg.max ?? maxPeers;
+      break;
+    case 'busy': // too many rooms on the server (src/limits.rs)
+      serverBusy = true;
       break;
   }
 }
