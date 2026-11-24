@@ -11,5 +11,8 @@ FROM gcr.io/distroless/cc-debian12
 COPY --from=build /app/target/release/call-app /call-app
 ENV PORT=3000
 EXPOSE 3000
-USER nonroot
+# Root: the Fly volume (/data, the accounts database) is mounted owned by
+# root, and this image has no shell to change that at start. The machine is
+# a Firecracker VM running only this binary.
+USER root
 CMD ["/call-app"]

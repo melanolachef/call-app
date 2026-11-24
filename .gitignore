@@ -2,3 +2,6 @@ target/
 .env
 desktop/target/
 desktop/gen/
+*.db
+*.db-wal
+*.db-shm

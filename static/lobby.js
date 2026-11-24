@@ -410,6 +410,16 @@ fetch('/api/apoio', { cache: 'no-store' }).then((res) => {
   $('support').hidden = !res.ok;
 }, () => {});
 
+// Accounts (optional): "Entrar" while signed out, the @username on the profile button.
+onAccountChange((value) => {
+  $('signin-top').hidden = !value || value.signedIn;
+  $('edit').title = value?.signedIn && value.username ? `@${value.username} · Editar perfil` : 'Editar perfil';
+});
+$('signin-top').onclick = (e) => {
+  e.preventDefault();
+  location.assign(signInUrl());
+};
+
 // The Windows app (desktop/) only makes sense on Windows, and not inside itself.
 $('get-app').hidden = !!window.__TAURI__ || !/Windows/.test(navigator.userAgent);
 

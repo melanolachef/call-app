@@ -5,8 +5,10 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "ws"] }
+getrandom = "0.3"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+rusqlite = { version = "0.43.0", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = { version = "0.10", default-features = false }
