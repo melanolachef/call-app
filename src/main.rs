@@ -1,6 +1,7 @@
 //! Screen sharing between friends: serves the pages and relays WebRTC signaling.
 
 mod apoio;
+mod contas;
 mod gifs;
 mod ice;
 mod presence;
@@ -18,6 +19,7 @@ use axum::{
 };
 
 use apoio::Apoio;
+use contas::Contas;
 use gifs::{GifError, Gifs};
 use ice::Ice;
 use presence::{normalize_code, Presence};
@@ -32,6 +34,14 @@ struct AppState {
     presence: Presence,
     /// Pix for voluntary support (`/apoiar`); `None` when `PIX_KEY` isn't set.
     apoio: Option<Arc<Apoio>>,
+    /// Optional accounts (`DATABASE_PATH` + Google client); `None` when off.
+    contas: Option<Arc<Contas>>,
+}
+
+impl FromRef<AppState> for Option<Arc<Contas>> {
+    fn from_ref(state: &AppState) -> Self {
+        state.contas.clone()
+    }
 }
 
 impl FromRef<AppState> for Option<Arc<Apoio>> {
@@ -148,7 +158,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if apoio.is_none() {
         println!("Apoio desligado (defina PIX_KEY para abrir /apoiar)");
     }
-    axum::serve(listener, app_with(Rooms::new(max_peers), ice, gifs, apoio)).await?;
+    let contas = Contas::from_env();
+    if contas.is_none() {
+        println!("Contas desligadas (defina DATABASE_PATH, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e PUBLIC_URL)");
+    }
+    axum::serve(
+        listener,
+        app_full(Rooms::new(max_peers), ice, gifs, apoio, contas),
+    )
+    .await?;
     Ok(())
 }
 
@@ -157,8 +175,20 @@ fn app(rooms: Rooms, ice: Arc<Ice>) -> Router {
     app_with(rooms, ice, Gifs::disabled(), None)
 }
 
+#[cfg(test)]
 fn app_with(rooms: Rooms, ice: Arc<Ice>, gifs: Arc<Gifs>, apoio: Option<Arc<Apoio>>) -> Router {
+    app_full(rooms, ice, gifs, apoio, None)
+}
+
+fn app_full(
+    rooms: Rooms,
+    ice: Arc<Ice>,
+    gifs: Arc<Gifs>,
+    apoio: Option<Arc<Apoio>>,
+    contas: Option<Arc<Contas>>,
+) -> Router {
     Router::new()
+        .merge(contas::routes())
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
         .route("/apoiar", get(|| async { Html(APOIAR_HTML) }))
@@ -227,6 +257,7 @@ fn app_with(rooms: Rooms, ice: Arc<Ice>, gifs: Arc<Gifs>, apoio: Option<Arc<Apoi
             gifs,
             presence: Presence::default(),
             apoio,
+            contas,
         })
 }
 
@@ -686,6 +717,138 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
         assert!(gone, "invisible: hidden from friends");
+    }
+
+    /// A raw HTTP request with optional cookie and JSON body; returns head and body.
+    async fn http(
+        addr: &str,
+        method: &str,
+        path: &str,
+        cookie: &str,
+        body: &str,
+    ) -> (String, String) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut stream = TcpStream::connect(addr).await.unwrap();
+        let mut request = format!("{method} {path} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n");
+        if !cookie.is_empty() {
+            request += &format!("Cookie: {cookie}\r\n");
+        }
+        if !body.is_empty() {
+            request += &format!(
+                "Content-Type: application/json\r\nContent-Length: {}\r\n",
+                body.len()
+            );
+        }
+        request += "\r\n";
+        request += body;
+        stream.write_all(request.as_bytes()).await.unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        let (head, body) = response.split_once("\r\n\r\n").unwrap();
+        (head.to_owned(), body.to_owned())
+    }
+
+    /// "name=value" from a Set-Cookie header in `head`.
+    fn set_cookie(head: &str, name: &str) -> String {
+        head.lines()
+            .filter_map(|l| l.strip_prefix("set-cookie: "))
+            .find(|l| l.starts_with(&format!("{name}=")))
+            .and_then(|l| l.split(';').next())
+            .unwrap_or_default()
+            .to_owned()
+    }
+
+    #[tokio::test]
+    async fn accounts_are_off_without_configuration() {
+        let addr = start_server().await;
+        let (head, _) = http(&addr, "GET", "/api/me", "", "").await;
+        assert!(head.starts_with("HTTP/1.1 404"));
+    }
+
+    #[tokio::test]
+    async fn sign_in_with_google_and_pick_a_username() {
+        // Google's token endpoint: hands back an ID token for account "g-42".
+        let google = Router::new().route(
+            "/token",
+            axum::routing::post(|body: String| async move {
+                assert!(body.contains("code=codigo-do-google"));
+                assert!(body.contains("client_secret=segredo"));
+                let exp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64
+                    + 600;
+                json!({ "id_token": contas::tests::id_token("g-42", "cliente", exp) }).to_string()
+            }),
+        );
+        let token_url = format!("http://{}/token", start_app(google).await);
+        let addr = start_app(app_full(
+            Rooms::default(),
+            Ice::stun_only(),
+            Gifs::disabled(),
+            None,
+            Some(contas::tests::memory(&token_url)),
+        ))
+        .await;
+
+        let (head, _) = http(&addr, "GET", "/api/me", "", "").await;
+        assert!(head.starts_with("HTTP/1.1 401"), "signed out");
+
+        let (head, _) = http(&addr, "GET", "/auth/google?volta=/room/abc123", "", "").await;
+        assert!(head.starts_with("HTTP/1.1 303"));
+        assert!(head.contains("location: https://google.exemplo/auth?client_id=cliente"));
+        assert!(head.contains("scope=openid&"));
+        let state_cookie = set_cookie(&head, "cpx_oauth");
+        let back_cookie = set_cookie(&head, "cpx_volta");
+        let state = state_cookie.split_once('=').unwrap().1.to_owned();
+
+        // A wrong state is refused.
+        let (head, _) = http(
+            &addr,
+            "GET",
+            "/auth/google/callback?code=x&state=outro",
+            &state_cookie,
+            "",
+        )
+        .await;
+        assert!(head.contains("location: /?conta=erro"));
+
+        let cookies = format!("{state_cookie}; {back_cookie}");
+        let path = format!("/auth/google/callback?code=codigo-do-google&state={state}");
+        let (head, _) = http(&addr, "GET", &path, &cookies, "").await;
+        assert!(
+            head.contains("location: /room/abc123?conta=entrou"),
+            "{head}"
+        );
+        let session = set_cookie(&head, "cpx_sessao");
+        assert!(session.len() > 20);
+
+        let (head, body) = http(&addr, "GET", "/api/me", &session, "").await;
+        assert!(head.starts_with("HTTP/1.1 200"));
+        let me: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(me["username"], Value::Null);
+
+        let (head, body) = http(
+            &addr,
+            "POST",
+            "/api/me",
+            &session,
+            r#"{"username":"Rafa","nick":"Rafa"}"#,
+        )
+        .await;
+        assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+        assert_eq!(
+            serde_json::from_str::<Value>(&body).unwrap()["username"],
+            "rafa"
+        );
+
+        let (head, _) = http(&addr, "POST", "/api/me", &session, r#"{"username":"x"}"#).await;
+        assert!(head.starts_with("HTTP/1.1 400"));
+
+        let (head, _) = http(&addr, "POST", "/auth/sair", &session, "").await;
+        assert!(head.contains("cpx_sessao=;"));
+        let (head, _) = http(&addr, "GET", "/api/me", &session, "").await;
+        assert!(head.starts_with("HTTP/1.1 401"), "session ended");
     }
 
     #[tokio::test]

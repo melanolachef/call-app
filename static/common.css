@@ -219,3 +219,12 @@ html.app-titlebar { --titlebar-h: 32px; }
 [data-gif]:hover, :hover > [data-gif], .tile:hover [data-gif], #person-card [data-gif], #profile [data-gif] { background-image: var(--gif-anim); }
 [data-gif-bg] { --tile-bg: var(--gif-bg-still, var(--card)); }
 [data-gif-bg]:hover { --tile-bg: var(--gif-bg-anim); }
+
+/* ---------- conta (common.js) ---------- */
+.account-box { padding-top: 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.account-box > div { display: flex; flex-direction: column; gap: 10px; }
+.account-note { margin: 0; font-size: 12px; line-height: 1.5; }
+.account-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.account-label { color: var(--muted); font-size: 13px; }
+.account-row strong { margin-right: auto; font-weight: 600; }
+.account-error { margin: 0; min-height: 1em; color: var(--danger) !important; font-size: 13px; }
