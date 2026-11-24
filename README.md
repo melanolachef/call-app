@@ -27,12 +27,12 @@
 O CPX Call é para jogar junto: você abre uma sala, manda o link e cada um pode
 compartilhar a própria tela, entrar na voz, ligar a câmera e conversar no chat.
 O vídeo vai **direto de um computador para o outro** (WebRTC), e o servidor, em
-Rust, só apresenta as pessoas: **não guarda nada**, nem conta, nem mensagem, nem
-registro de quem entrou.
+Rust, só apresenta as pessoas: não guarda mensagem, vídeo nem registro de quem
+entrou, e a conta (opcional) guarda só o @usuário e um identificador do Google.
 
 ![Sala do CPX Call com uma tela compartilhada, a lista de pessoas, câmeras e o chat](assets/screenshot.png)
 
-[Recursos](#tudo-o-que-a-sala-tem) · [Como usar](#como-usar) · [Leve para quem joga](#leve-para-quem-joga) · [Privacidade](#o-servidor-não-guarda-nada) · [Documentação](#documentação)
+[Recursos](#tudo-o-que-a-sala-tem) · [Como usar](#como-usar) · [Leve para quem joga](#leve-para-quem-joga) · [Privacidade](#o-servidor-guarda-o-mínimo) · [Documentação](#documentação)
 
 ## Tudo o que a sala tem
 
@@ -69,7 +69,7 @@ qualquer trabalho que não precisa fazer:
   a transmissão baixa de 30 para 24 FPS e depois a resolução, e volta quando alivia.
 - **Imagem nítida desde o primeiro segundo**, sem abrir borrada e melhorar devagar.
 
-## O servidor não guarda nada
+## O servidor guarda o mínimo
 
 O servidor só repassa a conversa inicial entre os navegadores (sinalização
 WebRTC) e as mensagens do chat, sem gravar. As salas existem só na memória e
@@ -79,6 +79,11 @@ servidor sabe em que sala o seu código de amigo está só enquanto você está 
 navegador. Os logs mostram só o número do participante e o começo do código da
 sala, nunca IP. Até a fonte vem do próprio servidor, para abrir o app não avisar
 terceiros de quem está online.
+
+Com a conta opcional (Entrar com Google), o servidor guarda num SQLite só o
+identificador da conta Google (sem e-mail, nome ou foto), o @usuário, o nome e
+o hash das sessões; apagar a conta apaga tudo. Detalhes em
+[docs/CONTAS.md](docs/CONTAS.md) e na página `/privacidade` do app.
 
 ## Documentação
 

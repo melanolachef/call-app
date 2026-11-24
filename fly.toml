@@ -8,6 +8,14 @@ primary_region = "gru" # São Paulo
 [env]
   PORT = "3000"
   MAX_PEERS = "12"
+  # Contas (docs/CONTAS.md): o banco fica no volume "dados" (crie antes do
+  # deploy: fly volumes create dados --size 1 --region gru).
+  DATABASE_PATH = "/data/cpx.db"
+  PUBLIC_URL = "https://cpx-call.fly.dev"
+
+[mounts]
+  source = "dados"
+  destination = "/data"
 
 [http_service]
   internal_port = 3000

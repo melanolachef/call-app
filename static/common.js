@@ -713,6 +713,10 @@ $('profile-form').onsubmit = (e) => {
   if (stored.includes(false)) toast('O navegador não deixou guardar o perfil: ele vale só até fechar esta página.', 6000);
   $('profile').close();
   profileOnSave?.(nick, draftPhoto);
+  // With an account, the name friends see follows the nick.
+  if (account?.signedIn && nick !== account.nick) {
+    accountRequest('POST', '/api/me', { nick }).then(({ ok, data }) => ok && setAccount({ signedIn: true, ...data }));
+  }
 };
 
 // Another tab of this browser changed the profile: `callback` refreshes this one.
@@ -985,3 +989,157 @@ async function fetchRoomCounts(ids) {
     return null;
   }
 }
+
+// ---------- conta (opcional, docs/CONTAS.md) ----------
+
+// `account`: undefined while unknown, null when the server has accounts off,
+// { signedIn: false } or { signedIn: true, id, username, nick }.
+let account;
+const accountListeners = [];
+
+function onAccountChange(callback) {
+  accountListeners.push(callback);
+  if (account !== undefined) callback(account);
+}
+
+function setAccount(value) {
+  account = value;
+  renderAccountSection();
+  accountListeners.forEach((callback) => callback(account));
+}
+
+async function loadAccount() {
+  try {
+    const res = await fetch('/api/me', { cache: 'no-store' });
+    if (res.status === 404) return setAccount(null);
+    if (res.status === 401) return setAccount({ signedIn: false });
+    if (res.ok) return setAccount({ signedIn: true, ...(await res.json()) });
+  } catch { /* offline: try again on the next page load */ }
+  return setAccount(account ?? null);
+}
+
+function signInUrl() {
+  return `/auth/google?volta=${encodeURIComponent(location.pathname)}`;
+}
+
+async function accountRequest(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+// The "Conta" part of the profile dialog.
+function renderAccountSection() {
+  const box = $('account-box');
+  box.hidden = !account;
+  if (!account) return;
+  $('account-out').hidden = account.signedIn;
+  $('account-in').hidden = !account.signedIn;
+  if (account.signedIn) $('account-username').textContent = account.username ? `@${account.username}` : 'sem @usuário ainda';
+}
+
+// First sign-in: pick the @username (and confirm the name friends will see).
+function suggestUsername(nick) {
+  const base = (nick || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+  return /^[a-z]/.test(base) ? base.slice(0, 20) : '';
+}
+
+function openUsernameDialog() {
+  $('username-input').value = account?.username || suggestUsername(load('nick'));
+  $('username-nick').value = account?.nick || load('nick');
+  $('username-error').textContent = '';
+  $('username-dialog').showModal();
+}
+
+document.body.insertAdjacentHTML('beforeend', `
+  <dialog id="username-dialog" aria-labelledby="username-title">
+    <form class="dialog-body" id="username-form">
+      <div class="heading">
+        <h2 id="username-title">Escolha seu @usuário</h2>
+        <span class="muted">É por ele que seus amigos vão te achar. Dá para trocar depois.</span>
+      </div>
+      <label class="field"><span class="muted">@usuário</span>
+        <input id="username-input" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="@?[A-Za-z][A-Za-z0-9_]{2,19}" required></label>
+      <label class="field"><span class="muted">Nome que aparece</span>
+        <input id="username-nick" maxlength="32" autocomplete="nickname" required></label>
+      <p class="muted account-error" id="username-error" role="alert"></p>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="username-later">Depois</button>
+        <button class="btn primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>`);
+
+$('username-later').onclick = () => $('username-dialog').close();
+$('username-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const { ok, data } = await accountRequest('POST', '/api/me', { username: $('username-input').value, nick: $('username-nick').value });
+  if (!ok) {
+    $('username-error').textContent = data.error || 'Não deu para salvar. Tente de novo.';
+    return;
+  }
+  $('username-dialog').close();
+  if (data.nick) save('nick', data.nick);
+  setAccount({ signedIn: true, ...data });
+  toast(`Pronto, você é @${data.username}.`);
+};
+
+// The account part inside the profile dialog (added after its form exists).
+$('open-appearance').insertAdjacentHTML('afterend', `
+  <div class="account-box" id="account-box" hidden>
+    <div id="account-out">
+      <p class="muted account-note">Com uma conta você ganha um @usuário e seus amigos em qualquer aparelho. Guardamos só um identificador da sua conta Google, sem e-mail nem foto (<a href="/privacidade" target="_blank">privacidade</a> · <a href="/termos" target="_blank">termos</a>).</p>
+      <a class="btn small" id="account-signin" href="/auth/google">Entrar com Google</a>
+    </div>
+    <div id="account-in" hidden>
+      <div class="account-row"><span class="account-label">Conta</span><strong id="account-username"></strong>
+        <button type="button" class="btn small ghost" id="account-edit">Trocar</button></div>
+      <div class="account-row">
+        <button type="button" class="btn small ghost" id="account-signout">Sair</button>
+        <button type="button" class="btn small danger" id="account-delete">Apagar conta</button>
+      </div>
+    </div>
+  </div>`);
+
+$('account-signin').onclick = (e) => {
+  e.preventDefault();
+  location.assign(signInUrl());
+};
+$('account-edit').onclick = () => {
+  $('profile').close();
+  openUsernameDialog();
+};
+$('account-signout').onclick = async () => {
+  await accountRequest('POST', '/auth/sair');
+  setAccount({ signedIn: false });
+  toast('Você saiu da conta neste aparelho.');
+};
+$('account-delete').onclick = async () => {
+  if (!window.confirm('Apagar sua conta? Seu @usuário e suas amizades somem e não dá para desfazer. O que está neste navegador (nick, foto) continua.')) return;
+  const { ok } = await accountRequest('DELETE', '/api/me');
+  if (!ok) return toast('Não deu para apagar agora. Tente de novo.');
+  $('profile').close();
+  setAccount({ signedIn: false });
+  toast('Conta apagada.');
+};
+
+// Back from Google: "?conta=entrou" or "?conta=erro".
+(() => {
+  const params = new URLSearchParams(location.search);
+  const result = params.get('conta');
+  if (!result) return;
+  params.delete('conta');
+  history.replaceState(null, '', location.pathname + (params.size ? `?${params}` : ''));
+  if (result === 'erro') toast('Não deu para entrar com Google. Tente de novo.', 5000);
+  if (result === 'entrou') {
+    onAccountChange((value) => {
+      if (value?.signedIn && !value.username && !$('username-dialog').open) openUsernameDialog();
+    });
+  }
+})();
+
+loadAccount();
