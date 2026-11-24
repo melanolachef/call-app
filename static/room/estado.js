@@ -31,6 +31,7 @@ let myPhoto = validPhoto(load('photo'));
 let localTrack = null; // our screen's video track while sharing
 let localAudio = null; // its sound (tab or system audio), when the browser gave one
 let roomFull = false;
+let serverBusy = false;
 let maxPeers = 12; // the server sends the real limit in welcome/full
 let left = false;
 let timer = null;
