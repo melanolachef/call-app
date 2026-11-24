@@ -12,8 +12,21 @@ use tokio::sync::mpsc;
 /// once per viewer, so much bigger rooms would need a media server (SFU).
 pub const DEFAULT_MAX_PEERS: usize = 12;
 
+/// Rooms open at once on the whole server.
+pub const DEFAULT_MAX_ROOMS: usize = 1000;
+/// Messages waiting for one participant. A browser reads them right away; a
+/// connection that lets this many pile up isn't reading and gets dropped,
+/// so a stuck client can't grow the server's memory without limit.
+pub const QUEUE: usize = 256;
+
 /// Sends text messages to one participant's WebSocket task.
-pub type Tx = mpsc::UnboundedSender<String>;
+pub type Tx = mpsc::Sender<String>;
+pub type Rx = mpsc::Receiver<String>;
+
+/// A participant's queue: the sending half goes in the room, the other to its task.
+pub fn queue() -> (Tx, Rx) {
+    mpsc::channel(QUEUE)
+}
 
 #[derive(Default)]
 struct Room {
@@ -26,6 +39,7 @@ struct Room {
 pub struct Rooms {
     rooms: Arc<Mutex<HashMap<String, Room>>>,
     max_peers: usize,
+    max_rooms: usize,
 }
 
 impl Default for Rooms {
@@ -43,13 +57,20 @@ pub enum Join {
         others: Vec<u32>,
     },
     Full,
+    /// Too many rooms on the server: no new one can open now.
+    ServerFull,
 }
 
 impl Rooms {
     pub fn new(max_peers: usize) -> Self {
+        Self::with_max_rooms(max_peers, DEFAULT_MAX_ROOMS)
+    }
+
+    pub fn with_max_rooms(max_peers: usize, max_rooms: usize) -> Self {
         Self {
             rooms: Arc::default(),
             max_peers,
+            max_rooms,
         }
     }
 
@@ -68,6 +89,11 @@ impl Rooms {
     pub fn join(&self, room_id: &str, tx: Tx) -> Join {
         let (id, others, count) = {
             let mut rooms = self.lock();
+            if !rooms.contains_key(room_id) && rooms.len() >= self.max_rooms {
+                drop(rooms);
+                println!("[limite] sala nova recusada: salas demais no servidor");
+                return Join::ServerFull;
+            }
             let room = rooms.entry(room_id.to_owned()).or_default();
             if room.peers.len() >= self.max_peers {
                 drop(rooms);
@@ -87,7 +113,7 @@ impl Rooms {
 
         // Sent before join() returns, hence before the newcomer's welcome and
         // before any offer it could send: the others always learn of it first.
-        broadcast(&others, &json!({ "type": "peer-joined", "id": id }));
+        self.broadcast(room_id, &others, &json!({ "type": "peer-joined", "id": id }));
         println!(
             "[sala {}] participante {id} entrou ({count}/{})",
             short(room_id),
@@ -117,7 +143,31 @@ impl Rooms {
             .cloned();
         if let Some(tx) = target {
             let msg = json!({ "type": "signal", "from": from, "data": data });
-            let _ = tx.send(msg.to_string());
+            self.deliver(room_id, to, &tx, msg.to_string());
+        }
+    }
+
+    /// Queues `msg` for one participant. A full queue means it stopped
+    /// reading: it leaves the room, which closes its connection (its task
+    /// sees the queue end) and tells the others.
+    fn deliver(&self, room_id: &str, id: u32, tx: &Tx, msg: String) {
+        if let Err(mpsc::error::TrySendError::Full(_)) = tx.try_send(msg) {
+            let removed = self
+                .lock()
+                .get_mut(room_id)
+                .and_then(|room| room.peers.remove(&id))
+                .is_some();
+            if removed {
+                println!("[sala {}] participante {id} não lia as mensagens: desconectado", short(room_id));
+            }
+        }
+    }
+
+    fn broadcast(&self, room_id: &str, peers: &[(u32, Tx)], msg: &Value) {
+        let msg = msg.to_string();
+        for (id, tx) in peers {
+            // A closed channel just means that participant is leaving right now.
+            self.deliver(room_id, *id, tx, msg.clone());
         }
     }
 
@@ -140,7 +190,7 @@ impl Rooms {
             remaining
         };
 
-        broadcast(&remaining, &json!({ "type": "peer-left", "id": id }));
+        self.broadcast(room_id, &remaining, &json!({ "type": "peer-left", "id": id }));
         println!(
             "[sala {}] participante {id} saiu ({}/{})",
             short(room_id),
@@ -150,14 +200,6 @@ impl Rooms {
         if remaining.is_empty() {
             println!("[sala {}] vazia, apagada", short(room_id));
         }
-    }
-}
-
-fn broadcast(peers: &[(u32, Tx)], msg: &Value) {
-    let msg = msg.to_string();
-    for (_, tx) in peers {
-        // A closed channel just means that participant is leaving right now.
-        let _ = tx.send(msg.clone());
     }
 }
 
@@ -178,13 +220,12 @@ fn short(id: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc::UnboundedReceiver;
 
-    fn peer() -> (Tx, UnboundedReceiver<String>) {
-        mpsc::unbounded_channel()
+    fn peer() -> (Tx, Rx) {
+        queue()
     }
 
-    fn next(rx: &mut UnboundedReceiver<String>) -> Value {
+    fn next(rx: &mut Rx) -> Value {
         serde_json::from_str(&rx.try_recv().expect("expected a message")).unwrap()
     }
 
@@ -294,6 +335,33 @@ mod tests {
                 others: vec![]
             }
         );
+    }
+
+    #[test]
+    fn no_new_rooms_past_the_limit() {
+        let rooms = Rooms::with_max_rooms(4, 2);
+        let (a, _ra) = peer();
+        let (b, _rb) = peer();
+        let (c, _rc) = peer();
+        rooms.join("a", a);
+        rooms.join("b", b);
+        assert_eq!(rooms.join("c", peer().0), Join::ServerFull);
+        // Existing rooms still take people.
+        assert!(matches!(rooms.join("a", c), Join::Joined { .. }));
+    }
+
+    #[test]
+    fn a_participant_that_stops_reading_is_dropped() {
+        let rooms = Rooms::default();
+        let (tx1, _stuck) = peer(); // never read
+        let (tx2, mut rx2) = peer();
+        rooms.join("r", tx1);
+        rooms.join("r", tx2);
+        for _ in 0..=QUEUE {
+            rooms.relay("r", 2, 1, json!("spam"));
+        }
+        assert_eq!(rooms.counts(&["r"]), vec![("r", 1)]);
+        assert!(rx2.try_recv().is_err(), "the other participant is untouched");
     }
 
     #[test]
