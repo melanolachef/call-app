@@ -4,11 +4,12 @@ mod apoio;
 mod contas;
 mod gifs;
 mod ice;
+mod limits;
 mod presence;
 mod rooms;
 mod signaling;
 
-use std::{error::Error, sync::Arc};
+use std::{error::Error, net::SocketAddr, sync::Arc};
 
 use axum::{
     extract::{FromRef, Path, RawQuery, State},
@@ -22,6 +23,7 @@ use apoio::Apoio;
 use contas::Contas;
 use gifs::{GifError, Gifs};
 use ice::Ice;
+use limits::Limits;
 use presence::{normalize_code, Presence};
 use rooms::{valid_room_id, Rooms};
 
@@ -36,6 +38,14 @@ struct AppState {
     apoio: Option<Arc<Apoio>>,
     /// Optional accounts (`DATABASE_PATH` + Google client); `None` when off.
     contas: Option<Arc<Contas>>,
+    /// Limits against abuse (src/limits.rs).
+    limits: Limits,
+}
+
+impl FromRef<AppState> for Limits {
+    fn from_ref(state: &AppState) -> Self {
+        state.limits.clone()
+    }
 }
 
 impl FromRef<AppState> for Option<Arc<Contas>> {
@@ -164,9 +174,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if contas.is_none() {
         println!("Contas desligadas (defina DATABASE_PATH, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e PUBLIC_URL)");
     }
+    // The peer address is the client's IP for the limits (behind Fly's proxy
+    // the real one comes in a header; see limits::ClientIp).
+    let app = app_full(
+        Rooms::new(max_peers),
+        ice,
+        gifs,
+        apoio,
+        contas,
+        Limits::from_env(),
+    );
     axum::serve(
         listener,
-        app_full(Rooms::new(max_peers), ice, gifs, apoio, contas),
+        app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await?;
     Ok(())
@@ -179,7 +199,7 @@ fn app(rooms: Rooms, ice: Arc<Ice>) -> Router {
 
 #[cfg(test)]
 fn app_with(rooms: Rooms, ice: Arc<Ice>, gifs: Arc<Gifs>, apoio: Option<Arc<Apoio>>) -> Router {
-    app_full(rooms, ice, gifs, apoio, None)
+    app_full(rooms, ice, gifs, apoio, None, Limits::default())
 }
 
 fn app_full(
@@ -188,6 +208,7 @@ fn app_full(
     gifs: Arc<Gifs>,
     apoio: Option<Arc<Apoio>>,
     contas: Option<Arc<Contas>>,
+    limits: Limits,
 ) -> Router {
     Router::new()
         .merge(contas::routes())
@@ -255,6 +276,11 @@ fn app_full(
         .route("/ws/{id}", get(signaling::ws_handler))
         // For the hosting platform's health checks.
         .route("/health", get(|| async { "ok" }))
+        // Per-IP budgets for the APIs and the sign-in routes.
+        .layer(axum::middleware::from_fn_with_state(
+            limits.clone(),
+            limits::limit_api,
+        ))
         .with_state(AppState {
             rooms,
             ice,
@@ -262,6 +288,7 @@ fn app_full(
             presence: Presence::default(),
             apoio,
             contas,
+            limits,
         })
 }
 
@@ -497,7 +524,13 @@ mod tests {
     async fn start_app(router: Router) -> String {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, router).await });
+        tokio::spawn(async move {
+            axum::serve(
+                listener,
+                router.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+        });
         format!("127.0.0.1:{}", addr.port())
     }
 
@@ -766,6 +799,84 @@ mod tests {
             .to_owned()
     }
 
+    fn app_limited(rooms: Rooms, limits: Limits) -> Router {
+        app_full(
+            rooms,
+            Ice::stun_only(),
+            Gifs::disabled(),
+            None,
+            None,
+            limits,
+        )
+    }
+
+    #[tokio::test]
+    async fn websocket_from_another_site_is_refused() {
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        let addr = start_server().await;
+        let mut request = format!("ws://{addr}/ws/sala1")
+            .into_client_request()
+            .unwrap();
+        request
+            .headers_mut()
+            .insert("origin", "https://malicioso.exemplo".parse().unwrap());
+        let err = tokio_tungstenite::connect_async(request).await.unwrap_err();
+        assert!(err.to_string().contains("403"), "{err}");
+
+        // Same site (Origin matches Host) is fine.
+        let mut request = format!("ws://{addr}/ws/sala1")
+            .into_client_request()
+            .unwrap();
+        let origin = format!("http://{addr}");
+        request
+            .headers_mut()
+            .insert("origin", origin.parse().unwrap());
+        assert!(tokio_tungstenite::connect_async(request).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn too_many_connections_from_one_address() {
+        let addr = start_app(app_limited(
+            Rooms::default(),
+            Limits::new(2, 100, Vec::new()),
+        ))
+        .await;
+        let _a = connect(&addr, "sala1").await;
+        let _b = connect(&addr, "sala2").await;
+        let err = tokio_tungstenite::connect_async(format!("ws://{addr}/ws/sala3"))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("429"), "{err}");
+        drop(_a);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert!(
+            tokio_tungstenite::connect_async(format!("ws://{addr}/ws/sala3"))
+                .await
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn no_new_rooms_when_the_server_is_full() {
+        let addr = start_app(app_limited(Rooms::with_max_rooms(12, 1), Limits::default())).await;
+        let mut first = connect(&addr, "sala1").await;
+        assert_eq!(recv(&mut first).await["type"], "welcome");
+        let mut second = connect(&addr, "sala2").await;
+        assert_eq!(recv(&mut second).await["type"], "busy");
+    }
+
+    #[tokio::test]
+    async fn api_budget_per_minute() {
+        let addr = start_server().await;
+        for _ in 0..20 {
+            let (head, _) = http(&addr, "GET", "/api/ice", "", "").await;
+            assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+        }
+        let (head, _) = http(&addr, "GET", "/api/ice", "", "").await;
+        assert!(head.starts_with("HTTP/1.1 429"), "{head}");
+        assert!(head.contains("retry-after: 60"));
+    }
+
     #[tokio::test]
     async fn accounts_are_off_without_configuration() {
         let addr = start_server().await;
@@ -796,6 +907,7 @@ mod tests {
             Gifs::disabled(),
             None,
             Some(contas::tests::memory(&token_url)),
+            Limits::default(),
         ))
         .await;
 

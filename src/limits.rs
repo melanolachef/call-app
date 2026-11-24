@@ -36,6 +36,8 @@ pub enum Kind {
     Rooms,
     Ice,
     Apoio,
+    /// Sign-in and account routes.
+    Conta,
 }
 
 impl Kind {
@@ -45,7 +47,7 @@ impl Kind {
         match self {
             Kind::Join => 30,
             Kind::Gifs => 60,
-            Kind::Friends | Kind::Rooms | Kind::Apoio => 40,
+            Kind::Friends | Kind::Rooms | Kind::Apoio | Kind::Conta => 40,
             Kind::Ice => 20,
         }
     }
@@ -57,6 +59,9 @@ impl Kind {
             "/api/rooms" => Some(Kind::Rooms),
             "/api/ice" => Some(Kind::Ice),
             "/api/apoio" | "/api/apoio/qr.svg" => Some(Kind::Apoio),
+            "/api/me" | "/auth/google" | "/auth/google/callback" | "/auth/sair" => {
+                Some(Kind::Conta)
+            }
             _ => None,
         }
     }
@@ -320,7 +325,9 @@ mod tests {
         assert!(limits.origin_allowed(&headers(Some("https://cpx-call.fly.dev"))));
         assert!(limits.origin_allowed(&headers(Some("https://outro.exemplo"))));
         assert!(!limits.origin_allowed(&headers(Some("https://malicioso.exemplo"))));
-        assert!(!limits.origin_allowed(&headers(Some("https://cpx-call.fly.dev.malicioso.exemplo"))));
+        assert!(
+            !limits.origin_allowed(&headers(Some("https://cpx-call.fly.dev.malicioso.exemplo")))
+        );
     }
 
     #[test]
