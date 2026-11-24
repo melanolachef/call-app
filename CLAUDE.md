@@ -63,7 +63,7 @@ a green test card, so override `getDisplayMedia` to return
 
 ## Estado atual
 
-_Atualizado em 2026-11-23._
+_Atualizado em 2026-11-24._
 
 - **No ar (main, publicado em 2026-11-18):** design novo
   (`docs/design/cpx-call-componentes.html`: quem assiste, direto/relay,
@@ -79,6 +79,15 @@ _Atualizado em 2026-11-23._
   amigo por aparelho, `/api/friends`, presença só em memória
   (`src/presence.rs`), invisível, "Usar em outro aparelho" para o app.
   GIF como foto de perfil e banner (#135), com o seletor do KLIPY no diálogo.
+  Design novo do celular (#146, `docs/design/cpx-call-mobile.html`, abas
+  Palco/Chat/Sons em `static/room/celular.js`). Apoio por Pix em `/apoiar`
+  (#148; `PIX_*` já no `fly secrets`).
+- **PR aberto #160 — contas opcionais com Google (fase 1 de 4,
+  `docs/CONTAS.md`):** SQLite em volume do Fly, só o `sub` do Google,
+  @usuário. **Não mergear na development antes de criar o volume `dados`**
+  (o `fly.toml` passa a montar `/data`) e o cliente OAuth no Google Cloud.
+- **Branch `feat/limites` (#149, estacionado):** `src/limits.rs` e filas
+  limitadas nas salas prontos; falta ligar em `signaling.rs`/`main.rs`.
 - **Design mobile novo (branch `feat/design-mobile`, PR aberto):**
   `docs/design/cpx-call-mobile.html` implementado só no layout de celular
   (computador igual): sala com abas Palco/Chat/Sons, barra de voz, carrossel
@@ -99,6 +108,12 @@ _Atualizado em 2026-11-23._
 
 ## Próximos passos
 
+0. **Abrir para o público sem susto:** terminar #149 (limites) e #150 (TURN
+   só para quem está em sala, antes de pôr a chave da Cloudflare); depois
+   contas fases 2–4 (#157 amizades por @usuário, #158 presença online/em
+   call/invisível, #159 perfil na conta), dono da sala (#151), termos e
+   privacidade (#152, obrigatório antes de ligar as contas em produção),
+   primeira vez (#153), operação (#154).
 1. **Fase 1 do app nativo ("o mais Rust possível"):** ao clicar em
    "Compartilhar tela" dentro do app, o Rust captura e codifica (protótipo
    acima) e envia com `str0m` (proposta do estudo em docs/nativo) numa conexão extra por pessoa que assiste,
