@@ -215,6 +215,7 @@ fn app_full(
     Router::new()
         .merge(contas::routes())
         .merge(contas::amizades::routes())
+        .merge(contas::perfil::routes())
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
         .route("/apoiar", get(|| async { Html(APOIAR_HTML) }))

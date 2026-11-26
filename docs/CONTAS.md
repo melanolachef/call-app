@@ -11,7 +11,7 @@ do Fly):
 
 | Tabela | O que tem | O que **não** tem |
 |---|---|---|
-| `users` | id interno, identificador opaco da conta Google (`sub`), @usuário, nome que aparece, data de criação | e-mail, nome do Google, foto do Google, IP |
+| `users` | id interno, identificador opaco da conta Google (`sub`), @usuário, nome que aparece, foto e banner do perfil, data de criação | e-mail, nome do Google, foto do Google, IP |
 | `sessions` | hash SHA-256 do token de sessão, a quem pertence, criação, último uso | o token em si |
 | `friendships` | par de contas, quem pediu, quando pediu e quando aceitou | mensagens, histórico de salas |
 
@@ -56,7 +56,11 @@ letra; único sem diferenciar maiúsculas; alguns nomes reservados.
   `/ws/presenca` (não manda nada; ping a cada 25 s); o servidor conta
   conexões por conta, só em memória. `/api/amigos` traz `online` (Início
   aberto ou numa sala) e `sala`. Invisível fecha a conexão.
-- **4 (#159) Perfil na conta:** foto, banner e nick sincronizados entre aparelhos.
+- **4 (#159) Perfil na conta — feita:** `GET/PUT /api/me/perfil` (nick, foto,
+  banner). O servidor confere as imagens como as páginas: só JPEG/PNG/WebP
+  embutidos cujos primeiros bytes são mesmo daquele tipo (banner só JPEG),
+  ou GIF `https://` do KLIPY, nos mesmos tamanhos máximos. Ao entrar, o
+  perfil salvo vale no aparelho; conta sem perfil recebe o do aparelho.
 
 Antes de abrir para o público: limites contra abuso (#149) e as páginas de
 termos e privacidade (#152), que precisam dizer exatamente o que está acima.
