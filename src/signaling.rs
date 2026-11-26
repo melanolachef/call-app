@@ -5,7 +5,7 @@ use std::time::Duration;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, State,
+        Path, RawQuery, State,
     },
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -19,7 +19,8 @@ use crate::contas::Contas;
 use crate::ice::Ice;
 use crate::limits::{too_many, Bucket, ClientIp, Connection, Kind, Limits};
 use crate::presence::Presence;
-use crate::rooms::{queue, valid_room_id, Join, Rooms, Rx};
+use crate::rooms::{queue, valid_room_id, Admin, Join, Rooms, Rx};
+use sha2::{Digest, Sha256};
 
 /// Large enough for any SDP offer/answer, small enough to bound memory.
 const MAX_MESSAGE_SIZE: usize = 64 * 1024;
@@ -44,6 +45,35 @@ struct ClientMsg {
     data: Value,
 }
 
+/// For the server: the room owner's commands (#151), `{"admin": {"kick": 3}}`
+/// or `{"admin": {"lock": true}}`. Only the owner's are obeyed.
+#[derive(Deserialize)]
+struct AdminMsg {
+    admin: AdminCmd,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum AdminCmd {
+    Kick(u32),
+    Lock(bool),
+}
+
+/// The owner key a browser keeps for this room (`?dono=`, 32 to 64 hex), as
+/// a hash: the raw key never stays on the server.
+fn owner_key(query: Option<&str>) -> Option<String> {
+    let key = query?
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("dono="))?;
+    let ok = (32..=64).contains(&key.len()) && key.bytes().all(|b| b.is_ascii_hexdigit());
+    ok.then(|| {
+        Sha256::digest(key.as_bytes())
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
+    })
+}
+
 /// For the server itself: "friends may see me here" (`secret` + `nick`), or
 /// `null` to stop (invisible). See presence.rs.
 #[derive(Deserialize)]
@@ -61,6 +91,7 @@ struct Announce {
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     Path(room_id): Path<String>,
+    RawQuery(query): RawQuery,
     State(rooms): State<Rooms>,
     State(presence): State<Presence>,
     State(ice): State<Arc<Ice>>,
@@ -89,12 +120,14 @@ pub async fn ws_handler(
     // Signed in: friends with an account see this room too (same rules as
     // friend codes: only while here, and not when invisible).
     let account = contas.and_then(|c| c.account_id(&headers).map(|id| (c, id)));
+    let key = owner_key(query.as_deref());
     ws.max_message_size(MAX_MESSAGE_SIZE)
         .on_upgrade(move |socket| {
-            handle_socket(socket, room_id, rooms, presence, ice, slot, account)
+            handle_socket(socket, room_id, rooms, presence, ice, slot, account, key)
         })
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_socket(
     mut socket: WebSocket,
     room_id: String,
@@ -103,9 +136,18 @@ async fn handle_socket(
     ice: Arc<Ice>,
     _slot: Connection, // held until the socket ends
     account: Option<(Arc<Contas>, i64)>,
+    key: Option<String>,
 ) {
     let (tx, rx) = queue();
-    match rooms.join(&room_id, tx) {
+    match rooms.join_as(&room_id, tx, key) {
+        Join::Locked => {
+            let _ = socket.send(text(&json!({ "type": "locked" }))).await;
+            let _ = socket.send(Message::Close(None)).await;
+        }
+        Join::Kicked => {
+            let _ = socket.send(text(&json!({ "type": "kicked" }))).await;
+            let _ = socket.send(Message::Close(None)).await;
+        }
         Join::Full => {
             // Best effort: the browser may already be gone.
             let full = json!({ "type": "full", "max": rooms.max_peers() });
@@ -154,7 +196,9 @@ async fn run(
     account: Option<&(Arc<Contas>, i64)>,
     mut rx: Rx,
 ) -> Result<(), axum::Error> {
-    let welcome = json!({ "type": "welcome", "id": id, "peers": others, "max": rooms.max_peers(), "ice": ice });
+    let state = rooms.state(room_id);
+    let welcome = json!({ "type": "welcome", "id": id, "peers": others, "max": rooms.max_peers(), "ice": ice,
+        "owner": state["owner"], "locked": state["locked"] });
     socket.send(text(&welcome)).await?;
 
     let mut messages = Bucket::new(MSG_RATE, MSG_BURST);
@@ -178,6 +222,12 @@ async fn run(
                     // Malformed messages are ignored rather than closing the socket.
                     if let Ok(msg) = serde_json::from_str::<ClientMsg>(msg.as_str()) {
                         rooms.relay(room_id, id, msg.to, msg.data);
+                    } else if let Ok(msg) = serde_json::from_str::<AdminMsg>(msg.as_str()) {
+                        let action = match msg.admin {
+                            AdminCmd::Kick(target) => Admin::Kick(target),
+                            AdminCmd::Lock(locked) => Admin::Lock(locked),
+                        };
+                        rooms.admin(room_id, id, action);
                     } else if let Ok(msg) = serde_json::from_str::<PresenceMsg>(msg.as_str()) {
                         match msg.presence {
                             Some(a) => {

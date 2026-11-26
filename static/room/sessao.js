@@ -118,7 +118,7 @@ let reconnectAt = 0; // when the next attempt starts (for the countdown)
 
 async function join() {
   hwH264 = await hwH264Ready; // needed before any peer (ICE servers come in the welcome)
-  const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/${roomId}`);
+  const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/${roomId}?dono=${ownerKey()}`);
   ws = socket;
   ws.onmessage = onMessage;
   ws.onclose = () => {
@@ -128,6 +128,21 @@ async function join() {
       shareBtn.disabled = true;
       clearInterval(timer);
       showNotice('Sala cheia', `Esta sala já tem ${maxPeers} pessoas. Tente de novo mais tarde ou crie outra.`);
+      return;
+    }
+    if (turnedAway) {
+      const why = turnedAway;
+      turnedAway = '';
+      clearInterval(timer);
+      [...peers.keys()].forEach(removePeer);
+      myId = null;
+      refresh();
+      if (why === 'kicked') {
+        left = true; // don't come back by ourselves
+        showNotice('Você foi removido da sala', 'O dono da sala tirou você daqui.', { label: 'Ir para o início', run: () => location.assign('/') });
+      } else {
+        showNotice('Sala trancada', 'O dono trancou esta sala: ninguém novo entra agora. Peça para destrancar e tente de novo.');
+      }
       return;
     }
     if (serverBusy) {
@@ -200,6 +215,8 @@ function onMessage(ev) {
   switch (msg.type) {
     case 'welcome': {
       myId = msg.id;
+      roomOwner = msg.owner ?? null;
+      roomLocked = !!msg.locked;
       useIceServers(msg.ice); // before any peer below is created
       maxPeers = msg.max ?? maxPeers;
       shareBtn.disabled = !canShare;
@@ -245,6 +262,18 @@ function onMessage(ev) {
     case 'busy': // too many rooms on the server (src/limits.rs)
       serverBusy = true;
       break;
+    case 'locked': // the owner locked the room (#151)
+    case 'kicked':
+      turnedAway = msg.type;
+      break;
+    case 'room': {
+      const wasLocked = roomLocked;
+      roomOwner = msg.owner ?? null;
+      roomLocked = !!msg.locked;
+      if (roomLocked !== wasLocked) addSystem(roomLocked ? 'O dono trancou a sala: ninguém novo entra.' : 'O dono destrancou a sala.');
+      refresh();
+      break;
+    }
   }
 }
 

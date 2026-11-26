@@ -635,13 +635,13 @@ mod tests {
         let mut a = connect(&addr, "room1").await;
         assert_eq!(
             recv(&mut a).await,
-            json!({ "type": "welcome", "id": 1, "peers": [], "max": rooms::DEFAULT_MAX_PEERS, "ice": ice::stun_servers() })
+            json!({ "type": "welcome", "id": 1, "peers": [], "max": rooms::DEFAULT_MAX_PEERS, "ice": ice::stun_servers(), "owner": null, "locked": false })
         );
 
         let mut b = connect(&addr, "room1").await;
         assert_eq!(
             recv(&mut b).await,
-            json!({ "type": "welcome", "id": 2, "peers": [1], "max": rooms::DEFAULT_MAX_PEERS, "ice": ice::stun_servers() })
+            json!({ "type": "welcome", "id": 2, "peers": [1], "max": rooms::DEFAULT_MAX_PEERS, "ice": ice::stun_servers(), "owner": null, "locked": false })
         );
         assert_eq!(
             recv(&mut a).await,
@@ -1048,6 +1048,45 @@ mod tests {
         drop(ws);
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         assert!(!online().await, "closed: gone");
+    }
+
+    #[tokio::test]
+    async fn room_owner_locks_and_kicks_over_websocket() {
+        let addr = start_server().await;
+        const OWNER: &str = "0123456789abcdef0123456789abcdef";
+        const OTHER: &str = "fedcba9876543210fedcba9876543210";
+        let join = |key: &str| {
+            let url = format!("ws://{addr}/ws/sala-dono?dono={key}");
+            async move { tokio_tungstenite::connect_async(url).await.unwrap().0 }
+        };
+        let mut owner = join(OWNER).await;
+        let welcome = recv(&mut owner).await;
+        assert_eq!(
+            (welcome["owner"].as_u64(), welcome["locked"].as_bool()),
+            (Some(1), Some(false))
+        );
+        let mut other = join(OTHER).await;
+        assert_eq!(recv(&mut other).await["owner"], 1);
+        recv(&mut owner).await; // peer-joined
+
+        // Not the owner: ignored. The owner: everyone learns the room is locked.
+        send(&mut other, json!({ "admin": { "lock": true } })).await;
+        send(&mut owner, json!({ "admin": { "lock": true } })).await;
+        assert_eq!(
+            recv(&mut owner).await,
+            json!({ "type": "room", "owner": 1, "locked": true })
+        );
+        let mut late = join("11111111111111111111111111111111").await;
+        assert_eq!(recv(&mut late).await["type"], "locked");
+
+        send(&mut owner, json!({ "admin": { "kick": 2 } })).await;
+        loop {
+            if recv(&mut other).await["type"] == "kicked" {
+                break;
+            }
+        }
+        let mut again = join(OTHER).await;
+        assert_eq!(recv(&mut again).await["type"], "kicked");
     }
 
     #[tokio::test]

@@ -37,6 +37,12 @@
     #invite { flex: none; padding: 0 12px; border-left: 1px solid var(--border); background: var(--raised); color: var(--text); font-size: 13px; }
     #invite:hover { filter: brightness(1.2); }
     #invite.copied { color: var(--online); background: var(--card); }
+    .lock-btn { flex: none; width: 34px; height: 34px; align-self: center; background: transparent; color: var(--muted); }
+    .lock-btn:hover { color: var(--text); background: var(--raised); }
+    .lock-btn[aria-pressed="true"] { color: var(--warn); background: rgb(255 159 10 / .14); }
+    .top-end .pill.locked { color: var(--warn); }
+    .owner-tag { margin-left: 6px; }
+    #pc-kick { margin-top: 8px; align-self: flex-start; }
     .top-end { margin-left: auto; flex: none; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
     .top-end .pill.live { border-color: transparent; background: var(--live-bg); color: var(--live); }
     .top-end .pill.reconnecting { color: var(--warn); }
@@ -606,8 +612,10 @@
         </div>
         <button id="invite" title="Copiar o convite da sala"><svg class="m-only" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg><span class="m-hide" id="invite-desk">Copiar</span><span class="m-only" id="invite-mob">Convidar</span></button>
       </div>
+      <button class="icon-btn lock-btn" id="lock-btn" hidden></button>
       <span class="top-end">
         <span class="pill reconnecting" id="reconnecting" role="status" hidden>Reconectando…</span>
+        <span class="pill locked" id="locked-pill" title="Ninguém novo entra até o dono destrancar" hidden>trancada</span>
         <span class="pill live" id="live" hidden><span class="dot" aria-hidden="true"></span>ao vivo</span>
         <span class="net" id="net" tabindex="0" role="img" aria-label="Qualidade da conexão" hidden>
           <svg viewBox="0 0 20 16" aria-hidden="true"><rect x="1" y="11" width="3.5" height="4" rx=".5"/><rect x="6.5" y="7.5" width="3.5" height="7.5" rx=".5"/><rect x="12" y="4" width="3.5" height="11" rx=".5"/></svg>
@@ -782,6 +790,7 @@
       <strong id="pc-name"></strong>
       <span class="pc-status" id="pc-status"></span>
       <button class="btn small" id="pc-edit" hidden>Editar perfil</button>
+      <button class="btn small danger" id="pc-kick" hidden>Expulsar da sala</button>
       <div class="pc-audio" id="pc-audio" hidden>
         <label class="pc-slider"><span>Volume da voz</span><output id="pc-voice-value">100%</output>
           <input type="range" id="pc-voice-volume" min="0" max="2" step="0.05" aria-label="Volume da voz só para você"></label>

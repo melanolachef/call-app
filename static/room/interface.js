@@ -111,6 +111,12 @@ function openPersonCard(person, anchor) {
   $('pc-status').textContent = person.self ? 'Você' : capitalize(person.status[0]);
   $('pc-status').className = `pc-status ${person.self ? '' : person.status[1]}`;
   $('pc-edit').hidden = !person.self;
+  $('pc-kick').hidden = person.self || !iOwnTheRoom();
+  $('pc-kick').onclick = () => {
+    if (!window.confirm(`Tirar ${person.name} da sala? Ele não consegue voltar enquanto a sala existir.`)) return;
+    sendAdmin({ kick: person.id });
+    closePersonCard();
+  };
   renderPersonAudio(person.self ? null : peers.get(person.id));
   personCard.hidden = false;
   // Beside the clicked row or card, kept inside the window; centered on phones.
@@ -179,6 +185,7 @@ function personRow(person) {
   const name = el('span', 'person-name');
   name.append(el('span', 'ellipsis', person.name));
   if (person.self) name.append(el('span', 'you', 'você'));
+  if (person.id === roomOwner) name.append(el('span', 'tag owner-tag', 'dono'));
   if (person.voiceIn) name.append(voiceIcon(person));
   const [status, cls] = person.status;
   text.append(name, el('span', `person-status ellipsis ${cls}`, status));
@@ -412,6 +419,7 @@ function refresh() {
   if (!soundPop.hidden) renderSoundpad(); // "entre na voz" hint follows the voice
   syncDesktopKeys();
   renderMobile(people);
+  renderRoomLock();
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
   $('share-short').textContent = localTrack ? 'Parar' : 'Compartilhar';
@@ -435,3 +443,20 @@ setInterval(async () => {
     }
   }
 }, 2000);
+
+// ---------- dono da sala: trancar (#151) ----------
+
+const LOCK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const UNLOCK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+
+function renderRoomLock() {
+  const button = $('lock-btn');
+  button.hidden = !iOwnTheRoom();
+  button.innerHTML = roomLocked ? LOCK_ICON : UNLOCK_ICON; // fixed markup
+  button.setAttribute('aria-pressed', String(roomLocked));
+  const label = roomLocked ? 'Destrancar a sala' : 'Trancar a sala (ninguém novo entra)';
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  $('locked-pill').hidden = !roomLocked || myId === null;
+}
+$('lock-btn').onclick = () => sendAdmin({ lock: !roomLocked });

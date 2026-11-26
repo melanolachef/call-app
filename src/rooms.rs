@@ -1,7 +1,7 @@
 //! In-memory rooms: who is in each one and how to reach them.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex, MutexGuard, PoisonError},
 };
 
@@ -32,6 +32,16 @@ pub fn queue() -> (Tx, Rx) {
 struct Room {
     next_id: u32,
     peers: HashMap<u32, Tx>,
+    /// Owner key (hash) of whoever opened the room (#151). Memory only, gone
+    /// with the room.
+    owner_key: Option<String>,
+    /// The connected participant holding the owner key, if any.
+    owner: Option<u32>,
+    /// Locked: only the owner may come in; who is already here stays.
+    locked: bool,
+    /// Each participant's key (hash), to keep someone kicked out.
+    keys: HashMap<u32, String>,
+    kicked: HashSet<String>,
 }
 
 /// All rooms, shared between connections. Cloning only clones the `Arc`.
@@ -59,6 +69,17 @@ pub enum Join {
     Full,
     /// Too many rooms on the server: no new one can open now.
     ServerFull,
+    /// The owner locked the room.
+    Locked,
+    /// The owner kicked this key out of the room.
+    Kicked,
+}
+
+/// What the owner may do (#151).
+#[derive(Debug, PartialEq)]
+pub enum Admin {
+    Kick(u32),
+    Lock(bool),
 }
 
 impl Rooms {
@@ -86,8 +107,15 @@ impl Rooms {
 
     /// Adds a participant to the room (creating the room if needed) and tells
     /// the others about it.
+    #[cfg(test)]
     pub fn join(&self, room_id: &str, tx: Tx) -> Join {
-        let (id, others, count) = {
+        self.join_as(room_id, tx, None)
+    }
+
+    /// Like `join`, with the browser's owner key for this room (its hash):
+    /// whoever opens the room owns it, and gets it back on reconnecting.
+    pub fn join_as(&self, room_id: &str, tx: Tx, key: Option<String>) -> Join {
+        let (id, others, count, owner_now) = {
             let mut rooms = self.lock();
             if !rooms.contains_key(room_id) && rooms.len() >= self.max_rooms {
                 drop(rooms);
@@ -95,6 +123,19 @@ impl Rooms {
                 return Join::ServerFull;
             }
             let room = rooms.entry(room_id.to_owned()).or_default();
+            if room.peers.is_empty() {
+                room.owner_key = key.clone(); // opened it: owns it
+            }
+            let is_owner = key.is_some() && key == room.owner_key;
+            if key.as_ref().is_some_and(|k| room.kicked.contains(k)) {
+                drop(rooms);
+                return Join::Kicked;
+            }
+            if room.locked && !is_owner {
+                drop(rooms);
+                println!("[sala {}] entrada recusada: sala trancada", short(room_id));
+                return Join::Locked;
+            }
             if room.peers.len() >= self.max_peers {
                 drop(rooms);
                 println!("[sala {}] entrada recusada: sala cheia", short(room_id));
@@ -108,7 +149,14 @@ impl Rooms {
                 .map(|(&peer_id, peer_tx)| (peer_id, peer_tx.clone()))
                 .collect();
             room.peers.insert(id, tx);
-            (id, others, room.peers.len())
+            if let Some(key) = key {
+                room.keys.insert(id, key);
+            }
+            let owner_now = is_owner && room.owner != Some(id);
+            if is_owner {
+                room.owner = Some(id);
+            }
+            (id, others, room.peers.len(), owner_now)
         };
 
         // Sent before join() returns, hence before the newcomer's welcome and
@@ -118,6 +166,9 @@ impl Rooms {
             &others,
             &json!({ "type": "peer-joined", "id": id }),
         );
+        if owner_now {
+            self.broadcast(room_id, &others, &self.state(room_id));
+        }
         println!(
             "[sala {}] participante {id} entrou ({count}/{})",
             short(room_id),
@@ -127,6 +178,68 @@ impl Rooms {
             id,
             others: others.into_iter().map(|(peer_id, _)| peer_id).collect(),
         }
+    }
+
+    /// `{"type": "room", "owner": id|null, "locked": bool}`.
+    pub fn state(&self, room_id: &str) -> Value {
+        let rooms = self.lock();
+        let room = rooms.get(room_id);
+        json!({
+            "type": "room",
+            "owner": room.and_then(|r| r.owner),
+            "locked": room.is_some_and(|r| r.locked),
+        })
+    }
+
+    /// An owner's command. Only the connected owner may; nobody kicks
+    /// themselves. Returns whether it happened.
+    pub fn admin(&self, room_id: &str, by: u32, action: Admin) -> bool {
+        let (everyone, kicked) = {
+            let mut rooms = self.lock();
+            let Some(room) = rooms.get_mut(room_id) else {
+                return false;
+            };
+            if room.owner != Some(by) {
+                return false;
+            }
+            let kicked = match action {
+                Admin::Lock(locked) => {
+                    room.locked = locked;
+                    None
+                }
+                Admin::Kick(target) => {
+                    if target == by {
+                        return false;
+                    }
+                    let Some(tx) = room.peers.remove(&target) else {
+                        return false;
+                    };
+                    if let Some(key) = room.keys.remove(&target) {
+                        room.kicked.insert(key);
+                    }
+                    Some((target, tx))
+                }
+            };
+            let everyone: Vec<(u32, Tx)> = room
+                .peers
+                .iter()
+                .map(|(&id, tx)| (id, tx.clone()))
+                .collect();
+            (everyone, kicked)
+        };
+        if let Some((target, tx)) = kicked {
+            // Their connection reads this, then sees its queue end and leaves
+            // (which tells the others "peer-left").
+            let _ = tx.try_send(json!({ "type": "kicked" }).to_string());
+            println!(
+                "[sala {}] participante {target} expulso pelo dono",
+                short(room_id)
+            );
+        } else {
+            println!("[sala {}] dono mudou o trancamento", short(room_id));
+        }
+        self.broadcast(room_id, &everyone, &self.state(room_id));
+        true
     }
 
     /// How many people are in each room; rooms that don't exist count 0.
@@ -186,6 +299,11 @@ impl Rooms {
                 return;
             };
             room.peers.remove(&id);
+            room.keys.remove(&id);
+            let owner_left = room.owner == Some(id);
+            if owner_left {
+                room.owner = None;
+            }
             let remaining = room
                 .peers
                 .iter()
@@ -202,6 +320,9 @@ impl Rooms {
             &remaining,
             &json!({ "type": "peer-left", "id": id }),
         );
+        if !remaining.is_empty() {
+            self.broadcast(room_id, &remaining, &self.state(room_id));
+        }
         println!(
             "[sala {}] participante {id} saiu ({}/{})",
             short(room_id),
@@ -376,6 +497,76 @@ mod tests {
             rx2.try_recv().is_err(),
             "the other participant is untouched"
         );
+    }
+
+    fn key(name: &str) -> Option<String> {
+        Some(name.to_owned())
+    }
+
+    #[test]
+    fn whoever_opens_the_room_owns_it() {
+        let rooms = Rooms::default();
+        let (a, _ra) = peer();
+        let (b, _rb) = peer();
+        rooms.join_as("r", a, key("dono"));
+        rooms.join_as("r", b, key("outro"));
+        assert_eq!(rooms.state("r")["owner"], 1);
+        // Only the owner's commands count.
+        assert!(!rooms.admin("r", 2, Admin::Lock(true)));
+        assert!(rooms.admin("r", 1, Admin::Lock(true)));
+        assert_eq!(rooms.state("r")["locked"], true);
+    }
+
+    #[test]
+    fn owner_gets_the_room_back_after_reconnecting() {
+        let rooms = Rooms::default();
+        let (a, _ra) = peer();
+        let (b, _rb) = peer();
+        let (c, _rc) = peer();
+        rooms.join_as("r", a, key("dono"));
+        rooms.join_as("r", b, key("outro"));
+        rooms.leave("r", 1);
+        assert_eq!(rooms.state("r")["owner"], Value::Null);
+        rooms.join_as("r", c, key("dono"));
+        assert_eq!(rooms.state("r")["owner"], 3);
+    }
+
+    #[test]
+    fn locked_room_lets_only_the_owner_in() {
+        let rooms = Rooms::default();
+        let (a, _ra) = peer();
+        rooms.join_as("r", a, key("dono"));
+        rooms.admin("r", 1, Admin::Lock(true));
+        assert_eq!(rooms.join_as("r", peer().0, key("outro")), Join::Locked);
+        assert_eq!(rooms.join_as("r", peer().0, None), Join::Locked);
+        assert!(
+            matches!(
+                rooms.join_as("r", peer().0, key("dono")),
+                Join::Joined { .. }
+            ),
+            "owner on another tab"
+        );
+    }
+
+    #[test]
+    fn kicked_out_and_kept_out() {
+        let rooms = Rooms::default();
+        let (a, mut ra) = peer();
+        let (b, mut rb) = peer();
+        rooms.join_as("r", a, key("dono"));
+        rooms.join_as("r", b, key("chato"));
+        while ra.try_recv().is_ok() {}
+        assert!(!rooms.admin("r", 1, Admin::Kick(1)), "not yourself");
+        assert!(rooms.admin("r", 1, Admin::Kick(2)));
+        assert_eq!(next(&mut rb), json!({ "type": "kicked" }));
+        assert_eq!(rooms.counts(&["r"]), vec![("r", 1)]);
+        assert_eq!(rooms.join_as("r", peer().0, key("chato")), Join::Kicked);
+        // The room forgets everything once empty.
+        rooms.leave("r", 1);
+        assert!(matches!(
+            rooms.join_as("r", peer().0, key("chato")),
+            Join::Joined { .. }
+        ));
     }
 
     #[test]
