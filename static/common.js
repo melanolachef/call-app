@@ -1007,14 +1007,19 @@ function setAccount(value) {
   accountListeners.forEach((callback) => callback(account));
 }
 
+let accountRetry = 0;
 async function loadAccount() {
   try {
     const res = await fetch('/api/me', { cache: 'no-store' });
     if (res.status === 404) return setAccount(null);
     if (res.status === 401) return setAccount({ signedIn: false });
     if (res.ok) return setAccount({ signedIn: true, ...(await res.json()) });
-  } catch { /* offline: try again on the next page load */ }
-  return setAccount(account ?? null);
+  } catch { /* offline */ }
+  // Busy (429), a deploy in progress, offline: not an answer about the
+  // account. Keep what we had and ask again a bit later.
+  accountRetry = Math.min(accountRetry + 1, 5);
+  setTimeout(loadAccount, 2000 * accountRetry);
+  return account;
 }
 
 function signInUrl() {
