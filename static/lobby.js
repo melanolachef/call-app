@@ -77,7 +77,11 @@ function pickTagline(hour = new Date().getHours()) {
 
 $('tagline').textContent = pickTagline();
 
+// The wide-screen home (painel.js) redraws from the same data.
+const lobbyChanged = () => window.dispatchEvent(new Event('lobby-changed'));
+
 function renderProfile() {
+  lobbyChanged();
   paintAvatar($('me-avatar'), nick || '?', 1, photo);
   $('me-nick').textContent = nick || 'Escolher nick';
   $('greeting').textContent = nick ? `${greeting()}, ${nick}.` : `${greeting()}.`;
@@ -92,7 +96,7 @@ function renderTagline() {
   $('tagline').textContent = n ? `${n} ${n === 1 ? 'amigo' : 'amigos'} em call agora.` : tagline;
 }
 
-$('appearance-btn').onclick = openAppearance;
+$('appearance-btn').onclick = () => openSettings('perfil');
 $('edit').onclick = () => openProfileDialog({
   title: nick ? 'Editar perfil' : 'Como seus amigos vão te ver?',
   submitLabel: 'Salvar',
@@ -219,6 +223,7 @@ function roomItem(room) {
 }
 
 function renderRooms() {
+  lobbyChanged();
   const list = orderedRooms();
   $('rooms-empty').hidden = list.some((r) => !r.home);
   $('rooms').replaceChildren(...list.map(roomItem));
@@ -312,6 +317,11 @@ function accountFriendItem(friend) {
     link.append(enter);
   }
   row.append(link);
+  const message = el('button', 'btn small ghost dm-btn', 'Mensagem');
+  message.type = 'button';
+  message.onclick = () => openDm(friend);
+  if (friend.nao_lidas) message.append(el('span', 'badge', String(friend.nao_lidas)));
+  row.append(message);
   const actions = el('span', 'room-actions');
   const remove = iconButton(ICON_X, `Desfazer amizade com ${accountFriendName(friend)}`);
   remove.onclick = () => {
@@ -347,6 +357,7 @@ function requestItem(friend) {
 }
 
 function renderFriends() {
+  lobbyChanged();
   const withAccount = !!accountFriends;
   $('friends-section').hidden = !friendsSupported && !withAccount;
   if ($('friends-section').hidden) return;

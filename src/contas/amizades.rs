@@ -249,6 +249,20 @@ impl Contas {
         in_lobby || self.where_is(user).is_some()
     }
 
+    /// A deleted account: drop everything kept in memory about it, so its
+    /// still-open pages stop showing it to anyone (ids can be reused).
+    pub fn forget_account(&self, user: i64) {
+        self.online().retain(|_, (who, _)| *who != user);
+        self.lobby
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&user);
+        self.inbox
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&user);
+    }
+
     /// The room `user` joined most recently, and for how long.
     pub fn where_is(&self, user: i64) -> Option<(String, u64)> {
         self.online()
@@ -310,11 +324,13 @@ async fn list(
         return Problem::Database.into_response();
     };
     let (mut friends, mut received, mut sent) = (Vec::new(), Vec::new(), Vec::new());
+    let unread = contas.unread(me.id);
     for (user, relation) in &all {
         let mut entry = person(user);
         match relation {
             Relation::Friend => {
                 entry["online"] = contas.is_online(user.id).into();
+                entry["nao_lidas"] = unread.get(&user.id).copied().unwrap_or(0).into();
                 if let Some((room, secs)) = contas.where_is(user.id) {
                     let count = rooms.counts(&[room.as_str()]).first().map_or(0, |c| c.1);
                     entry["sala"] = room.into();

@@ -38,6 +38,10 @@ pub enum Kind {
     Apoio,
     /// Sign-in and account routes.
     Conta,
+    /// Direct messages (a conversation is faster than the rest).
+    Mensagem,
+    /// Looking someone up by @username: low, so names can't be swept.
+    Busca,
 }
 
 impl Kind {
@@ -47,13 +51,24 @@ impl Kind {
         match self {
             Kind::Join => 30,
             Kind::Gifs => 60,
-            Kind::Friends | Kind::Rooms | Kind::Apoio | Kind::Conta => 40,
+            Kind::Friends | Kind::Rooms | Kind::Apoio => 40,
+            // Every open page refreshes the account and friends every 15 s,
+            // and a whole house shares one IP.
+            Kind::Conta => 120,
             Kind::Ice => 20,
+            Kind::Mensagem => 120,
+            Kind::Busca => 30,
         }
     }
 
     fn for_path(path: &str) -> Option<Self> {
-        if path.starts_with("/api/usuarios/") || path.starts_with("/api/amigos") {
+        if path.starts_with("/api/mensagens") {
+            return Some(Kind::Mensagem);
+        }
+        if path.starts_with("/api/usuarios/") {
+            return Some(Kind::Busca);
+        }
+        if path == "/api/me" || path.starts_with("/api/me/") || path.starts_with("/api/amigos") {
             return Some(Kind::Conta);
         }
         match path {

@@ -68,6 +68,7 @@
     .friend-status b { font-weight: 500; color: var(--text); }
     .friend-item .room-enter { margin-left: auto; }
     .request-actions { margin-left: auto; flex: none; display: flex; gap: 6px; }
+    .dm-btn { flex: none; margin-left: 8px; }
     #friends-btn .badge { margin-left: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-sm); background: var(--live); color: #000; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
     .friend-item .room-icon { color: #fff; font-weight: 600; text-transform: uppercase; }
     .empty { margin: 0; padding: 4px 20px 16px; font-size: 13px; color: var(--muted); }
@@ -114,6 +115,8 @@
       .friend-item .room-enter { margin: auto 0 0; padding: 0; height: 34px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-md); background: var(--raised-2); font-size: 14px; font-weight: 500; }
       .friend-item .room-actions { right: 6px; top: 8px; transform: none; padding: 0; background: none; }
       .friend-request .friend-status { white-space: normal; }
+      .friend-item:has(.dm-btn) { flex-direction: column; align-items: stretch; padding-right: 0; }
+      .friend-item .dm-btn { margin: 0 12px 12px; }
       .friend-request .request-actions { margin: auto 0 0; }
       #friends-empty { padding: 0; }
 
@@ -141,6 +144,113 @@
       .m-actions .btn { height: 50px; font-size: 16px; }
       .m-actions .btn.ghost { box-shadow: inset 0 0 0 1px var(--border); }
     }
+
+    /* ---------- início em telas largas (painel.js; docs/design/cpx-call-novas-telas.html) ---------- */
+    .top, .lobby { display: none; }
+    .home-panel { height: calc(100vh - var(--titlebar-h)); height: calc(100dvh - var(--titlebar-h)); display: grid; grid-template-columns: 72px 248px minmax(0, 1fr) 380px; }
+    .rail { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0; background: var(--bg); overflow-y: auto; }
+    .rail-logo { position: relative; display: flex; width: 46px; height: 46px; border-radius: 12px; }
+    .rail-logo img { width: 100%; height: 100%; border-radius: 12px; image-rendering: pixelated; }
+    .rail-logo::before { content: ''; position: absolute; left: -13px; top: 8px; width: 4px; height: 30px; border-radius: 0 3px 3px 0; background: var(--text); }
+    .rail-sep { width: 28px; height: 2px; border-radius: 1px; background: var(--raised-2); }
+    .rail-rooms { display: flex; flex-direction: column; gap: 8px; }
+    .rail-room, .rail-btn { position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--raised); color: var(--text); font-size: 15px; font-weight: 600; text-decoration: none; transition: border-radius .15s, background .15s; }
+    .rail-room:hover, .rail-btn:hover { border-radius: 14px; background: var(--raised-2); }
+    .rail-badge { position: absolute; right: -3px; bottom: -3px; min-width: 16px; height: 16px; padding: 0 4px; border: 2px solid var(--bg); border-radius: 5px; background: var(--online); color: #000; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .rail-btn { background: none; border: 1px dashed var(--raised-2); color: var(--muted); }
+    .rail-btn svg { width: 18px; height: 18px; }
+    .rail-gear { margin-top: auto; border: 0; }
+    .panel-side { min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: 12px 8px 0; background: var(--frame); border-right: 1px solid var(--line); }
+    .panel-search { display: flex; align-items: center; gap: 8px; height: 36px; margin-bottom: 8px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg); color: var(--faint); }
+    .panel-search svg { width: 15px; height: 15px; flex: none; }
+    .panel-search input { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font-size: 13px; outline: none; }
+    .panel-nav { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: var(--r-md); background: none; color: var(--muted); font-size: 14px; font-weight: 500; text-align: left; }
+    .panel-nav svg { width: 18px; height: 18px; }
+    .panel-nav:hover { background: var(--raised); color: var(--text); }
+    .panel-nav[aria-current="true"] { background: var(--raised); color: var(--text); }
+    .panel-count { margin-left: auto; font-size: 11px; color: var(--faint); }
+    .panel-group { margin: 16px 0 6px; padding: 0 10px; font-size: 11px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .02em; }
+    .panel-calls { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
+    .panel-call { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--r-md); color: var(--text); text-decoration: none; }
+    .panel-call:hover { background: var(--raised); }
+    .panel-call-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; }
+    .panel-call-sub { font-size: 12px; color: var(--online); }
+    .panel-faces { display: flex; flex: none; }
+    .panel-faces .avatar { width: 20px; height: 20px; border-radius: 5px; border: 2px solid var(--frame); font-size: 9px; }
+    .panel-faces .avatar + .avatar { margin-left: -5px; }
+    .panel-me { flex: none; display: flex; align-items: center; gap: 10px; margin: auto -8px 0; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--bg); }
+    .panel-me-face { width: 34px; height: 34px; padding: 0; font-size: 13px; cursor: pointer; }
+    .panel-me-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; }
+    .panel-me-text span { font-size: 12px; color: var(--muted); }
+    .panel-me-text span.online { color: var(--online); }
+    .panel-me .icon-btn { background: none; color: var(--muted); }
+    .panel-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+    .panel-head { flex: none; height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+    .panel-title-icon { display: flex; color: var(--muted); }
+    .panel-title-icon svg { width: 20px; height: 20px; }
+    .panel-head h1 { margin: 0; font-size: 16px; font-weight: 700; }
+    .panel-tabs { display: flex; align-items: center; gap: 6px; }
+    .panel-head-sep { width: 1px; height: 20px; margin: 0 6px; background: var(--border); }
+    .panel-tab { height: 30px; padding: 0 12px; border-radius: var(--r-md); background: none; color: var(--muted); font-size: 14px; font-weight: 500; }
+    .panel-tab:hover { color: var(--text); background: var(--raised); }
+    .panel-tab[aria-selected="true"] { background: var(--raised); color: var(--text); }
+    .panel-code-box { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .panel-code { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--card); font-size: 13px; }
+    .panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 20px 24px; }
+    .panel-body > .panel-group { padding: 0; margin: 20px 0 6px; }
+    .panel-list { list-style: none; margin: 0; padding: 0; }
+    .panel-friend, .panel-room { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-top: 1px solid var(--line); }
+    .panel-friend:hover, .panel-room:hover { background: rgb(255 255 255 / .02); }
+    .panel-face-wrap { position: relative; flex: none; display: flex; }
+    .panel-friend .avatar { width: 36px; height: 36px; font-size: 14px; }
+    .presence-dot { position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; border: 3px solid var(--bg); border-radius: 4px; background: var(--raised-2); }
+    .presence-dot.online, .presence-dot.call { background: var(--online); }
+    .panel-friend.off .panel-friend-text strong { color: var(--muted); }
+    .panel-friend-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; }
+    .panel-friend-status { font-size: 13px; color: var(--muted); }
+    .panel-friend.call .panel-friend-status { color: var(--online); }
+    .panel-friend-status b { font-weight: 500; }
+    .panel-friend .friend-more, .panel-room .friend-more { width: 30px; height: 30px; background: none; color: var(--muted); }
+    .panel-friend .friend-more:hover, .panel-room .friend-more:hover { background: var(--raised); color: var(--text); }
+    .panel-room .friend-more.pinned { color: var(--warn); }
+    .panel-unread .badge { margin-left: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-sm); background: var(--live); color: #000; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+    .panel-friend.request { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+    .panel-menu { position: fixed; z-index: 20; min-width: 180px; padding: 4px; display: flex; flex-direction: column; box-shadow: 0 12px 32px rgb(0 0 0 / .5); }
+    .panel-menu-item { height: 34px; padding: 0 10px; border-radius: var(--r-sm); background: none; color: var(--text); text-align: left; font-size: 14px; }
+    .panel-menu-item:hover { background: var(--raised); }
+    .panel-menu-item.danger { color: var(--danger); }
+    .panel-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 40px 6px; color: var(--muted); font-size: 14px; }
+    .panel-empty p { margin: 0; }
+    .panel-room-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: var(--text); text-decoration: none; }
+    .panel-room-link .tag { margin-left: 8px; }
+    .panel-room-count { flex: none; font-size: 13px; color: var(--faint); }
+    .panel-room-count.online { color: var(--online); }
+    .panel-create { display: flex; gap: 8px; margin: 16px 0 4px; }
+    .panel-create .input { flex: 1; height: 36px; }
+    .panel-create .btn { height: 36px; }
+    .panel-now { min-height: 0; overflow-y: auto; padding: 20px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+    .panel-now h2 { margin: 0; font-size: 16px; font-weight: 700; }
+    .now-rooms { display: flex; flex-direction: column; gap: 10px; }
+    .now-card { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card); }
+    .now-card .panel-friend-status { color: var(--muted); }
+    .now-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px; border: 1px dashed var(--border); border-radius: var(--r-lg); color: var(--muted); font-size: 13px; }
+    .now-empty p { margin: 0; }
+    .now-add { margin-top: 12px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+    .now-add p { margin: 0; font-size: 13px; line-height: 1.5; }
+    .now-add-form { display: flex; gap: 8px; }
+    .now-add-form .input { flex: 1; min-width: 0; height: 36px; }
+    .now-add-form .btn { height: 36px; }
+    .now-invisible { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+    .now-invisible .muted { margin-left: auto; font-size: 12px; }
+    @media (max-width: 1180px) {
+      .home-panel { grid-template-columns: 72px 248px minmax(0, 1fr); }
+      .panel-now { display: none; }
+    }
+    @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
+      .home-panel { display: none; }
+      .top { display: flex; }
+      .lobby { display: flex; }
+    }
   </style>
 </head>
 <body>
@@ -150,7 +260,7 @@
     <div class="top-end">
       <a class="btn small get-app round" id="get-app" href="https://github.com/melanolachef/call-app/releases/latest/download/CPX-Call-Windows.exe" title="Atalhos de voz que funcionam com o jogo em foco" hidden>Baixar app para Windows</a>
       <button class="btn small round get-app" id="install" title="Abre sem as barras do navegador, com a tela inteira para a live" hidden>Instalar</button>
-      <button class="icon-btn" id="appearance-btn" title="Aparência" aria-label="Aparência"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.4-1.1-.3-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4.3-4-7.7-9-7.7z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/></svg></button>
+      <button class="icon-btn" id="appearance-btn" title="Configurações" aria-label="Configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       <a class="btn small ghost signin-top" id="signin-top" href="/auth/google" title="Ganhe um @usuário e seus amigos em qualquer aparelho" hidden>Entrar</a>
       <button class="me-pill" id="edit" title="Editar perfil">
         <div class="avatar" id="me-avatar" aria-hidden="true"></div>
@@ -158,6 +268,54 @@
       </button>
     </div>
   </header>
+
+  <div class="home-panel" id="home-panel">
+    <nav class="rail" aria-label="Salas">
+      <a class="rail-logo" href="/" aria-current="page" title="Início"><img src="/favicon.svg" alt="Início"></a>
+      <span class="rail-sep" aria-hidden="true"></span>
+      <div class="rail-rooms" id="rail-rooms"></div>
+      <button type="button" class="rail-btn rail-new" id="rail-new" title="Nova sala" aria-label="Nova sala"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button type="button" class="rail-btn" id="rail-paste" title="Entrar com convite" aria-label="Entrar com convite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
+      <button type="button" class="rail-btn rail-gear" id="rail-settings" title="Configurações" aria-label="Configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    </nav>
+    <aside class="panel-side">
+      <label class="panel-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input id="panel-search" placeholder="Buscar amigo ou sala" autocomplete="off" aria-label="Buscar amigo ou sala"></label>
+      <button type="button" class="panel-nav" data-view="amigos"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/></svg>Amigos<span class="panel-count mono" id="panel-friends-count"></span></button>
+      <button type="button" class="panel-nav" data-view="salas"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Salas</button>
+      <h3 class="panel-group" id="panel-calls-title">Em call agora</h3>
+      <ul class="panel-calls" id="panel-calls"></ul>
+      <div class="panel-me">
+        <button type="button" class="avatar panel-me-face" id="panel-me-face" title="Editar perfil" aria-label="Editar perfil"></button>
+        <span class="panel-me-text"><strong class="ellipsis" id="panel-me-name"></strong><span class="ellipsis" id="panel-me-status"></span></span>
+        <button type="button" class="btn small ghost" id="panel-signin" hidden>Entrar</button>
+        <button type="button" class="icon-btn" id="panel-me-settings" title="Configurações" aria-label="Configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      </div>
+    </aside>
+    <main class="panel-main">
+      <header class="panel-head">
+        <span class="panel-title-icon" id="panel-title-icon" aria-hidden="true"></span>
+        <h1 id="panel-title">Amigos</h1>
+        <span class="panel-tabs" id="panel-tabs" role="tablist">
+          <span class="panel-head-sep" aria-hidden="true"></span>
+          <button type="button" class="panel-tab" role="tab" data-tab="online">Online</button>
+          <button type="button" class="panel-tab" role="tab" data-tab="todos">Todos</button>
+          <button type="button" class="btn small accent" id="panel-add">Adicionar amigo</button>
+        </span>
+        <span class="panel-code-box" id="now-code-box"><span class="muted">Seu código</span><span class="panel-code mono" id="panel-code"></span><button type="button" class="btn small ghost" id="panel-code-copy">Copiar</button></span>
+      </header>
+      <div class="panel-body" id="panel-body"></div>
+    </main>
+    <aside class="panel-now">
+      <h2>Agora</h2>
+      <div class="now-rooms" id="now-rooms"></div>
+      <div class="now-add">
+        <h2>Adicionar amigo</h2>
+        <p class="muted">Sem conta: cada pessoa tem um código. Cole o do seu amigo e mande o seu para ele. Com conta, use "Adicionar amigo" e o @usuário.</p>
+        <form class="now-add-form" id="now-add"><input class="input mono" id="now-code" placeholder="XXXX-XXXX" maxlength="200" autocomplete="off" aria-label="Código do amigo"><button class="btn small accent">Adicionar</button></form>
+        <label class="now-invisible"><input type="checkbox" class="settings-switch" id="now-invisible" role="switch"><span>Ficar invisível</span><span class="muted">você vê, eles não</span></label>
+      </div>
+    </aside>
+  </div>
 
   <main class="lobby">
     <div class="hello">
@@ -224,6 +382,8 @@
 
   <script src="/common.js"></script>
   <script src="/amigos.js"></script>
+  <script src="/configuracoes.js"></script>
   <script src="/lobby.js"></script>
+  <script src="/painel.js"></script>
 </body>
 </html>

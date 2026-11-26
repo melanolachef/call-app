@@ -26,6 +26,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 pub mod amizades;
+pub mod mensagens;
 pub mod perfil;
 
 const SESSION_COOKIE: &str = "cpx_sessao";
@@ -87,6 +88,19 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE users ADD COLUMN banner_image TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN profile_at INTEGER;
 ",
+    "
+    CREATE TABLE messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        recipient INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        read_at INTEGER
+    );
+    CREATE INDEX messages_pair ON messages(sender, recipient, id);
+    CREATE INDEX messages_unread ON messages(recipient, read_at);
+    CREATE INDEX messages_age ON messages(created_at);
+",
 ];
 
 pub struct Google {
@@ -105,6 +119,9 @@ pub struct Contas {
     online: Mutex<amizades::Online>,
     /// Open "I'm here" connections per account (the lobby, #158; memory only).
     lobby: Mutex<std::collections::HashMap<i64, usize>>,
+    /// Presence connections that get direct messages right away (#180).
+    inbox: Mutex<mensagens::Inbox>,
+    next_listener: std::sync::atomic::AtomicU64,
 }
 
 #[derive(Debug, PartialEq)]
@@ -174,6 +191,8 @@ impl Contas {
             public_url: public_url.trim_end_matches('/').to_owned(),
             online: Mutex::default(),
             lobby: Mutex::default(),
+            inbox: Mutex::default(),
+            next_listener: std::sync::atomic::AtomicU64::new(1),
         })
     }
 
@@ -314,6 +333,8 @@ pub enum Problem {
     NeedUsername,
     TooManyRequests,
     BadImage,
+    NotFriends,
+    EmptyMessage,
     Database,
 }
 
@@ -333,6 +354,8 @@ impl IntoResponse for Problem {
                 StatusCode::TOO_MANY_REQUESTS,
                 "Você tem pedidos demais esperando resposta. Espere alguns serem aceitos.",
             ),
+            Problem::NotFriends => (StatusCode::FORBIDDEN, "Só dá para mandar mensagem para amigos."),
+            Problem::EmptyMessage => (StatusCode::BAD_REQUEST, "A mensagem está vazia."),
             Problem::BadImage => (StatusCode::BAD_REQUEST, "Essa imagem não parece uma foto válida."),
             Problem::Database => (StatusCode::INTERNAL_SERVER_ERROR, "Algo deu errado. Tente de novo."),
         };
@@ -633,6 +656,7 @@ async fn delete_me(State(contas): State<ContasState>, headers: HeaderMap) -> Res
     if contas.delete_user(user.id).is_err() {
         return Problem::Database.into_response();
     }
+    contas.forget_account(user.id);
     clear_session(&contas)
 }
 

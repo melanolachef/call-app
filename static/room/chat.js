@@ -3,13 +3,10 @@
 // Chat goes through the signaling WebSocket (one copy per participant), so it
 // works even when the direct video connection fails. Nothing is stored.
 const MAX_CHAT = 500;
-const GROUP_MS = 5 * 60_000; // consecutive messages from the same person share a header
 const messagesEl = $('messages');
 const chatInput = $('chat-input');
 // Phones, upright or sideways (keep in sync with the CSS in room.html).
 const mobile = matchMedia('(max-width: 760px), (max-height: 500px) and (pointer: coarse)');
-let lastAuthor = null;
-let lastAt = 0;
 let unread = 0;
 
 function cleanChat(value) {
@@ -20,6 +17,7 @@ function setChatEnabled(on) {
   chatInput.disabled = !on;
   $('chat-send').disabled = !on;
   $('emoji-btn').disabled = !on;
+  $('photo-btn').disabled = !on;
   document.querySelectorAll('#chat-quick button').forEach((button) => (button.disabled = !on));
   if (!on) setEmojiPicker(false);
 }
@@ -68,29 +66,40 @@ const MAX_CHAT_ITEMS = 300;
 function appendToChat(item) {
   const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
   messagesEl.append(item);
-  while (messagesEl.childElementCount > MAX_CHAT_ITEMS) messagesEl.firstElementChild.remove();
+  while (messagesEl.childElementCount > MAX_CHAT_ITEMS) {
+    const old = messagesEl.firstElementChild;
+    old.querySelectorAll('img[src^="blob:"]').forEach((img) => URL.revokeObjectURL(img.src)); // photos (fotos.js)
+    old.remove();
+  }
   if (nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-function addMessage({ authorId, name, photo, text = '', gif = null, self = false }) {
+function addMessage({ authorId, name, photo, text = '', gif = null, image = null, self = false }) {
   const now = Date.now();
-  const grouped = authorId === lastAuthor && now - lastAt < GROUP_MS;
-  lastAuthor = authorId;
-  lastAt = now;
-
-  // No bubbles: a small photo, the name and the time on the first message of
-  // a run, then just the text.
-  const li = el('li', `msg${self ? ' self' : ''}${grouped ? ' grouped' : ''}`);
+  // No bubbles: a small photo, the name and the time on every message, so a
+  // long message that wraps never runs into the next one.
+  const li = el('li', `msg${self ? ' self' : ''}`);
   const time = new Date(now).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  if (!grouped) {
-    const avatar = el('div', 'avatar');
-    avatar.setAttribute('aria-hidden', 'true');
-    paintAvatar(avatar, name, authorId, photo);
-    const head = el('div', 'msg-head');
-    head.append(el('span', 'ellipsis', self ? `${name}` : name), el('span', 'msg-time', time));
-    li.append(avatar, head);
-  }
-  if (gif) {
+  const avatar = el('div', 'avatar');
+  avatar.setAttribute('aria-hidden', 'true');
+  paintAvatar(avatar, name, authorId, photo);
+  const head = el('div', 'msg-head');
+  head.append(el('span', 'ellipsis', name), el('span', 'msg-time', time));
+  li.append(avatar, head);
+  if (image) {
+    // A photo or GIF sent from someone's device (fotos.js): click to open it big.
+    const link = el('a', 'msg-photo-link');
+    link.href = image.url;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    const img = el('img', 'msg-gif msg-photo');
+    img.src = image.url;
+    img.alt = image.gif ? 'GIF' : 'Foto';
+    img.title = time;
+    if (image.w && image.h) img.style.aspectRatio = `${image.w} / ${image.h}`;
+    link.append(img);
+    li.append(link);
+  } else if (gif) {
     // Sized before it loads, so the chat doesn't jump when it arrives.
     const img = el('img', 'msg-gif');
     img.src = gif.url;
@@ -106,17 +115,17 @@ function addMessage({ authorId, name, photo, text = '', gif = null, self = false
     li.append(body);
   }
   appendToChat(li);
-  mirrorToRail(name, gif ? 'mandou um GIF' : text);
+  const what = image ? (image.gif ? 'mandou um GIF' : 'mandou uma foto') : gif ? 'mandou um GIF' : text;
+  mirrorToRail(name, what);
 
   if (!self) {
     unread += 1;
     updateUnread();
-    notify(name, gif ? 'mandou um GIF' : text, 'chat');
+    notify(name, what, 'chat');
   }
 }
 
 function addSystem(text) {
-  lastAuthor = null; // the next message starts a new group
   appendToChat(el('li', 'system', text));
 }
 

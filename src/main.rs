@@ -105,6 +105,7 @@ const ROOM_JS: &str = concat!(
     include_str!("../static/room/camera.js"),
     include_str!("../static/room/ptt.js"),
     include_str!("../static/room/chat.js"),
+    include_str!("../static/room/fotos.js"),
     include_str!("../static/room/emojis.js"),
     include_str!("../static/room/gifs.js"),
     include_str!("../static/room/notificacoes.js"),
@@ -115,10 +116,14 @@ const ROOM_JS: &str = concat!(
     include_str!("../static/room/rede.js"),
     include_str!("../static/room/celular.js"),
     include_str!("../static/room/denuncia.js"),
+    include_str!("../static/room/ajustes.js"),
+    include_str!("../static/room/sala-larga.js"),
     include_str!("../static/room/inicio.js"),
 );
 const LOBBY_JS: &str = include_str!("../static/lobby.js");
+const PAINEL_JS: &str = include_str!("../static/painel.js");
 const AMIGOS_JS: &str = include_str!("../static/amigos.js");
+const CONFIGURACOES_JS: &str = include_str!("../static/configuracoes.js");
 const COMMON_JS: &str = include_str!("../static/common.js");
 const COMMON_CSS: &str = include_str!("../static/common.css");
 const THEME_JS: &str = include_str!("../static/theme.js");
@@ -217,6 +222,7 @@ fn app_full(
         .merge(contas::routes())
         .merge(contas::amizades::routes())
         .merge(contas::perfil::routes())
+        .merge(contas::mensagens::routes())
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
         .route("/apoiar", get(|| async { Html(APOIAR_HTML) }))
@@ -227,7 +233,12 @@ fn app_full(
         .route("/api/apoio/qr.svg", get(apoio_qr))
         .route("/room.js", get(|| async { javascript(ROOM_JS) }))
         .route("/lobby.js", get(|| async { javascript(LOBBY_JS) }))
+        .route("/painel.js", get(|| async { javascript(PAINEL_JS) }))
         .route("/amigos.js", get(|| async { javascript(AMIGOS_JS) }))
+        .route(
+            "/configuracoes.js",
+            get(|| async { javascript(CONFIGURACOES_JS) }),
+        )
         .route("/common.js", get(|| async { javascript(COMMON_JS) }))
         .route("/theme.js", get(|| async { javascript(THEME_JS) }))
         .route(
@@ -601,6 +612,8 @@ mod tests {
             .contains("content-type: text/javascript"));
         assert!(get("/common.js").await.contains("text/javascript"));
         assert!(get("/lobby.js").await.contains("text/javascript"));
+        assert!(get("/configuracoes.js").await.contains("text/javascript"));
+        assert!(get("/painel.js").await.contains("text/javascript"));
         assert!(get("/amigos.js").await.contains("text/javascript"));
         assert!(get("/theme.js").await.contains("text/javascript"));
         assert!(get("/common.css").await.contains("content-type: text/css"));
