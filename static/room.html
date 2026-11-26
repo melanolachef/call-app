@@ -571,7 +571,7 @@
       .tile.has-cam .cam-video, .tile.has-cam .cam-video.mirror { position: static; flex: none; width: 60px; height: 60px; border-radius: 10px; }
       .tile.has-cam .tile-text { padding: 0; background: none; color: inherit; align-items: center; align-self: auto; }
       .tile.has-cam .tile-text .status { color: inherit; }
-      #tiles .tile.away { grid-column: 1 / -1; order: 1; flex-direction: row; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card) !important; }
+      #tiles .tile.away, .content.has-screens #tiles .tile.away { grid-column: 1 / -1; order: 1; flex-direction: row; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card) !important; }
       .tile.away .avatar, .tile.away.has-cam .cam-video { width: 36px; height: 36px; border-radius: var(--r-md); font-size: 14px; }
       .tile.away .tile-text { flex: 1; align-items: flex-start; text-align: left; }
       .tile.away strong { font-size: 15px; font-weight: 500; }
@@ -707,6 +707,28 @@
       #rail-input:focus { outline: none; border-color: var(--muted); }
       #rail-input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: rgb(11 11 12 / .9); color: var(--text); font-size: 16px; }
       #rail-form .btn { height: 40px; }
+    }
+    /* Cards of who is in the call, like Discord's voice tiles (computer only;
+       phones keep their own design). */
+    .tile-label, .live-badge { display: none; }
+    @media (min-width: 761px) {
+      .content:not(.has-screens) #tiles { display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 12px; overflow: hidden; }
+      .content:not(.has-screens) #tiles .tile { flex: none; width: var(--tile-w, 320px); }
+      .tile { aspect-ratio: 16 / 9; min-height: 0; gap: 0; border-radius: 10px; cursor: pointer; transition: filter .15s; }
+      .tile:hover { filter: brightness(1.08); }
+      .tile .avatar { width: clamp(56px, 24%, 104px); height: auto; aspect-ratio: 1; border-radius: 50%; font-size: clamp(20px, 3vw, 36px); box-shadow: 0 6px 20px rgb(0 0 0 / .35); transition: box-shadow .12s; }
+      .tile.speaking .avatar { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--online); }
+      .tile .tile-text, .tile .mute-badge { display: none; }
+      .tile.away { opacity: .55; }
+      .tile.away:hover { opacity: .8; }
+      .tile-label { display: flex; position: absolute; left: 8px; bottom: 8px; max-width: calc(100% - 16px); align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; background: rgb(0 0 0 / .6); color: #fff; font-size: 13px; font-weight: 600; line-height: 1.2; }
+      .tile-label .tl-icon { display: inline-flex; flex: none; color: var(--danger); }
+      .tile-label .tl-icon svg { width: 14px; height: 14px; }
+      .tile-label .tl-away { flex: none; font-weight: 400; color: rgb(255 255 255 / .7); }
+      .live-badge { display: block; position: absolute; top: 8px; right: 8px; padding: 2px 7px; border-radius: 4px; background: var(--live); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+      .tile.is-live { border-color: transparent; }
+      .tile.has-cam .tile-label { bottom: 8px; }
+      .content.has-screens #tiles .tile { width: 200px; height: auto; }
     }
   </style>
 </head>

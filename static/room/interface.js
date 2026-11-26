@@ -253,6 +253,20 @@ function personTile(person) {
   badge.setAttribute('aria-hidden', 'true');
   badge.innerHTML = ICONS.micOff; // fixed markup
   tile.append(avatar, text, badge);
+  // Computer, like Discord's voice tiles: the name in a dark label at the
+  // bottom-left with the mute/deafen icon, "AO VIVO" for whoever shares.
+  const label = el('span', 'tile-label');
+  label.append(el('span', 'ellipsis', person.name));
+  const deafened = person.self ? voice.deafened : false;
+  if (person.voiceIn && person.voiceMuted) {
+    const icon = el('span', 'tl-icon');
+    icon.innerHTML = deafened ? ICONS.headphonesOff : ICONS.micOff; // fixed markup
+    icon.title = deafened ? 'Sem som' : 'Mudo';
+    label.append(icon);
+  }
+  if (!person.voiceIn) label.append(el('span', 'tl-away', 'fora da voz'));
+  tile.append(label);
+  if (person.status[1] === 'live') tile.append(el('span', 'live-badge', 'AO VIVO'));
   if (person.p2p === 'off') tile.append(el('span', 'p2p-off', 'sem P2P'));
   return tile;
 }
@@ -410,6 +424,7 @@ function refresh() {
   const shown = (localTrack ? 1 : 0) + list.filter((p) => p.sharing).length;
   $('empty').hidden = shown > 0;
   $('content').classList.toggle('has-screens', shown > 0);
+  layoutTiles(); // after the cards and the screens are in place
   $('screens').style.setProperty('--cols', shown > 2 ? 2 : 1);
   $('live').hidden = shown === 0;
   $('reconnecting').hidden = true; // the banner on the stage says it now
@@ -469,3 +484,29 @@ function renderRoomLock() {
   $('locked-pill').hidden = !roomLocked || myId === null;
 }
 $('lock-btn').onclick = () => sendAdmin({ lock: !roomLocked });
+
+// ---------- grade dos cards (computador) ----------
+
+// Like Discord: for N people, try 1, 2, 3… columns and keep the one that gives
+// the biggest 16:9 cards that still fit the stage. Recomputed when the stage
+// or the number of cards changes.
+const TILE_GAP = 12;
+function layoutTiles() {
+  const box = $('tiles');
+  if (mobile.matches || $('content').classList.contains('has-screens')) {
+    box.style.removeProperty('--tile-w');
+    return;
+  }
+  const count = [...box.children].filter((t) => t.offsetParent !== null || t.style.display !== 'none').length;
+  const { width, height } = box.getBoundingClientRect();
+  if (!count || width < 50 || height < 50) return;
+  let best = 0;
+  for (let cols = 1; cols <= count; cols++) {
+    const rows = Math.ceil(count / cols);
+    const byWidth = (width - (cols - 1) * TILE_GAP) / cols;
+    const byHeight = ((height - (rows - 1) * TILE_GAP) / rows) * (16 / 9);
+    best = Math.max(best, Math.min(byWidth, byHeight));
+  }
+  box.style.setProperty('--tile-w', `${Math.floor(Math.min(best, 640))}px`);
+}
+new ResizeObserver(layoutTiles).observe($('tiles'));
