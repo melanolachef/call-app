@@ -176,6 +176,6 @@ function goToLobby() {
 $('leave').onclick = goToLobby;
 $('home').onclick = (e) => {
   e.preventDefault();
-  goToLobby();
+  if (okToLeave()) goToLobby();
 };
 
