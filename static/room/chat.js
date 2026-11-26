@@ -39,6 +39,8 @@ function updateUnread() {
   $('chat-badge').textContent = String(unread);
   $('tab-badge').hidden = unread === 0;
   $('tab-badge').textContent = String(unread);
+  $('unfold-badge').hidden = unread === 0;
+  $('unfold-badge').textContent = String(unread);
   document.title = unread ? `(${unread}) CPX Call` : 'CPX Call';
 }
 
@@ -179,3 +181,53 @@ $('home').onclick = (e) => {
   goToLobby();
 };
 
+
+// ---------- largura do chat (telas largas) ----------
+
+// Drag the chat's left edge to make it wider or narrower (remembered in this
+// browser); double-click puts it back. Dragging it almost shut folds it away,
+// like the button in its corner; a tab on the right edge brings it back.
+const CHAT_W = { min: 240, normal: 300, max: 640, fold: 180 };
+
+function setChatWidth(px, remember = true) {
+  const width = Math.round(Math.min(Math.max(px, CHAT_W.min), Math.min(CHAT_W.max, innerWidth * 0.45)));
+  document.documentElement.style.setProperty('--chat-w', `${width}px`);
+  $('chat-resize').setAttribute('aria-valuenow', String(width));
+  if (remember) save('chat-w', width === CHAT_W.normal ? '' : String(width));
+}
+
+setChatWidth(Number(load('chat-w')) || CHAT_W.normal, false);
+
+const chatHandle = $('chat-resize');
+chatHandle.setAttribute('aria-valuemin', String(CHAT_W.min));
+chatHandle.setAttribute('aria-valuemax', String(CHAT_W.max));
+let widthBeforeDrag = CHAT_W.normal;
+chatHandle.onpointerdown = (e) => {
+  widthBeforeDrag = Number(chatHandle.getAttribute('aria-valuenow')) || CHAT_W.normal;
+  chatHandle.setPointerCapture(e.pointerId);
+  document.body.classList.add('chat-resizing');
+};
+chatHandle.onpointermove = (e) => {
+  if (!chatHandle.hasPointerCapture(e.pointerId)) return;
+  const width = innerWidth - e.clientX - 16; // the chat keeps its 16px margin
+  if (width < CHAT_W.fold) {
+    chatHandle.releasePointerCapture(e.pointerId);
+    document.body.classList.remove('chat-resizing');
+    setChatWidth(widthBeforeDrag); // it comes back as it was
+    setChatShown(false); // dragged shut
+    return;
+  }
+  setChatWidth(width);
+};
+chatHandle.onpointerup = chatHandle.onpointercancel = () => document.body.classList.remove('chat-resizing');
+chatHandle.ondblclick = () => setChatWidth(CHAT_W.normal);
+chatHandle.onkeydown = (e) => {
+  const now = Number(chatHandle.getAttribute('aria-valuenow')) || CHAT_W.normal;
+  const step = e.shiftKey ? 60 : 20;
+  if (e.key === 'ArrowLeft') setChatWidth(now + step); // the chat grows to the left
+  else if (e.key === 'ArrowRight') setChatWidth(now - step);
+  else return;
+  e.preventDefault();
+};
+$('chat-fold').onclick = () => setChatShown(false);
+$('chat-unfold').onclick = () => setChatShown(true);
