@@ -1314,3 +1314,50 @@ function whenAgeOk(then) {
 
 loadAccount();
 
+
+// ---------- links dentro do app para Windows ----------
+
+// The app's WebView ignores new windows (target="_blank", window.open), so
+// links like "Apoiar" did nothing there. Inside the app, pages of this site
+// open in the same window, and outside links go to the system browser or
+// mail app (`open_url`). An older app without that command gets the link
+// copied, with a note to paste it in the browser.
+(() => {
+  const app = window.__TAURI__?.core;
+  if (!app) return;
+
+  async function openOutside(url) {
+    try {
+      await app.invoke('open_url', { url });
+      return;
+    } catch { /* an app from before open_url */ }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Link copiado: cole no navegador para abrir.', 5000);
+    } catch {
+      toast(url, 8000);
+    }
+  }
+
+  function route(href) {
+    let url;
+    try {
+      url = new URL(href, location.href);
+    } catch {
+      return;
+    }
+    if (url.origin === location.origin) location.assign(url.href); // this site: same window
+    else if (url.protocol === 'https:' || url.protocol === 'mailto:') openOutside(url.href);
+  }
+
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest?.('a[target="_blank"], a[href^="mailto:"]');
+    if (!link?.href || e.defaultPrevented) return;
+    e.preventDefault();
+    route(link.href);
+  });
+  window.open = (url) => {
+    if (url) route(String(url));
+    return null;
+  };
+})();
