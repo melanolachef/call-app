@@ -373,7 +373,7 @@ function refresh() {
   }
 
   renderSeats(people.length);
-  $('people').replaceChildren(...people.map(personRow));
+  renderPeopleGroups(people); // sala-larga.js
   $('tiles').replaceChildren(...people.map(personTile));
   $('tiles').classList.toggle('no-cams', !people.some((p) => p.camOn));
   observeTiles();
@@ -427,6 +427,7 @@ function refresh() {
   if (!soundPop.hidden) renderSoundpad(); // "entre na voz" hint follows the voice
   syncDesktopKeys();
   renderMobile(people);
+  renderWideSide(people);
   renderRoomLock();
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
