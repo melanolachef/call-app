@@ -17,6 +17,7 @@ function setChatEnabled(on) {
   chatInput.disabled = !on;
   $('chat-send').disabled = !on;
   $('emoji-btn').disabled = !on;
+  $('photo-btn').disabled = !on;
   document.querySelectorAll('#chat-quick button').forEach((button) => (button.disabled = !on));
   if (!on) setEmojiPicker(false);
 }
@@ -65,11 +66,15 @@ const MAX_CHAT_ITEMS = 300;
 function appendToChat(item) {
   const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
   messagesEl.append(item);
-  while (messagesEl.childElementCount > MAX_CHAT_ITEMS) messagesEl.firstElementChild.remove();
+  while (messagesEl.childElementCount > MAX_CHAT_ITEMS) {
+    const old = messagesEl.firstElementChild;
+    old.querySelectorAll('img[src^="blob:"]').forEach((img) => URL.revokeObjectURL(img.src)); // photos (fotos.js)
+    old.remove();
+  }
   if (nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-function addMessage({ authorId, name, photo, text = '', gif = null, self = false }) {
+function addMessage({ authorId, name, photo, text = '', gif = null, image = null, self = false }) {
   const now = Date.now();
   // No bubbles: a small photo, the name and the time on every message, so a
   // long message that wraps never runs into the next one.
@@ -81,7 +86,20 @@ function addMessage({ authorId, name, photo, text = '', gif = null, self = false
   const head = el('div', 'msg-head');
   head.append(el('span', 'ellipsis', name), el('span', 'msg-time', time));
   li.append(avatar, head);
-  if (gif) {
+  if (image) {
+    // A photo or GIF sent from someone's device (fotos.js): click to open it big.
+    const link = el('a', 'msg-photo-link');
+    link.href = image.url;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    const img = el('img', 'msg-gif msg-photo');
+    img.src = image.url;
+    img.alt = image.gif ? 'GIF' : 'Foto';
+    img.title = time;
+    if (image.w && image.h) img.style.aspectRatio = `${image.w} / ${image.h}`;
+    link.append(img);
+    li.append(link);
+  } else if (gif) {
     // Sized before it loads, so the chat doesn't jump when it arrives.
     const img = el('img', 'msg-gif');
     img.src = gif.url;
@@ -97,12 +115,13 @@ function addMessage({ authorId, name, photo, text = '', gif = null, self = false
     li.append(body);
   }
   appendToChat(li);
-  mirrorToRail(name, gif ? 'mandou um GIF' : text);
+  const what = image ? (image.gif ? 'mandou um GIF' : 'mandou uma foto') : gif ? 'mandou um GIF' : text;
+  mirrorToRail(name, what);
 
   if (!self) {
     unread += 1;
     updateUnread();
-    notify(name, gif ? 'mandou um GIF' : text, 'chat');
+    notify(name, what, 'chat');
   }
 }
 
