@@ -28,6 +28,7 @@ function createPeer(id, initiator) {
   peer.screen.volume.oninput = () => setVolume(Number(peer.screen.volume.value));
   peer.screen.volume.setAttribute('aria-label', 'Volume');
   peers.set(id, peer);
+  attachFileChannel(peer); // photos in the chat (fotos.js), before any offer
 
   pc.onicecandidate = (e) => {
     if (e.candidate) send(id, { candidate: e.candidate });
