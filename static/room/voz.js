@@ -349,11 +349,23 @@ let previewTrack = null; // mic opened just for the meter, when not in voice
 let previewAnalyser = null;
 let meterTimer = null;
 
-async function openVoiceSettings() {
+// Fills the voice controls with the current values (the dialog and the
+// "Voz" page of the settings share them).
+function renderVoiceSettings() {
   $('vs-ns').checked = voice.noiseSuppression;
   renderPttSettings();
   $('vs-volume').value = String(voice.volume);
+}
+
+async function openVoiceSettings() {
+  renderVoiceSettings();
   $('voice-settings').showModal();
+  await startVoicePreview();
+}
+
+// The input meter: opens the mic just for it when not in the voice.
+async function startVoicePreview() {
+  stopVoicePreview();
   try {
     voice.ctx ??= new AudioContext();
     await voice.ctx.resume();
@@ -403,12 +415,13 @@ async function switchMic() {
 }
 
 $('voice-settings-btn').onclick = openVoiceSettings;
-$('voice-settings').onclose = () => {
+function stopVoicePreview() {
   clearInterval(meterTimer);
   previewTrack?.stop();
   previewTrack = null;
   previewAnalyser = null;
-};
+}
+$('voice-settings').onclose = stopVoicePreview;
 $('vs-mic').onchange = () => {
   voice.deviceId = $('vs-mic').value;
   save('micId', voice.deviceId);

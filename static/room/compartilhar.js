@@ -214,7 +214,8 @@ function renderQualityPicker() {
   const { height, fps, priority } = quality;
   qualityBtn.querySelector('.q-label').textContent = `${height}p · ${fps}`;
   qualityBtn.title = `Qualidade ao compartilhar: ${height}p a ${fps} FPS, prioridade ${PRIORITY[priority].label.toLowerCase()}`;
-  if (qualityPop.hidden) return;
+  // Hidden popup, unless its controls are on the settings page (ajustes.js).
+  if (qualityPop.hidden && qualityPop.contains($('q-presets'))) return;
   $('q-presets').replaceChildren(...QUALITY_PRESETS.map((p) => {
     const pressed = p.height === height && p.fps === fps && p.priority === priority;
     const button = choiceButton('', pressed, () => setQuality({ height: p.height, fps: p.fps, priority: p.priority }));

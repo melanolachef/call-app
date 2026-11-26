@@ -92,7 +92,7 @@ function renderTagline() {
   $('tagline').textContent = n ? `${n} ${n === 1 ? 'amigo' : 'amigos'} em call agora.` : tagline;
 }
 
-$('appearance-btn').onclick = openAppearance;
+$('appearance-btn').onclick = () => openSettings('perfil');
 $('edit').onclick = () => openProfileDialog({
   title: nick ? 'Editar perfil' : 'Como seus amigos vão te ver?',
   submitLabel: 'Salvar',
