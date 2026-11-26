@@ -344,3 +344,23 @@ html.app-titlebar { --titlebar-h: 32px; }
   .settings-borrowed > .field > .select, .settings-borrowed > .field > input[type="range"], .settings-borrowed > .field > .meter, .settings-borrowed > .field > .btn { width: 100%; }
   .settings-sounds .sound-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ---------- grupo (grupos.js) ---------- */
+.group-dialog { width: min(460px, calc(100vw - 24px)); max-height: calc(100dvh - 48px); overflow-y: auto; }
+.gd-head { display: flex; align-items: center; gap: 12px; }
+.gd-head h2 { flex: 1; min-width: 0; }
+.gd-head .icon-btn { background: none; color: var(--muted); }
+.gd-invite { display: flex; gap: 8px; }
+.gd-invite .input { flex: 1; min-width: 0; height: 34px; font-size: 12px; color: var(--muted); }
+.gd-section { margin: 6px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.gd-list { list-style: none; margin: 0; padding: 0; }
+.gd-row { display: flex; align-items: center; gap: 10px; min-height: 40px; border-top: 1px solid var(--line); }
+.gd-row:first-child { border-top: 0; }
+.gd-row .avatar { width: 28px; height: 28px; font-size: 12px; }
+.gd-name { flex: 1; min-width: 0; color: var(--text); text-decoration: none; font-size: 14px; }
+a.gd-name:hover { text-decoration: underline; }
+.gd-name .tag { margin-left: 8px; padding: 0 5px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 11px; color: var(--faint); }
+.gd-add { display: flex; gap: 8px; }
+.gd-add .input { flex: 1; height: 34px; }
+.gd-foot { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.btn.ghost.danger { background: none; color: var(--danger); }

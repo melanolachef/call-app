@@ -883,47 +883,8 @@ function roomName(id) {
   return id.match(/^(.+)-[a-z0-9]{4,6}$/)?.[1] ?? id.slice(0, 8);
 }
 
-// Rooms you have been in, newest first: [{ id, at, pinned }].
-function loadRooms() {
-  try {
-    const list = JSON.parse(load('rooms') || '[]');
-    return Array.isArray(list) ? list.filter((r) => r && validRoomId(r.id)) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveRooms(list) {
-  save('rooms', JSON.stringify(list.slice(0, 30)));
-}
-
-function rememberRoom(id) {
-  const list = loadRooms();
-  const old = list.find((r) => r.id === id);
-  saveRooms([{ id, at: Date.now(), pinned: !!old?.pinned }, ...list.filter((r) => r.id !== id)]);
-}
-
-function roomUrl(id) {
-  return `${location.origin}/room/${id}`;
-}
-
-function slugify(text) {
-  return text.normalize('NFD').replace(/[̀-ͯ]/g, '') // "Sábado" -> "Sabado"
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    .slice(0, 40).replace(/-+$/, '');
-}
-
 function randomChars(count, alphabet) {
   return Array.from(crypto.getRandomValues(new Uint8Array(count)), (b) => alphabet[b % alphabet.length]).join('');
-}
-
-// A name gets a 6-character random suffix so strangers can't guess the room;
-// no name gives a fully random ID.
-function newRoomId(name) {
-  const slug = slugify(name);
-  return slug
-    ? `${slug}-${randomChars(6, 'abcdefghijklmnopqrstuvwxyz0123456789')}`
-    : randomChars(16, '0123456789abcdef');
 }
 
 function colorFor(id) {
@@ -932,58 +893,183 @@ function colorFor(id) {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
-// ---------- Block (sala fixa) ----------
+// ---------- grupos (#189) ----------
 
-// Your fixed room: created once in the lobby (after you pick a nick), kept in
-// this browser and always one click away (like a Discord group). It is a
-// normal room with a stable, unguessable ID named after you
-// ("block-de-lucas-x7k2p9"), so invited friends see whose room it is; the
-// server knows nothing about it. Without storage (private mode) it lasts until
-// the page is closed. Only reading never creates it: opening an invite
-// shouldn't leave a room behind in a friend's browser.
-let homeFallback = '';
-function homeRoomId() {
-  const saved = load('home-room');
-  return validRoomId(saved) ? saved : homeFallback;
+// Rooms live inside groups, like Discord servers: each group has an owner,
+// members, an invite link and its rooms (it starts with "geral"). No account
+// needed: this browser is a member by a random key it keeps (the server only
+// stores its hash); signing in moves its groups to the account. The list is
+// cached here so pages draw at once, then refreshed from /api/grupos.
+// Old room links (and the old "Block") still open, but no list shows them.
+
+let memoryDeviceKey = '';
+function deviceKey() {
+  let key = load('aparelho') || memoryDeviceKey;
+  if (!/^[0-9a-f]{32}$/.test(key)) {
+    key = randomChars(32, '0123456789abcdef');
+    save('aparelho', key);
+  }
+  memoryDeviceKey = key; // storage blocked: lasts while the page is open
+  return key;
 }
 
-function ensureHomeRoom(nick) {
-  const existing = homeRoomId();
-  // The first version made it a bare random code ("faa5361814923c29"), which
-  // friends saw as gibberish: swap it for a named one, keeping the old room
-  // in the list so links already sent still lead somewhere.
-  if (existing && !/^[0-9a-f]{16}$/.test(existing)) return existing;
-  if (existing) rememberRoom(existing);
-  const slug = slugify(nick);
-  const id = newRoomId(slug ? `block-de-${slug}` : 'meu-block');
-  homeFallback = id;
-  save('home-room', id);
-  return id;
+function cachedGroups() {
+  try {
+    const list = JSON.parse(load('grupos') || '[]');
+    return Array.isArray(list) ? list.filter((g) => g && Array.isArray(g.salas)) : [];
+  } catch {
+    return [];
+  }
 }
 
-function isHomeRoom(id) {
-  return !!id && id === homeRoomId();
+// [{ id, nome, dono, convite, membros, salas: [{ id, nome }] }]
+let groups = cachedGroups();
+let groupsOn = true; // false when the server has no database (no groups)
+
+async function groupRequest(method, path, body) {
+  const headers = { 'X-Cpx-Aparelho': deviceKey() };
+  if (body) headers['Content-Type'] = 'application/json';
+  try {
+    const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, data };
+  } catch {
+    return { ok: false, status: 0, data: { error: 'Sem conexão. Tente de novo.' } };
+  }
+}
+
+function setGroups(list) {
+  groups = list.map((g) => ({ ...g, membros: Array.isArray(g.membros) ? g.membros.length : g.membros }));
+  save('grupos', JSON.stringify(groups));
+  window.dispatchEvent(new Event('groups-changed'));
+}
+
+// A group the server just sent back (created, joined, changed): in place.
+function putGroup(group) {
+  const at = groups.findIndex((g) => g.id === group.id);
+  setGroups(at < 0 ? [...groups, group] : groups.map((g, i) => (i === at ? group : g)));
+}
+
+function dropGroup(id) {
+  setGroups(groups.filter((g) => g.id !== id));
+}
+
+async function loadGroups() {
+  const res = await groupRequest('GET', '/api/grupos');
+  if (res.status === 404) {
+    groupsOn = false;
+    window.dispatchEvent(new Event('groups-changed'));
+    return groups;
+  }
+  if (!res.ok) return groups; // offline: keep the cached list
+  setGroups(res.data.grupos ?? []);
+  syncGroupNick();
+  return groups;
+}
+
+// Members without an account show by the nick they had when they joined:
+// keep it current when it changes.
+function syncGroupNick() {
+  const nick = load('nick');
+  if (!nick || !groups.length || load('grupoNick') === nick) return;
+  groupRequest('PUT', '/api/grupos/nick', { nick }).then((res) => res.ok && save('grupoNick', nick));
+}
+
+function isGroupRoom(id) {
+  return /^g-[0-9a-f]{16}$/.test(id || '');
+}
+
+// { group, room } for a room of one of your groups, else null.
+function groupOfRoom(id) {
+  for (const group of groups) {
+    const room = group.salas.find((s) => s.id === id);
+    if (room) return { group, room };
+  }
+  return null;
+}
+
+// A group room you're not in turns you away: don't offer "Entrar" there.
+function canJoinRoom(id) {
+  return !isGroupRoom(id) || !!groupOfRoom(id);
+}
+
+function inviteUrl(code) {
+  return `${location.origin}/?convite=${code}`;
+}
+
+// "Os Cria" -> "oc" (rail buttons).
+function shortName(name) {
+  return Array.from(name.replace(/[^\p{L}\p{N}]/gu, '')).slice(0, 2).join('').toLowerCase() || '#';
 }
 
 function displayRoomName(id) {
-  return isHomeRoom(id) ? 'Block' : roomName(id);
+  const found = groupOfRoom(id);
+  if (found) return `${found.group.nome} · ${found.room.nome}`;
+  return isGroupRoom(id) ? 'sala de um grupo' : roomName(id);
 }
 
-// Fixed room first (when there is one), then pinned ones, then the rest by most recent.
+// Every room of your groups, group by group.
 function orderedRooms() {
-  const home = homeRoomId();
-  const rest = loadRooms()
-    .filter((r) => r.id !== home)
-    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.at - a.at);
-  return home ? [{ id: home, at: 0, pinned: true, home: true }, ...rest] : rest;
+  return groups.flatMap((group) => group.salas.map((room) => ({ id: room.id, name: room.nome, group })));
 }
+
+// "Novo grupo": asks the name, creates it, returns the group (or null).
+async function createGroup(name) {
+  const res = await groupRequest('POST', '/api/grupos', { nome: name, nick: load('nick') || '' });
+  if (!res.ok) {
+    toast(res.data.error || 'Não deu para criar o grupo.');
+    return null;
+  }
+  putGroup(res.data);
+  return res.data;
+}
+
+// The code in an invite link ("…/?convite=3fa9c01b2d4e") or the bare code.
+function parseInvite(text) {
+  const code = (text || '').trim().match(/convite=([0-9a-f]{12})/)?.[1] ?? (text || '').trim();
+  return /^[0-9a-f]{12}$/.test(code) ? code : null;
+}
+
+// Shows what the invite is and joins on "Entrar"; resolves to the group.
+async function acceptInvite(code) {
+  const preview = await groupRequest('GET', `/api/convites/${code}`);
+  if (!preview.ok) {
+    toast(preview.data.error || 'Esse convite não vale mais.', 5000);
+    return null;
+  }
+  const { nome, membros } = preview.data;
+  if (groups.some((g) => g.convite === code)) return groups.find((g) => g.convite === code);
+  if (!window.confirm(`Entrar no grupo "${nome}" (${membros} ${membros === 1 ? 'pessoa' : 'pessoas'})?`)) return null;
+  const res = await groupRequest('POST', `/api/convites/${code}`, { nick: load('nick') || '' });
+  if (!res.ok) {
+    toast(res.data.error || 'Não deu para entrar no grupo.', 5000);
+    return null;
+  }
+  putGroup(res.data);
+  toast(`Você entrou em ${res.data.nome}.`);
+  return res.data;
+}
+
+window.addEventListener('storage', (e) => {
+  if (e.key === 'grupos') { // changed in another tab
+    groups = cachedGroups();
+    window.dispatchEvent(new Event('groups-changed'));
+  }
+});
 
 // How many people are in each room now (server's /api/rooms); null if offline.
+// The server answers up to 30 rooms per request.
 async function fetchRoomCounts(ids) {
   if (!ids.length) return null;
+  const chunks = [];
+  for (let i = 0; i < ids.length && i < 120; i += 30) chunks.push(ids.slice(i, i + 30));
   try {
-    const res = await fetch(`/api/rooms?ids=${ids.join(',')}`, { cache: 'no-store' });
-    return res.ok ? await res.json() : null;
+    const parts = await Promise.all(chunks.map(async (chunk) => {
+      const res = await fetch(`/api/rooms?ids=${chunk.join(',')}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    }));
+    return Object.assign({}, ...parts);
   } catch {
     return null;
   }

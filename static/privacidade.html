@@ -31,7 +31,16 @@
     <p>O CPX Call é feito para guardar o mínimo possível. O vídeo, a voz e a câmera vão direto entre os aparelhos de quem está na sala; o servidor só apresenta as pessoas e repassa o chat, sem gravar. Esta página diz exatamente o que passa pelo servidor e o que fica guardado.</p>
 
     <h2>Sem conta</h2>
-    <p>Nada sobre você fica guardado no servidor. Seu nick, foto, banner, salas, amigos e aparência ficam só no seu navegador. Enquanto você está numa sala, o servidor tem na memória quem está nela e repassa as mensagens; quando você sai, isso some. Se você usa código de amigo e não está invisível, o servidor sabe em que sala esse código está só enquanto você está nela. Para saber quem é o dono de uma sala (quem a abriu, que pode trancar e expulsar), seu navegador manda um código aleatório por sala; o servidor guarda só uma impressão dele, na memória, enquanto a sala existe.</p>
+    <p>Fora os grupos (abaixo), nada sobre você fica guardado no servidor. Seu nick, foto, banner, amigos e aparência ficam só no seu navegador. Enquanto você está numa sala, o servidor tem na memória quem está nela e repassa as mensagens; quando você sai, isso some. Se você usa código de amigo e não está invisível, o servidor sabe em que sala esse código está só enquanto você está nela. Para saber quem é o dono de uma sala (quem a abriu, que pode trancar e expulsar), seu navegador manda um código aleatório por sala; o servidor guarda só uma impressão dele, na memória, enquanto a sala existe.</p>
+
+    <h2>Grupos</h2>
+    <p>As salas ficam dentro de grupos. Para o grupo saber quem faz parte dele, com ou sem conta, guardamos:</p>
+    <div class="wrap"><table>
+      <tr><th>O que</th><th>Para que</th><th>Por quanto tempo</th></tr>
+      <tr><td>O nome do grupo, o nome de cada sala, o código do convite e quem é o dono</td><td>Mostrar o grupo e as salas para quem faz parte</td><td>Até o dono apagar o grupo (ou apagar a conta, se tiver)</td></tr>
+      <tr><td>Quem faz parte: a sua conta ou, sem conta, uma impressão (hash) de um código aleatório que o seu navegador cria; o nick com que você entrou; quando entrou</td><td>Deixar só quem faz parte entrar nas salas do grupo, e mostrar quem está no grupo</td><td>Até você sair do grupo, o dono tirar você, ou o grupo ser apagado</td></tr>
+    </table></div>
+    <p>Quem está no grupo vê os nicks (e o @usuário de quem tem conta) de todo mundo que faz parte dele. Se você entrar com Google depois, os grupos do seu navegador passam para a sua conta. Para sair de um grupo, abra o grupo e toque em "Sair do grupo".</p>
 
     <h2>Com conta (opcional)</h2>
     <p>Quem entra com Google ganha um @usuário. Para isso, guardamos:</p>
@@ -51,7 +60,7 @@
     <ul>
       <li>Vídeo, voz, câmera e telas compartilhadas: vão direto entre os aparelhos, criptografados. O servidor não vê.</li>
       <li>Mensagens do chat da sala: o servidor repassa e esquece. Fotos do chat vão direto entre os aparelhos.</li>
-      <li>Em quais salas você esteve e com quem.</li>
+      <li>Em quais salas você esteve e com quem (o servidor só sabe de quais grupos você faz parte).</li>
       <li>Seu endereço IP: o servidor usa na hora (para conectar e para limitar abuso) e não grava. Os registros do servidor têm só números de participante e o começo do código da sala.</li>
     </ul>
 
@@ -70,7 +79,7 @@
     <h2>Seus direitos (LGPD)</h2>
     <ul>
       <li><b>Ver e corrigir</b>: seu @usuário e nome ficam no seu perfil, e você troca quando quiser.</li>
-      <li><b>Apagar</b>: Perfil › Conta › Apagar conta apaga tudo na hora. Some das cópias diárias em até 5 dias.</li>
+      <li><b>Apagar</b>: Perfil › Conta › Apagar conta apaga tudo na hora, inclusive os grupos que você criou. Sem conta, sair de cada grupo apaga você dele. Some das cópias diárias em até 5 dias.</li>
       <li><b>Sair de todos os aparelhos</b> e qualquer outro pedido: fale com a gente.</li>
     </ul>
 

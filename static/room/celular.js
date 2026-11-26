@@ -113,7 +113,7 @@ function renderMobile(people) {
   if (myId === null) return;
   const inVoice = people.filter((p) => p.voiceIn);
   const match = /-([a-z0-9]{6})$/.exec(roomId);
-  const suffix = match && !isHomeRoom(roomId) ? `-${match[1]} · ` : '';
+  const suffix = match && !isGroupRoom(roomId) ? `-${match[1]} · ` : '';
   $('sub-info').textContent = `${suffix}${people.length}/${maxPeers}`;
 
   // Palco

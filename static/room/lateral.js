@@ -1,8 +1,14 @@
-// ---------- suas salas (barra lateral) ----------
+// ---------- salas do grupo (barra lateral) ----------
 
-// Same list as the lobby (fixed room first), so you can hop between rooms
-// without going back. The counts come from the server's /api/rooms.
+// The rooms of this room's group (#189), so you can hop between them without
+// going back; in an old link room, all your groups' rooms. The counts come
+// from the server's /api/rooms (for every group: the rail shows them too).
 let hudCounts = {};
+
+function hudRooms() {
+  const here = groupOfRoom(roomId);
+  return here ? here.group.salas.map((s) => ({ id: s.id, name: s.nome })) : orderedRooms();
+}
 
 // Leaving while sharing cuts everyone watching: ask first.
 function okToLeave() {
@@ -24,17 +30,21 @@ function hudItem(room) {
   const count = hudCounts[room.id];
   const text = el('span', 'hud-count', count === undefined ? '' : count === 0 ? 'vazia' : `${count} ${count === 1 ? 'pessoa' : 'pessoas'}`);
   if (count > 0 && !current) text.classList.add('online');
-  link.append(el('span', 'hud-name ellipsis', displayRoomName(room.id)));
-  if (room.home) link.append(el('span', 'tag', 'fixa'));
-  link.append(text);
+  link.append(el('span', 'hud-name ellipsis', groupOfRoom(roomId) ? room.name : displayRoomName(room.id)), text);
   const li = el('li');
   li.append(link);
   return li;
 }
 
 function renderHud() {
-  $('hud-rooms').replaceChildren(...orderedRooms().map(hudItem));
+  const here = groupOfRoom(roomId);
+  $('hud-title').textContent = here ? here.group.nome : 'Seus grupos';
+  $('hud-group').hidden = !here;
+  $('hud-new').hidden = !here?.group.dono; // only the owner makes rooms
+  $('hud').hidden = !hudRooms().length;
+  $('hud-rooms').replaceChildren(...hudRooms().map(hudItem));
   renderRoomRail(); // sala-larga.js
+  renderSideRooms();
 }
 
 async function updateHudCounts() {
@@ -46,15 +56,28 @@ async function updateHudCounts() {
 }
 
 
-$('hud-new').onsubmit = (e) => {
+$('hud-new').onsubmit = async (e) => {
   e.preventDefault();
-  if (!okToLeave()) return;
-  const id = newRoomId($('hud-new-name').value);
-  location.assign(`/room/${id}`);
+  const here = groupOfRoom(roomId);
+  if (!here) return;
+  const res = await groupRequest('POST', `/api/grupos/${here.group.id}/salas`, { nome: $('hud-new-name').value });
+  if (!res.ok) return toast(res.data.error || 'Não deu para criar a sala.', 4000);
+  $('hud-new-name').value = '';
+  putGroup(res.data);
+  toast('Sala criada.');
+};
+$('hud-group').onclick = () => {
+  const here = groupOfRoom(roomId);
+  if (here) openGroup(here.group.id);
 };
 
 renderHud();
 updateHudCounts();
+loadGroups(); // the cached list may be old (or empty on a new device)
+window.addEventListener('groups-changed', () => {
+  renderHud();
+  updateHudCounts();
+});
 setInterval(updateHudCounts, 15_000);
 
 // ---------- amigos em call (barra lateral) ----------
@@ -121,9 +144,11 @@ window.addEventListener('storage', renderHud); // changed from another tab
 // Phones open the system share sheet (WhatsApp etc.); elsewhere a ready-made
 // message goes to the clipboard.
 async function invite() {
-  const url = location.href;
-  const text = isHomeRoom(roomId)
-    ? 'Bora? Entra no meu Block do CPX Call:'
+  const here = groupOfRoom(roomId);
+  // A group room only lets members in: send the group's invite (#189).
+  const url = here ? inviteUrl(here.group.convite) : location.href;
+  const text = here
+    ? `Bora? Entra no grupo ${here.group.nome} do CPX Call:`
     : `Bora? Entra na sala ${roomName(roomId)} do CPX Call:`;
   if (navigator.share && mobile.matches) {
     try {

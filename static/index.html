@@ -38,6 +38,12 @@
     #rooms li + li, #friends li + li { border-top: 1px solid var(--border-strong); margin-left: 70px; }
     #rooms li + li .room-item, #friends li + li .room-item { margin-left: -70px; }
     .room-item { position: relative; display: flex; align-items: center; padding-right: 12px; }
+    #rooms .group-head { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 12px 6px 20px; border-top: 1px solid var(--border); }
+    #rooms .group-head:first-child { border-top: 0; }
+    .group-open { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0; background: none; color: var(--text); text-align: left; }
+    .group-open strong { font-size: 16px; }
+    .group-open .muted { font-size: 12px; }
+    #rooms li.group-head + li .room-item { margin-left: 0; }
     .room-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 12px 8px 12px 20px; color: var(--text); text-decoration: none; }
     .room-icon { flex: none; width: 36px; height: 36px; border-radius: var(--r-md); background: var(--raised); color: var(--soft); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; text-transform: lowercase; }
     .room-icon svg { width: 18px; height: 18px; }
@@ -80,7 +86,7 @@
     /* ---------- celular (docs/design/cpx-call-mobile.html, "Início") ----------
        Friends as a row of cards, the rooms as a plain list, and the two
        actions fixed at the bottom. */
-    .m-only, .m-actions, #rooms-edit { display: none; }
+    .m-only, .m-actions { display: none; }
     @media (max-width: 760px), (max-height: 500px) and (pointer: coarse) {
       .m-only { display: inline; }
       .m-hide, .grid, #appearance-btn { display: none !important; }
@@ -134,9 +140,7 @@
       .presence i + i { margin-left: -6px; }
       .room-count { font-size: 14px; }
       .chevron.m-only { display: block; width: 16px; height: 16px; }
-      #rooms-edit { display: inline-flex; }
       .room-actions { right: 40px; }
-      body:not(.editing) .room-actions { display: none; }
       #rooms li + li .room-actions { right: 40px; }
 
       /* Nova sala / Colar convite, always at hand. */
@@ -225,6 +229,14 @@
     .panel-room-link .tag { margin-left: 8px; }
     .panel-room-count { flex: none; font-size: 13px; color: var(--faint); }
     .panel-room-count.online { color: var(--online); }
+    .rail .rail-room.current { background: var(--text); color: var(--bg); }
+    .rail .rail-room.current::before { content: ''; position: absolute; left: -13px; top: 7px; width: 4px; height: 30px; border-radius: 0 3px 3px 0; background: var(--text); }
+    .rail:has(.rail-room.current) .rail-logo::before { display: none; }
+    .panel-room-hash { flex: none; width: 20px; color: var(--faint); font-size: 18px; text-align: center; }
+    .panel-group-actions { display: flex; gap: 8px; margin: 16px 0 4px; }
+    .panel-group-title { display: flex; align-items: baseline; gap: 10px; width: 100%; margin: 22px 0 6px; padding: 0 6px; background: none; color: var(--text); font-size: 15px; text-align: left; }
+    .panel-group-title .muted { font-size: 13px; }
+    .panel-group-title:hover strong { text-decoration: underline; }
     .panel-create { display: flex; gap: 8px; margin: 16px 0 4px; }
     .panel-create .input { flex: 1; height: 36px; }
     .panel-create .btn { height: 36px; }
@@ -270,18 +282,18 @@
   </header>
 
   <div class="home-panel" id="home-panel">
-    <nav class="rail" aria-label="Salas">
+    <nav class="rail" aria-label="Grupos">
       <a class="rail-logo" href="/" aria-current="page" title="Início"><img src="/favicon.svg" alt="Início"></a>
       <span class="rail-sep" aria-hidden="true"></span>
       <div class="rail-rooms" id="rail-rooms"></div>
-      <button type="button" class="rail-btn rail-new" id="rail-new" title="Nova sala" aria-label="Nova sala"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button type="button" class="rail-btn rail-new" id="rail-new" title="Novo grupo" aria-label="Novo grupo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       <button type="button" class="rail-btn" id="rail-paste" title="Entrar com convite" aria-label="Entrar com convite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
       <button type="button" class="rail-btn rail-gear" id="rail-settings" title="Configurações" aria-label="Configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
     </nav>
     <aside class="panel-side">
-      <label class="panel-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input id="panel-search" placeholder="Buscar amigo ou sala" autocomplete="off" aria-label="Buscar amigo ou sala"></label>
+      <label class="panel-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input id="panel-search" placeholder="Buscar amigo ou grupo" autocomplete="off" aria-label="Buscar amigo ou grupo"></label>
       <button type="button" class="panel-nav" data-view="amigos"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/></svg>Amigos<span class="panel-count mono" id="panel-friends-count"></span></button>
-      <button type="button" class="panel-nav" data-view="salas"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Salas</button>
+      <button type="button" class="panel-nav" data-view="salas"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Grupos</button>
       <h3 class="panel-group" id="panel-calls-title">Em call agora</h3>
       <ul class="panel-calls" id="panel-calls"></ul>
       <div class="panel-me">
@@ -320,21 +332,21 @@
   <main class="lobby">
     <div class="hello">
       <h1 id="greeting">Olá.</h1>
-      <p id="tagline">Abra uma sala e mande o link para a galera.</p>
+      <p id="tagline">Bora juntar o grupo?</p>
     </div>
 
     <div class="grid">
       <form class="panel card" id="create-form">
-        <h2>Nova sala</h2>
-        <label class="sr-only" for="room-name">Nome da sala (opcional)</label>
-        <input class="input" id="room-name" maxlength="40" placeholder="Nome (opcional)" autocomplete="off">
-        <button class="btn primary">Criar sala</button>
+        <h2>Novo grupo</h2>
+        <label class="sr-only" for="room-name">Nome do grupo</label>
+        <input class="input" id="room-name" maxlength="32" placeholder="Nome do grupo" autocomplete="off" required>
+        <button class="btn primary">Criar grupo</button>
       </form>
 
       <form class="panel card" id="join-form">
         <h2>Entrar com convite</h2>
-        <label class="sr-only" for="join-link">Link ou código da sala</label>
-        <input class="input" id="join-link" placeholder="Cole o link ou o código" autocomplete="off">
+        <label class="sr-only" for="join-link">Link do convite</label>
+        <input class="input" id="join-link" placeholder="Cole o link do convite" autocomplete="off">
         <button class="btn">Entrar</button>
       </form>
     </div>
@@ -352,12 +364,11 @@
 
     <section class="rooms" aria-labelledby="rooms-title">
       <div class="section-head">
-        <h2 class="section-title" id="rooms-title">Suas salas</h2>
-        <button class="btn small ghost" id="rooms-edit" aria-pressed="false">Editar</button>
+        <h2 class="section-title" id="rooms-title">Seus grupos</h2>
       </div>
       <div class="card">
         <ul id="rooms" aria-labelledby="rooms-title"></ul>
-        <p class="empty" id="rooms-empty">As salas por onde você passar ficam aqui, com quem está nelas agora.</p>
+        <p class="empty" id="rooms-empty">Crie um grupo e mande o convite para a galera. As salas ficam dentro dele.</p>
       </div>
     </section>
     <p class="support" id="support" hidden><a href="/apoiar">Apoiar o CPX Call</a> · sem anúncio, a galera ajuda a pagar o servidor</p>
@@ -365,8 +376,8 @@
   </main>
 
   <div class="m-actions">
-    <button class="btn primary" id="m-new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova sala</button>
-    <button class="btn ghost" id="m-paste"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>Colar convite</button>
+    <button class="btn primary" id="m-new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Novo grupo</button>
+    <button class="btn ghost" id="m-paste"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>Entrar com convite</button>
   </div>
 
   <dialog id="m-dialog" aria-labelledby="m-dialog-title">
@@ -382,6 +393,7 @@
 
   <script src="/common.js"></script>
   <script src="/amigos.js"></script>
+  <script src="/grupos.js"></script>
   <script src="/configuracoes.js"></script>
   <script src="/lobby.js"></script>
   <script src="/painel.js"></script>

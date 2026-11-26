@@ -65,10 +65,15 @@ impl Kind {
         if path.starts_with("/api/mensagens") {
             return Some(Kind::Mensagem);
         }
-        if path.starts_with("/api/usuarios/") {
+        // Invites are guessable only by trying: as slow as looking up names.
+        if path.starts_with("/api/usuarios/") || path.starts_with("/api/convites/") {
             return Some(Kind::Busca);
         }
-        if path == "/api/me" || path.starts_with("/api/me/") || path.starts_with("/api/amigos") {
+        if path == "/api/me"
+            || path.starts_with("/api/me/")
+            || path.starts_with("/api/amigos")
+            || path.starts_with("/api/grupos")
+        {
             return Some(Kind::Conta);
         }
         match path {
