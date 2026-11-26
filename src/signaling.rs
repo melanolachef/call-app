@@ -209,6 +209,49 @@ async fn run(
     }
 }
 
+/// `GET /ws/presenca`: the page is open (lobby, the Windows app) for the
+/// signed-in account, so friends see "online" (#158). Nothing is sent; the
+/// page closes it to go invisible. Same checks as joining a room.
+pub async fn presence_handler(
+    ws: WebSocketUpgrade,
+    State(limits): State<Limits>,
+    State(contas): State<Option<Arc<Contas>>>,
+    ClientIp(ip): ClientIp,
+    headers: HeaderMap,
+) -> Response {
+    let Some(contas) = contas else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let Some(user) = contas.account_id(&headers) else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    if !limits.origin_allowed(&headers) {
+        return (StatusCode::FORBIDDEN, "Origem não permitida").into_response();
+    }
+    if !limits.allow(Kind::Join, ip) {
+        return too_many();
+    }
+    let Ok(slot) = limits.connect(ip) else {
+        return too_many();
+    };
+    ws.max_message_size(1024).on_upgrade(move |mut socket| async move {
+        let _slot = slot;
+        contas.came_online(user);
+        let mut ping = tokio::time::interval(PING_EVERY);
+        ping.tick().await;
+        loop {
+            tokio::select! {
+                incoming = socket.recv() => match incoming {
+                    Some(Ok(Message::Close(_)) | Err(_)) | None => break,
+                    Some(Ok(_)) => {} // nothing to say; pongs land here too
+                },
+                _ = ping.tick() => if socket.send(Message::Ping(Default::default())).await.is_err() { break },
+            }
+        }
+        contas.went_away(user);
+    })
+}
+
 fn text(value: &Value) -> Message {
     Message::Text(value.to_string().into())
 }

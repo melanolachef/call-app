@@ -277,6 +277,7 @@ fn app_full(
         .route("/api/ice", get(ice_servers))
         .route("/api/gifs", get(gif_search))
         .route("/api/friends", get(friends))
+        .route("/ws/presenca", get(signaling::presence_handler))
         .route("/ws/{id}", get(signaling::ws_handler))
         // For the hosting platform's health checks.
         .route("/health", get(|| async { "ok" }))
@@ -991,6 +992,61 @@ mod tests {
             serde_json::from_str::<Value>(&body).unwrap()["amigos"],
             json!([])
         );
+    }
+
+    #[tokio::test]
+    async fn friends_see_you_online_while_the_page_is_open() {
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        let contas = contas::tests::memory("http://nada");
+        let session = |sub: &str, username: &str| {
+            let id = contas.user_for_google(sub).unwrap();
+            contas
+                .update_user(id, Some(username), Some(username))
+                .unwrap();
+            let user = contas
+                .user_by_token(&contas.new_session(id).unwrap())
+                .unwrap();
+            (
+                user,
+                format!("cpx_sessao={}", contas.new_session(id).unwrap()),
+            )
+        };
+        let (lucas, lucas_cookie) = session("g-1", "lucas");
+        let (bia, bia_cookie) = session("g-2", "bia");
+        contas.request(&lucas, "bia").unwrap();
+        contas.accept(bia.id, lucas.id).unwrap();
+        let addr = start_app(app_full(
+            Rooms::default(),
+            Ice::stun_only(),
+            Gifs::disabled(),
+            None,
+            Some(contas.clone()),
+            Limits::default(),
+        ))
+        .await;
+        let online = || async {
+            let (_, body) = http(&addr, "GET", "/api/amigos", &bia_cookie, "").await;
+            serde_json::from_str::<Value>(&body).unwrap()["amigos"][0]["online"] == json!(true)
+        };
+        assert!(!online().await);
+
+        let err = tokio_tungstenite::connect_async(format!("ws://{addr}/ws/presenca"))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("401"), "signed out: {err}");
+
+        let mut request = format!("ws://{addr}/ws/presenca")
+            .into_client_request()
+            .unwrap();
+        request
+            .headers_mut()
+            .insert("cookie", lucas_cookie.parse().unwrap());
+        let (ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert!(online().await, "page open: online");
+        drop(ws);
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert!(!online().await, "closed: gone");
     }
 
     #[tokio::test]

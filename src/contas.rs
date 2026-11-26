@@ -96,6 +96,8 @@ pub struct Contas {
     public_url: String,
     /// Which room connections belong to which account (memory only).
     online: Mutex<amizades::Online>,
+    /// Open "I'm here" connections per account (the lobby, #158; memory only).
+    lobby: Mutex<std::collections::HashMap<i64, usize>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -164,6 +166,7 @@ impl Contas {
             google,
             public_url: public_url.trim_end_matches('/').to_owned(),
             online: Mutex::default(),
+            lobby: Mutex::default(),
         })
     }
 

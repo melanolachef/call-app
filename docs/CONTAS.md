@@ -52,8 +52,10 @@ letra; único sem diferenciar maiúsculas; alguns nomes reservados.
   `/?u=usuario`. Onde o amigo está vem do mesmo aviso de presença da sala
   (respeita o invisível), só em memória. Os códigos de amigo continuam para
   quem não tem conta.
-- **3 (#158) Presença:** uma conexão leve aberta também no Início; amigos veem
-  online, em qual sala, ou nada (invisível). Só em memória.
+- **3 (#158) Presença — feita:** o Início, logado e não invisível, abre
+  `/ws/presenca` (não manda nada; ping a cada 25 s); o servidor conta
+  conexões por conta, só em memória. `/api/amigos` traz `online` (Início
+  aberto ou numa sala) e `sala`. Invisível fecha a conexão.
 - **4 (#159) Perfil na conta:** foto, banner e nick sincronizados entre aparelhos.
 
 Antes de abrir para o público: limites contra abuso (#149) e as páginas de
