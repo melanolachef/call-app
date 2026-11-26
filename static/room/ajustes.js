@@ -69,6 +69,8 @@ registerSettings('notificacoes', {
   title: 'Notificações',
   render(box) {
     box.append(settingsHead('Notificações', 'Avisos do sistema quando esta aba não está na frente.'));
+    const sound = settingsSwitch(shareSoundOn, 'Som de transmissão', setShareSound);
+    box.append(settingsRow('Som quando alguém começa ou para de compartilhar', 'Um toque curto, mesmo com a aba na frente. Fica quieto quando você silencia todo mundo (Fone).', sound));
     if ($('notify-btn').hidden) {
       box.append(el('p', 'settings-note', 'Este navegador não deixa o site mandar avisos.'));
       return null;
