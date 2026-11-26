@@ -26,6 +26,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 pub mod amizades;
+pub mod perfil;
 
 const SESSION_COOKIE: &str = "cpx_sessao";
 const STATE_COOKIE: &str = "cpx_oauth";
@@ -79,6 +80,12 @@ const MIGRATIONS: &[&str] = &[
         CHECK (user_a < user_b)
     );
     CREATE INDEX friendships_b ON friendships(user_b);
+",
+    "
+    ALTER TABLE users ADD COLUMN photo TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN banner_color TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN banner_image TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN profile_at INTEGER;
 ",
 ];
 
@@ -306,6 +313,7 @@ pub enum Problem {
     SelfFriend,
     NeedUsername,
     TooManyRequests,
+    BadImage,
     Database,
 }
 
@@ -325,6 +333,7 @@ impl IntoResponse for Problem {
                 StatusCode::TOO_MANY_REQUESTS,
                 "Você tem pedidos demais esperando resposta. Espere alguns serem aceitos.",
             ),
+            Problem::BadImage => (StatusCode::BAD_REQUEST, "Essa imagem não parece uma foto válida."),
             Problem::Database => (StatusCode::INTERNAL_SERVER_ERROR, "Algo deu errado. Tente de novo."),
         };
         (status, Json(json!({ "error": error }))).into_response()

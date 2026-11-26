@@ -713,10 +713,8 @@ $('profile-form').onsubmit = (e) => {
   if (stored.includes(false)) toast('O navegador não deixou guardar o perfil: ele vale só até fechar esta página.', 6000);
   $('profile').close();
   profileOnSave?.(nick, draftPhoto);
-  // With an account, the name friends see follows the nick.
-  if (account?.signedIn && nick !== account.nick) {
-    accountRequest('POST', '/api/me', { nick }).then(({ ok, data }) => ok && setAccount({ signedIn: true, ...data }));
-  }
+  // With an account, the profile is saved there too (every device gets it).
+  if (account?.signedIn) pushProfile();
 };
 
 // Another tab of this browser changed the profile: `callback` refreshes this one.
@@ -725,6 +723,7 @@ function onProfileChangedElsewhere(callback) {
   window.addEventListener('storage', (e) => {
     if (e.key === null || PROFILE_KEYS.includes(e.key)) callback();
   });
+  window.addEventListener('profile-synced', callback); // brought from the account
 }
 
 let toastTimer = null;
@@ -1141,5 +1140,35 @@ $('account-delete').onclick = async () => {
     });
   }
 })();
+
+// ---------- perfil na conta (#159) ----------
+
+// Signed in, the profile lives in the account: on this device it is replaced
+// by the saved one; an account that never saved one gets this device's.
+async function pushProfile() {
+  const { ok, data } = await accountRequest('PUT', '/api/me/perfil', {
+    nick: load('nick'), photo: load('photo'), bannerColor: load('bannerColor'), bannerImage: load('bannerImage'),
+  });
+  if (!ok) toast(data.error ? `${data.error} O perfil ficou só neste aparelho.` : 'O perfil ficou só neste aparelho.', 5000);
+  else if (account?.signedIn && data.nick !== account.nick) setAccount({ ...account, nick: data.nick });
+}
+
+let profileChecked = false;
+async function syncProfileWithAccount(value) {
+  if (!value?.signedIn || profileChecked) return;
+  profileChecked = true;
+  const { ok, data } = await accountRequest('GET', '/api/me/perfil');
+  if (!ok) return;
+  if (!data.salvo) {
+    if (load('nick')) pushProfile();
+    return;
+  }
+  const saved = { nick: data.nick, photo: data.photo, bannerColor: data.bannerColor, bannerImage: data.bannerImage };
+  const changed = Object.entries(saved).filter(([key, value]) => (load(key) || '') !== (value || ''));
+  if (!changed.length) return;
+  changed.forEach(([key, value]) => save(key, value || ''));
+  window.dispatchEvent(new Event('profile-synced'));
+}
+onAccountChange(syncProfileWithAccount);
 
 loadAccount();
