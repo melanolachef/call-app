@@ -226,11 +226,15 @@ $('me-mic').onclick = micClick;
 $('rail-mic').onclick = micClick;
 $('deafen').onclick = () => setDeafened(!voice.deafened);
 $('me-deafen').onclick = () => setDeafened(!voice.deafened);
-document.addEventListener('keydown', (e) => { // Ctrl+Shift+M, like Discord
-  if (voice.joined && e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'm') {
-    e.preventDefault();
-    toggleMic();
-  }
+// Shortcuts like Discord's: Ctrl+Shift+M mutes the mic, Ctrl+Shift+D the
+// headphones (everyone). In the Windows app they also work with a game in
+// front (desktop/src/keys.rs → window.cpxDesktop).
+const VOICE_SHORTCUTS = { m: () => toggleMic(), d: () => setDeafened(!voice.deafened) };
+document.addEventListener('keydown', (e) => {
+  const run = VOICE_SHORTCUTS[e.key.toLowerCase()];
+  if (!run || !voice.joined || !e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return;
+  e.preventDefault(); // Ctrl+Shift+D would bookmark every tab
+  run();
 });
 
 // Speaking rings: a cheap level check 10 times a second, only while in voice.
@@ -299,7 +303,7 @@ function renderVoiceUi() {
     button.innerHTML = voice.deafened ? ICONS.headphonesOff : ICONS.headphones;
     button.setAttribute('aria-pressed', String(voice.deafened));
     button.setAttribute('aria-label', label);
-    button.title = label;
+    button.title = `${label} (Ctrl+Shift+D)`;
   }
   if (!$('voice-settings-btn').innerHTML) $('voice-settings-btn').innerHTML = ICONS.sliders;
   if (!$('voice-leave').innerHTML) $('voice-leave').innerHTML = ICONS.hangup;

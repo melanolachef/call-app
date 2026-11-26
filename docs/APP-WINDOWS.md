@@ -1,7 +1,7 @@
 # App para Windows
 
 O app abre a mesma sala do site numa janela própria e faz o que o navegador não
-consegue: a **tecla de falar** e o **Ctrl+Shift+M** funcionam com o jogo em
+consegue: a **tecla de falar**, o **Ctrl+Shift+M** (microfone) e o **Ctrl+Shift+D** (fone) funcionam com o jogo em
 primeiro plano.
 
 - **Download:** [CPX-Call-Windows.exe](https://github.com/melanolachef/call-app/releases/latest/download/CPX-Call-Windows.exe) (sempre a versão mais nova), também no botão **Baixar app para Windows** do início, que só aparece no Windows.
@@ -14,7 +14,7 @@ A janela carrega o site, então toda mudança na página chega sem atualizar o a
 
 Para os atalhos, a página diz ao app qual tecla vigiar (comando `set_ptt_key`).
 Um gancho de teclado do Windows (`WH_KEYBOARD_LL`) **observa** só essa tecla e o
-Ctrl+Shift+M, sem consumir nenhuma (o jogo continua recebendo), e descarta todas
+Ctrl+Shift+M e Ctrl+Shift+D, sem consumir nenhuma (o jogo continua recebendo), e descarta todas
 as outras ali mesmo. Quando a própria janela do app está na frente, o gancho fica
 quieto e a página cuida das teclas.
 

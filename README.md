@@ -39,13 +39,13 @@ entrou, e a conta (opcional) guarda só o @usuário e um identificador do Google
 | Recurso | O que dá para fazer |
 |---|---|
 | **Compartilhar tela** | Cada pessoa compartilha a própria tela, com o **som** do jogo ou da aba. Um botão escolhe a **qualidade**: resolução (480p a 1440p), FPS (15, 30 ou 60) e se, quando faltar fôlego, mantém a fluidez (jogos) ou a nitidez (texto), com atalhos Jogo, Jogo liso e Texto. Quem assiste vê em tela cheia ou numa janela flutuante por cima do jogo. |
-| **Voz** | Canal de voz como no Discord, com supressão de ruído, anel verde em quem fala, **apertar para falar** e **Ctrl+Shift+M** para mutar. |
+| **Voz** | Canal de voz como no Discord, com supressão de ruído, anel verde em quem fala, **apertar para falar** e atalhos para mutar o microfone (**Ctrl+Shift+M**) e o fone (**Ctrl+Shift+D**). |
 | **Câmera** | Câmera leve no card de cada pessoa, enviada só para quem está vendo o card. |
 | **Chat** | Mensagens em balões, emojis e reações que flutuam pela tela. Nada fica salvo. |
 | **Block e salas** | Seu **Block** é uma sala fixa com link que nunca muda; as salas por onde você passa ficam na lista, com quem está em cada uma agora. |
 | **Amigos** | Troque **códigos de amigo** (sem conta) e veja em que call cada um está agora, com um clique para entrar. Dá para ficar **invisível**. |
 | **Do seu jeito** | Nick, foto (ou um GIF animado), banner, cor de destaque, tema e fundo, tudo salvo só no seu navegador. |
-| **App para Windows** | A mesma sala numa janela própria, com a tecla de falar e o Ctrl+Shift+M funcionando **com o jogo em foco**. |
+| **App para Windows** | A mesma sala numa janela própria, com a tecla de falar, o Ctrl+Shift+M e o Ctrl+Shift+D funcionando **com o jogo em foco**. |
 
 ## Como usar
 
