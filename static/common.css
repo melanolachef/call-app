@@ -248,3 +248,12 @@ html.app-titlebar { --titlebar-h: 32px; }
 .fd-codes > summary { cursor: pointer; color: var(--muted); }
 .fd-codes[open] > summary { margin-bottom: 12px; }
 .fd-codes .field + .field, .fd-codes .btn { margin-top: 12px; }
+
+/* ---------- idade (common.js) ---------- */
+.age-links { margin: 0; font-size: 13px; }
+.age-actions { display: flex; flex-direction: column; gap: 8px; }
+.age-links a { color: var(--text); }
+.age-block { position: fixed; inset: 0; z-index: 2147483647; background: var(--bg); overflow: auto; }
+.age-block-text { max-width: 520px; margin: 18vh auto 0; padding: 0 24px; text-align: center; }
+.age-block h1 { font-size: 26px; }
+.age-block p { color: var(--muted); }

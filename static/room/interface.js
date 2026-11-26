@@ -112,6 +112,7 @@ function openPersonCard(person, anchor) {
   $('pc-status').className = `pc-status ${person.self ? '' : person.status[1]}`;
   $('pc-edit').hidden = !person.self;
   $('pc-kick').hidden = person.self || !iOwnTheRoom();
+  $('pc-report').hidden = person.self;
   $('pc-kick').onclick = () => {
     if (!window.confirm(`Tirar ${person.name} da sala? Ele não consegue voltar enquanto a sala existir.`)) return;
     sendAdmin({ kick: person.id });
@@ -131,6 +132,13 @@ function openPersonCard(person, anchor) {
     Object.assign(personCard.style, { left: `${left}px`, top: `${top}px`, transform: '' });
   }
   $('pc-close').focus();
+}
+
+// The person whose card is open (for "Denunciar").
+function currentCardPerson() {
+  if (personCard.hidden || personCardFor === null) return null;
+  const peer = peers.get(personCardFor);
+  return peer ? { id: peer.id, name: displayName(peer) } : null;
 }
 
 function closePersonCard() {

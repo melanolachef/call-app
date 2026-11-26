@@ -1171,4 +1171,55 @@ async function syncProfileWithAccount(value) {
 }
 onAccountChange(syncProfileWithAccount);
 
+// ---------- idade no primeiro acesso (#152) ----------
+
+// The terms ask for 13 or older. Asked once per browser; whoever answers
+// "under 13" can't use the app here. A declaration, not a check.
+document.body.insertAdjacentHTML('beforeend', `
+  <dialog id="age-dialog" aria-labelledby="age-title">
+    <div class="dialog-body">
+      <div class="heading">
+        <h2 id="age-title">Antes de começar</h2>
+        <span class="muted">O CPX Call é para quem tem 13 anos ou mais. Menores de 18 precisam da autorização dos pais ou responsáveis.</span>
+      </div>
+      <p class="muted age-links">Ao continuar, você concorda com os <a href="/termos" target="_blank">termos de uso</a> e a <a href="/privacidade" target="_blank">privacidade</a>.</p>
+      <div class="age-actions">
+        <button type="button" class="btn primary" id="age-yes" autofocus>Tenho 13 anos ou mais</button>
+        <button type="button" class="btn ghost" id="age-no">Tenho menos de 13</button>
+      </div>
+    </div>
+  </dialog>`);
+
+// A layer over the whole page (the page underneath keeps working, unseen;
+// the room never connects, since it waits for whenAgeOk).
+function blockUnderAge() {
+  if ($('age-block')) return;
+  const box = el('div', 'age-block');
+  box.id = 'age-block';
+  const text = el('div', 'age-block-text');
+  text.append(el('h1', null, 'O CPX Call é para quem tem 13 anos ou mais.'),
+    el('p', null, 'Quando você tiver 13, volta aqui. Até lá, chame um adulto se precisar de ajuda.'));
+  box.append(text);
+  document.body.append(box);
+}
+
+// Runs `then` once the age is declared (right away if it already was).
+function whenAgeOk(then) {
+  if (load('idade') === 'menor') return blockUnderAge();
+  if (load('idade') === '13+') return then?.();
+  const dialog = $('age-dialog');
+  dialog.oncancel = (e) => e.preventDefault(); // must answer
+  $('age-yes').onclick = () => {
+    save('idade', '13+');
+    dialog.close();
+    then?.();
+  };
+  $('age-no').onclick = () => {
+    save('idade', 'menor');
+    blockUnderAge();
+  };
+  dialog.showModal();
+}
+
 loadAccount();
+
