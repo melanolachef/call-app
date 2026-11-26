@@ -11,9 +11,31 @@ function hudRooms() {
 }
 
 // Leaving while sharing cuts everyone watching: ask first.
-function okToLeave() {
-  return !localTrack || window.confirm('Você está compartilhando a tela. Sair desta sala mesmo assim?');
+// Anything that leaves this page ends the call, so while you are in it
+// (voice, screen or camera) every way out asks first — the logo, the group
+// rail, another room. Only "Sair" itself leaves at once.
+let leavingOnPurpose = false;
+
+function inCall() {
+  return voice.joined || !!localTrack || !!cam.track;
 }
+
+function okToLeave() {
+  if (inCall()) {
+    const why = localTrack ? 'Você está compartilhando a tela.' : 'Você está na call.';
+    if (!window.confirm(`${why} Sair desta sala mesmo assim?`)) return false;
+  }
+  leavingOnPurpose = true;
+  return true;
+}
+
+// Safety net for any other way out (a link, a mail app taking over the tab,
+// F5): the browser asks before ending the call.
+window.addEventListener('beforeunload', (e) => {
+  if (left || leavingOnPurpose || !inCall()) return;
+  e.preventDefault();
+  e.returnValue = ''; // older browsers need it to show the prompt
+});
 
 function hudItem(room) {
   const current = room.id === roomId;
