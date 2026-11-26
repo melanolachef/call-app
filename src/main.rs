@@ -7,6 +7,7 @@ mod ice;
 mod limits;
 mod presence;
 mod rooms;
+mod seguranca;
 mod signaling;
 
 use std::{error::Error, net::SocketAddr, sync::Arc};
@@ -89,6 +90,7 @@ const DEFAULT_PORT: u16 = 3000;
 const INDEX_HTML: &str = include_str!("../static/index.html");
 const ROOM_HTML: &str = include_str!("../static/room.html");
 const APOIAR_HTML: &str = include_str!("../static/apoiar.html");
+const APOIAR_JS: &str = include_str!("../static/apoiar.js");
 const PRIVACIDADE_HTML: &str = include_str!("../static/privacidade.html");
 const TERMOS_HTML: &str = include_str!("../static/termos.html");
 // The room script is kept as one file per area under static/room/ and served as a
@@ -215,6 +217,7 @@ fn app_full(
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
         .route("/apoiar", get(|| async { Html(APOIAR_HTML) }))
+        .route("/apoiar.js", get(|| async { javascript(APOIAR_JS) }))
         .route("/privacidade", get(|| async { Html(PRIVACIDADE_HTML) }))
         .route("/termos", get(|| async { Html(TERMOS_HTML) }))
         .route("/api/apoio", get(apoio_info))
@@ -281,6 +284,7 @@ fn app_full(
             limits.clone(),
             limits::limit_api,
         ))
+        .layer(axum::middleware::from_fn(seguranca::headers))
         .with_state(AppState {
             rooms,
             ice,
@@ -574,7 +578,11 @@ mod tests {
             }
         };
 
-        assert!(get("/").await.starts_with("HTTP/1.1 200"));
+        let home = get("/").await;
+        assert!(home.starts_with("HTTP/1.1 200"));
+        assert!(home.contains("content-security-policy: default-src 'self'"));
+        assert!(home.contains("x-frame-options: DENY"));
+        assert!(get("/apoiar.js").await.contains("text/javascript"));
         assert!(get("/apoiar").await.contains("Apoiar o CPX Call"));
         assert!(get("/privacidade")
             .await
