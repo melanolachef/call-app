@@ -100,7 +100,7 @@ impl Ice {
     }
 }
 
-fn stun_servers() -> Value {
+pub fn stun_servers() -> Value {
     json!([{ "urls": ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] }])
 }
 

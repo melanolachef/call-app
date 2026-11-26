@@ -13,6 +13,9 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use std::sync::Arc;
+
+use crate::ice::Ice;
 use crate::limits::{too_many, Bucket, ClientIp, Connection, Kind, Limits};
 use crate::presence::Presence;
 use crate::rooms::{queue, valid_room_id, Join, Rooms, Rx};
@@ -59,6 +62,7 @@ pub async fn ws_handler(
     Path(room_id): Path<String>,
     State(rooms): State<Rooms>,
     State(presence): State<Presence>,
+    State(ice): State<Arc<Ice>>,
     State(limits): State<Limits>,
     ClientIp(ip): ClientIp,
     headers: HeaderMap,
@@ -81,7 +85,7 @@ pub async fn ws_handler(
         }
     };
     ws.max_message_size(MAX_MESSAGE_SIZE)
-        .on_upgrade(move |socket| handle_socket(socket, room_id, rooms, presence, slot))
+        .on_upgrade(move |socket| handle_socket(socket, room_id, rooms, presence, ice, slot))
 }
 
 async fn handle_socket(
@@ -89,6 +93,7 @@ async fn handle_socket(
     room_id: String,
     rooms: Rooms,
     presence: Presence,
+    ice: Arc<Ice>,
     _slot: Connection, // held until the socket ends
 ) {
     let (tx, rx) = queue();
@@ -105,13 +110,27 @@ async fn handle_socket(
         }
         Join::Joined { id, others } => {
             // An error only means the connection dropped; either way we leave.
-            let _ = run(&mut socket, &rooms, &presence, &room_id, id, &others, rx).await;
+            // TURN credentials only reach people inside a room (#150): the
+            // HTTP endpoint gives STUN only, so a script can't just ask for them.
+            let servers = ice.servers().await;
+            let _ = run(
+                &mut socket,
+                &rooms,
+                &presence,
+                &room_id,
+                id,
+                &others,
+                &servers,
+                rx,
+            )
+            .await;
             presence.forget(&room_id, id);
             rooms.leave(&room_id, id);
         }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run(
     socket: &mut WebSocket,
     rooms: &Rooms,
@@ -119,9 +138,10 @@ async fn run(
     room_id: &str,
     id: u32,
     others: &[u32],
+    ice: &Value,
     mut rx: Rx,
 ) -> Result<(), axum::Error> {
-    let welcome = json!({ "type": "welcome", "id": id, "peers": others, "max": rooms.max_peers() });
+    let welcome = json!({ "type": "welcome", "id": id, "peers": others, "max": rooms.max_peers(), "ice": ice });
     socket.send(text(&welcome)).await?;
 
     let mut messages = Bucket::new(MSG_RATE, MSG_BURST);

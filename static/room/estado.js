@@ -1,23 +1,13 @@
 'use strict';
 
-// STUN until /api/ice answers; with a TURN key the server adds Cloudflare TURN,
-// which relays the video when a network blocks direct connections.
+// STUN until the room's welcome arrives; with a TURN key the server adds
+// Cloudflare TURN there (only people inside a room get it, #150), which
+// relays the video when a network blocks direct connections. Every
+// (re)connection brings fresh credentials.
 let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
-let iceLoadedAt = 0;
-const ICE_REFRESH_MS = 6 * 60 * 60_000; // credentials last a day; refresh well before
 
-async function loadIceServers() {
-  if (Date.now() - iceLoadedAt < ICE_REFRESH_MS) return;
-  try {
-    const res = await fetch('/api/ice', { cache: 'no-store' });
-    const data = res.ok ? await res.json() : null;
-    if (Array.isArray(data?.iceServers) && data.iceServers.length) {
-      iceServers = data.iceServers;
-      iceLoadedAt = Date.now();
-    }
-  } catch {
-    // Keep STUN: direct connections still work for most networks.
-  }
+function useIceServers(list) {
+  if (Array.isArray(list) && list.length) iceServers = list;
 }
 const roomId = location.pathname.split('/').pop();
 const canShare = !!navigator.mediaDevices?.getDisplayMedia;

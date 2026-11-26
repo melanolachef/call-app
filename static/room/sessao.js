@@ -117,7 +117,7 @@ let reconnectAttempt = 0;
 let reconnectAt = 0; // when the next attempt starts (for the countdown)
 
 async function join() {
-  [hwH264] = await Promise.all([hwH264Ready, loadIceServers()]); // both needed before any peer
+  hwH264 = await hwH264Ready; // needed before any peer (ICE servers come in the welcome)
   const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/${roomId}`);
   ws = socket;
   ws.onmessage = onMessage;
@@ -200,6 +200,7 @@ function onMessage(ev) {
   switch (msg.type) {
     case 'welcome': {
       myId = msg.id;
+      useIceServers(msg.ice); // before any peer below is created
       maxPeers = msg.max ?? maxPeers;
       shareBtn.disabled = !canShare;
       retryDelay = 1000;
