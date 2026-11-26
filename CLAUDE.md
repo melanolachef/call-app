@@ -51,6 +51,13 @@ camera stops after ~1 s, so feed a `.y4m` file with
 a green test card, so override `getDisplayMedia` to return
 `canvas.captureStream()` when a realistic picture matters.
 
+**Windows: Smart App Control** (ligado no PC principal desde 26/11) bloqueia
+binários recém-compilados sem assinatura: o `cargo-fmt`, DLLs de macros do
+`desktop/` e até o `call-app.exe` do servidor ("Uma política de Controle de
+Aplicativo bloqueou este arquivo"). Enquanto estiver ligado, rode e teste o
+servidor no Pop!_OS (ou WSL com uma distribuição); `rustfmt` chamado direto
+ainda funciona, e o CI compila e testa o app.
+
 ## Releases
 
 - Site: production at https://cpx-call.fly.dev, deployed by hand with `fly deploy` from `main`.
@@ -63,38 +70,35 @@ a green test card, so override `getDisplayMedia` to return
 
 ## Estado atual
 
-_Atualizado em 2026-11-27._
+_Atualizado em 2026-11-26._
 
-- **No ar (main):** tudo até o design do celular (#146), Pix em `/apoiar`
-  (#148), contas opcionais com Google e @usuário (#160, SQLite no volume
-  `dados` do Fly), `/privacidade` e `/termos` (#161), limites contra abuso
-  (#164). Login com Google funcionando em produção (app em modo Teste no
-  Google Cloud: só entra quem está em "Usuários de teste" até publicar).
-- **Na development (falta publicar):** CSP (#166), TURN só na sala (#167),
-  contas fases 2–4 (#168–#170: amizades por @, "online", perfil na conta),
-  dono da sala (#171), Denunciar + idade 13+ (#172), nome em toda mensagem do
-  chat (#178), foto/GIF no chat por canal P2P `arquivos` (#179,
-  `static/room/fotos.js`), mensagens diretas guardadas 30 dias (#181,
-  `src/contas/mensagens.rs`) e as **novas telas** de
-  `docs/design/cpx-call-novas-telas.html` (#176): configurações em página
-  própria (`static/configuracoes.js` + `static/room/ajustes.js`, que pegam
-  emprestados os controles existentes), Início largo (`static/painel.js`,
-  só ≥ 761 px; o celular mantém `.lobby`) e sala larga
-  (`static/room/sala-larga.js`, só ≥ 1200 px; abaixo, o layout antigo).
-- **Grupos (#189, PR aberto em `feat/grupos`):** salas só dentro de grupos
-  (estilo servidor do Discord), sem login obrigatório (membro = conta ou
-  hash da chave do navegador), convite `/?convite=`, dono gerencia salas e
-  pessoas (`src/contas/grupos.rs`, `static/grupos.js`). Banco sempre ligado
-  (`cpx.db` por padrão), Google opcional. Falta: regressão da sala avulsa e
-  teste com 2+ pessoas reais.
-- **Revisão de segurança de 26/11:** 15 problemas achados; corrigidos
-  #8, #12 e #13 (limites, presença ao apagar conta). Os outros esperam
-  (lista na memória do agente); o mais grave é a fila cheia expulsar quem
-  recebe em vez de quem inunda (`rooms.rs`).
+- **No ar (main = development, #191):** grupos estilo servidor do Discord
+  (#190, `src/contas/grupos.rs`, `static/grupos.js`), telas novas
+  (configurações, Início e sala largos, #182–#184), mensagens diretas
+  (#181), foto/GIF no chat por P2P (#179), contas fases 1–4, dono da sala,
+  Denunciar + idade 13+, CSP, TURN só na sala, limites, `/privacidade`,
+  `/termos`, `/apoiar`. App Windows `app-v0.2.0`.
+- **PRs abertos para a development (26/11), esperando revisão:**
+  #201 só o Sair tira da call sem perguntar (#192) · #202 celular ouve a
+  call mesmo mudo, o mudo vira ganho na mixagem (#193) · #203 Apoiar/Pix e
+  links externos no app, comando `open_url` (#200) · #204 Ctrl+Shift+D para
+  o fone, também no app (#194) · #205 som quando alguém começa/para de
+  compartilhar (#195) · #206 chat com largura ajustável e recolhível (#197)
+  · #207 cards no estilo do Discord (#196). CI verde em todos.
+  #203 e #204 mexem no app: valem para quem instalar a próxima versão.
+- **Issues novas ainda sem código:** #198 grupos com a lógica do Discord
+  (barra de grupos, salas de voz com quem está em cada uma, membros
+  online/offline, trocar de sala sem sair do grupo) e #199 ícone do grupo.
+- **Revisão de segurança de 26/11:** 15 problemas; corrigidos #8, #12 e
+  #13. A lista completa ficou na memória do agente no outro computador; o
+  mais grave é a fila cheia expulsar quem recebe em vez de quem inunda
+  (`rooms.rs`).
+- **Issues já resolvidas mas abertas** (os PRs citaram o número sem
+  "Closes"): #149–#152, #156–#159, #176, #177, #180, #189.
 - **Produção sem TURN:** falta pôr `TURN_KEY_ID`/`TURN_KEY_API_TOKEN` (já
   seguro depois do #167; criar alerta de gastos na Cloudflare antes).
-- **Falta testar:** app Windows com a CSP, Android real e "relay" numa rede
-  que bloqueie P2P.
+- **Falta testar:** app Windows com a CSP, Android/iPhone reais (o #202 só
+  se confirma num iPhone) e "relay" numa rede que bloqueie P2P.
 - **Assinatura do instalador:** falta a inscrição na SignPath (o mantenedor faz).
 - **Branch local `feat/compartilhar-nativo`** (só no Windows principal, ainda
   não enviada): protótipo `desktop/examples/captura.rs` de captura + H.264 na
@@ -104,11 +108,12 @@ _Atualizado em 2026-11-27._
 
 ## Próximos passos
 
-0. **Publicar e corrigir:** publicar a development (PR para a main + deploy),
-   testar o app Windows com a CSP e o layout novo; corrigir o resto da
-   revisão de segurança (fila/inundação, pong, sala trancada ao reconectar,
-   TURN por conexão, expulsão); GIF próprio no perfil (#175); depois #153
-   (primeira vez) e #154 (operação).
+0. **Revisar e publicar:** mergear #201–#207, levar a development para a
+   main e fazer o deploy; gerar o app 0.3.0 (traz `open_url` e Ctrl+Shift+D).
+   Depois: #198 e #199 (grupos com a lógica do Discord, ícone do grupo);
+   corrigir o resto da revisão de segurança (fila/inundação, pong, sala
+   trancada ao reconectar, TURN por conexão, expulsão); GIF próprio no
+   perfil (#175); #153 (primeira vez) e #154 (operação).
 1. **Fase 1 do app nativo ("o mais Rust possível"):** ao clicar em
    "Compartilhar tela" dentro do app, o Rust captura e codifica (protótipo
    acima) e envia com `str0m` (proposta do estudo em docs/nativo) numa conexão extra por pessoa que assiste,
