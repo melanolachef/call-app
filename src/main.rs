@@ -495,8 +495,10 @@ fn percent_decode(text: &str) -> String {
 }
 
 /// `GET /api/ice` -> `{"iceServers": [...]}` for `RTCPeerConnection`.
-async fn ice_servers(State(ice): State<Arc<Ice>>) -> Response {
-    let body = serde_json::json!({ "iceServers": ice.servers().await });
+/// `GET /api/ice`: STUN only. TURN credentials go to people inside a room,
+/// in the WebSocket's welcome (#150); this stays for pages opened before.
+async fn ice_servers() -> Response {
+    let body = serde_json::json!({ "iceServers": ice::stun_servers() });
     (
         [
             (header::CONTENT_TYPE, "application/json"),
@@ -630,13 +632,13 @@ mod tests {
         let mut a = connect(&addr, "room1").await;
         assert_eq!(
             recv(&mut a).await,
-            json!({ "type": "welcome", "id": 1, "peers": [], "max": rooms::DEFAULT_MAX_PEERS })
+            json!({ "type": "welcome", "id": 1, "peers": [], "max": rooms::DEFAULT_MAX_PEERS, "ice": ice::stun_servers() })
         );
 
         let mut b = connect(&addr, "room1").await;
         assert_eq!(
             recv(&mut b).await,
-            json!({ "type": "welcome", "id": 2, "peers": [1], "max": rooms::DEFAULT_MAX_PEERS })
+            json!({ "type": "welcome", "id": 2, "peers": [1], "max": rooms::DEFAULT_MAX_PEERS, "ice": ice::stun_servers() })
         );
         assert_eq!(
             recv(&mut a).await,
@@ -1056,17 +1058,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ice_endpoint_with_turn_key_uses_cloudflare_once() {
+    async fn turn_credentials_only_inside_a_room() {
         let (api, calls) = fake_cloudflare(201).await;
         let addr = start_app(app(
             Rooms::default(),
             Ice::with_turn("key123", "secret-token", &api),
         ))
         .await;
-        let (_, first) = http_get(&addr, "/api/ice").await;
-        let (_, second) = http_get(&addr, "/api/ice").await;
+        // The public endpoint never hands out TURN.
+        let (_, public) = http_get(&addr, "/api/ice").await;
+        assert!(public["iceServers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|s| s.get("username").is_none()));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+
+        let mut a = connect(&addr, "sala1").await;
+        let first = recv(&mut a).await["ice"].clone();
+        let mut b = connect(&addr, "sala2").await;
+        let second = recv(&mut b).await["ice"].clone();
         assert_eq!(
-            first["iceServers"],
+            first,
             json!([
                 { "urls": ["stun:stun.cloudflare.com:3478"] },
                 { "urls": ["turn:turn.cloudflare.com:3478?transport=udp", "turns:turn.cloudflare.com:443?transport=tcp"],
@@ -1079,6 +1092,7 @@ mod tests {
             1,
             "credentials are reused"
         );
+        drop((a, b));
     }
 
     #[tokio::test]
@@ -1089,8 +1103,9 @@ mod tests {
             Ice::with_turn("key123", "secret-token", &api),
         ))
         .await;
-        let (_, body) = http_get(&addr, "/api/ice").await;
-        let servers = body["iceServers"].as_array().unwrap();
+        let mut ws = connect(&addr, "sala1").await;
+        let welcome = recv(&mut ws).await;
+        let servers = welcome["ice"].as_array().unwrap();
         assert!(!servers.is_empty());
         assert!(servers.iter().all(|s| s.get("username").is_none()));
     }
