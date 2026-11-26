@@ -272,21 +272,25 @@ pub async fn presence_handler(
     let Some(contas) = contas else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let Some(user) = contas.account_id(&headers) else {
-        return StatusCode::UNAUTHORIZED.into_response();
-    };
+    // Cheap checks first: only then ask the database who this is.
     if !limits.origin_allowed(&headers) {
         return (StatusCode::FORBIDDEN, "Origem não permitida").into_response();
     }
     if !limits.allow(Kind::Join, ip) {
         return too_many();
     }
+    let Some(user) = contas.account_id(&headers) else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
     let Ok(slot) = limits.connect(ip) else {
         return too_many();
     };
     ws.max_message_size(1024).on_upgrade(move |mut socket| async move {
         let _slot = slot;
         contas.came_online(user);
+        // Direct messages arrive here while the page is open (#180).
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(64);
+        let listener = contas.listen(user, tx);
         let mut ping = tokio::time::interval(PING_EVERY);
         ping.tick().await;
         loop {
@@ -295,9 +299,11 @@ pub async fn presence_handler(
                     Some(Ok(Message::Close(_)) | Err(_)) | None => break,
                     Some(Ok(_)) => {} // nothing to say; pongs land here too
                 },
+                Some(msg) = rx.recv() => if socket.send(Message::Text(msg.into())).await.is_err() { break },
                 _ = ping.tick() => if socket.send(Message::Ping(Default::default())).await.is_err() { break },
             }
         }
+        contas.stop_listening(user, listener);
         contas.went_away(user);
     })
 }

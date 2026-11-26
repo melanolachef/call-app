@@ -181,6 +181,7 @@ document.body.insertAdjacentHTML('beforeend', `
             <span class="muted">Seu link de amizade</span>
             <div class="fd-code"><span class="mono ellipsis" id="fd-mylink"></span><button type="button" class="btn small ghost" id="fd-copy-user">Copiar</button></div>
           </div>
+          <div class="fd-list" id="fd-friends"></div>
           <div class="fd-list" id="fd-received"></div>
           <div class="fd-list" id="fd-sent"></div>
         </div>
@@ -288,7 +289,7 @@ function friendLinkFor(username) {
   return `${location.origin}/?u=${username}`;
 }
 
-function personRow(f, ...buttons) {
+function friendRow(f, ...buttons) {
   const row = el('div', 'fd-person');
   const face = el('span', 'avatar');
   face.textContent = initials(accountFriendName(f));
@@ -331,14 +332,24 @@ function renderAccountFriendsDialog() {
   $('fd-codes').open = !named;
   if (!named) return;
   $('fd-mylink').textContent = friendLinkFor(account.username).replace(/^https?:\/\//, '');
+  const friends = accountFriends?.amigos ?? [];
+  $('fd-friends').replaceChildren(...(friends.length ? [el('span', 'muted fd-list-title', 'Seus amigos')] : []),
+    ...friends.map((f) => {
+      const button = actionButton('Mensagem', 'ghost', () => {
+        $('friends-dialog').close();
+        openDm(f);
+      });
+      if (f.nao_lidas) button.append(el('span', 'badge dm-badge', String(f.nao_lidas)));
+      return friendRow(f, button);
+    }));
   const received = accountFriends?.recebidos ?? [];
   const sent = accountFriends?.enviados ?? [];
   $('fd-received').replaceChildren(...(received.length ? [el('span', 'muted fd-list-title', 'Pedidos recebidos')] : []),
-    ...received.map((f) => personRow(f,
+    ...received.map((f) => friendRow(f,
       actionButton('Aceitar', 'primary', () => friendAction('POST', `/api/amigos/${f.id}/aceitar`, null, `Agora você e ${accountFriendName(f)} são amigos.`)),
       actionButton('Recusar', 'ghost', () => friendAction('DELETE', `/api/amigos/${f.id}`)))));
   $('fd-sent').replaceChildren(...(sent.length ? [el('span', 'muted fd-list-title', 'Pedidos enviados')] : []),
-    ...sent.map((f) => personRow(f, actionButton('Cancelar', 'ghost', () => friendAction('DELETE', `/api/amigos/${f.id}`)))));
+    ...sent.map((f) => friendRow(f, actionButton('Cancelar', 'ghost', () => friendAction('DELETE', `/api/amigos/${f.id}`)))));
 }
 
 // Exact @username only: the server never lists or completes names.
@@ -377,7 +388,7 @@ async function lookupUser() {
     amigo: actionButton('Já são amigos', 'ghost'),
     voce: actionButton('É você', 'ghost'),
   }[user.relacao] ?? actionButton('Mandar pedido', 'primary', ask);
-  found.replaceChildren(personRow(user, button));
+  found.replaceChildren(friendRow(user, button));
 }
 $('fd-user').oninput = () => {
   clearTimeout(lookupTimer);
@@ -415,6 +426,15 @@ function syncOnline() {
     const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/presenca`);
     onlineSocket = socket;
     socket.onopen = () => (onlineRetry = 0);
+    socket.onmessage = (e) => {
+      let msg;
+      try {
+        msg = JSON.parse(e.data);
+      } catch {
+        return;
+      }
+      if (msg?.type === 'dm') receiveDm(msg);
+    };
     socket.onclose = () => {
       if (onlineSocket !== socket) return; // closed on purpose
       onlineSocket = null;
@@ -428,4 +448,134 @@ function syncOnline() {
     socket.close();
   }
 }
+
+// ---------- mensagens diretas (#180) ----------
+
+// Between friends with an account, kept on the server for 30 days. They
+// arrive right away while a page holds /ws/presenca (the lobby); otherwise
+// the 15 s refresh of the friends list brings the unread count.
+
+document.body.insertAdjacentHTML('beforeend', `
+  <dialog id="dm-dialog" class="dm-dialog" aria-labelledby="dm-name">
+    <div class="dm-head">
+      <span class="avatar" id="dm-face" aria-hidden="true"></span>
+      <span class="dm-who"><strong class="ellipsis" id="dm-name"></strong><span class="muted ellipsis" id="dm-user"></span></span>
+      <button type="button" class="btn small ghost" id="dm-report">Denunciar</button>
+      <button type="button" class="btn small ghost" id="dm-delete">Apagar conversa</button>
+      <button type="button" class="icon-btn" id="dm-close" aria-label="Fechar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <ol class="dm-list" id="dm-list" aria-live="polite"></ol>
+    <form class="dm-form" id="dm-form">
+      <input id="dm-input" maxlength="2000" autocomplete="off" placeholder="Mensagem" aria-label="Mensagem">
+      <button class="btn small primary">Enviar</button>
+    </form>
+    <p class="muted dm-note">As mensagens ficam guardadas por 30 dias. "Apagar conversa" apaga para os dois.</p>
+  </dialog>`);
+
+let dmWith = null; // the friend whose conversation is open
+let lastUnread = null;
+
+function dmTime(seconds) {
+  return new Date(seconds * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function dmItem(m) {
+  const mine = m.de === account?.id;
+  const who = mine ? (account?.nick || 'Você') : accountFriendName(dmWith);
+  const li = el('li', mine ? 'dm-msg mine' : 'dm-msg');
+  const head = el('span', 'dm-msg-head');
+  head.append(el('strong', null, who), el('span', 'dm-msg-time', dmTime(m.em)));
+  li.append(head, el('p', 'dm-msg-text', m.texto));
+  li.dataset.id = String(m.id);
+  return li;
+}
+
+function appendDm(m) {
+  const list = $('dm-list');
+  if (list.querySelector(`[data-id="${m.id}"]`)) return; // sent here and echoed back
+  list.append(dmItem(m));
+  list.scrollTop = list.scrollHeight;
+}
+
+async function openDm(friend) {
+  dmWith = friend;
+  const face = $('dm-face');
+  face.textContent = initials(accountFriendName(friend));
+  face.style.background = colorFor(`u${friend.id}`);
+  $('dm-name').textContent = accountFriendName(friend);
+  $('dm-user').textContent = `@${friend.username}`;
+  $('dm-list').replaceChildren(el('li', 'muted dm-empty', 'Carregando…'));
+  if (!$('dm-dialog').open) $('dm-dialog').showModal();
+  const { ok, data } = await accountRequest('GET', `/api/mensagens/${friend.id}`);
+  if (dmWith !== friend) return;
+  const list = ok ? data.mensagens : [];
+  $('dm-list').replaceChildren(...(list.length ? list.map(dmItem) : [el('li', 'muted dm-empty', ok ? 'Nenhuma mensagem ainda. Diga oi!' : 'Não deu para carregar agora.')]));
+  $('dm-list').scrollTop = $('dm-list').scrollHeight;
+  $('dm-input').focus();
+  loadAccountFriends(); // the unread count went to zero
+}
+
+function receiveDm(msg) {
+  const other = msg.de === account?.id ? msg.para : msg.de;
+  if ($('dm-dialog').open && dmWith?.id === other) {
+    $('dm-list').querySelector('.dm-empty')?.remove();
+    appendDm({ id: msg.id, de: msg.de, texto: msg.texto, em: msg.em });
+    if (msg.de !== account?.id) accountRequest('GET', `/api/mensagens/${other}`); // marks it read
+    return;
+  }
+  if (msg.de === account?.id) return;
+  const friend = accountFriends?.amigos?.find((f) => f.id === msg.de);
+  toast(`Mensagem de ${friend ? accountFriendName(friend) : 'um amigo'}: ${msg.texto.slice(0, 60)}`, 5000);
+  loadAccountFriends();
+}
+
+// The 15 s refresh brings unread counts: say so when something new arrives
+// (pages without the live connection, like a room).
+window.addEventListener('account-friends-changed', () => {
+  const total = (accountFriends?.amigos ?? []).reduce((sum, f) => sum + (f.nao_lidas || 0), 0);
+  if (lastUnread !== null && total > lastUnread && !$('dm-dialog').open && !onlineSocket) {
+    const from = accountFriends.amigos.find((f) => f.nao_lidas);
+    toast(`Nova mensagem de ${from ? accountFriendName(from) : 'um amigo'}. Abra em Amigos.`, 5000);
+  }
+  lastUnread = total;
+});
+
+$('dm-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $('dm-input').value.trim();
+  if (!text || !dmWith) return;
+  $('dm-input').value = '';
+  const { ok, data } = await accountRequest('POST', `/api/mensagens/${dmWith.id}`, { texto: text });
+  if (!ok) {
+    $('dm-input').value = text;
+    toast(data.error || 'Não deu para mandar agora.');
+    return;
+  }
+  $('dm-list').querySelector('.dm-empty')?.remove();
+  appendDm(data);
+};
+$('dm-close').onclick = () => $('dm-dialog').close();
+$('dm-dialog').onclose = () => (dmWith = null);
+$('dm-delete').onclick = async () => {
+  if (!dmWith || !window.confirm(`Apagar a conversa com ${accountFriendName(dmWith)}? Some para os dois e não dá para desfazer.`)) return;
+  const { ok } = await accountRequest('DELETE', `/api/mensagens/${dmWith.id}`);
+  if (!ok) return toast('Não deu para apagar agora.');
+  $('dm-list').replaceChildren(el('li', 'muted dm-empty', 'Conversa apagada.'));
+};
+$('dm-report').onclick = () => {
+  if (!dmWith) return;
+  const lines = [...$('dm-list').querySelectorAll('.dm-msg')].slice(-15).map((li) =>
+    `[${li.querySelector('.dm-msg-time').textContent}] ${li.querySelector('strong').textContent}: ${li.querySelector('.dm-msg-text').textContent}`);
+  const body = [
+    `Denúncia de conversa com ${accountFriendName(dmWith)} (@${dmWith.username})`,
+    `Quem denuncia: @${account?.username || '?'}`,
+    '',
+    'Últimas mensagens:',
+    ...lines,
+    '',
+    'O que aconteceu:',
+  ].join('\n');
+  location.href = `mailto:cpxcallcontato@gmail.com?subject=${encodeURIComponent(`Denúncia de mensagem: @${dmWith.username}`)}&body=${encodeURIComponent(body)}`;
+  toast('Abrimos o seu e-mail com a denúncia. Você também pode desfazer a amizade: aí ele não manda mais mensagens.', 7000);
+};
 

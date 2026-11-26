@@ -218,6 +218,7 @@ fn app_full(
         .merge(contas::routes())
         .merge(contas::amizades::routes())
         .merge(contas::perfil::routes())
+        .merge(contas::mensagens::routes())
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
         .route("/apoiar", get(|| async { Html(APOIAR_HTML) }))

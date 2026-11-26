@@ -312,6 +312,11 @@ function accountFriendItem(friend) {
     link.append(enter);
   }
   row.append(link);
+  const message = el('button', 'btn small ghost dm-btn', 'Mensagem');
+  message.type = 'button';
+  message.onclick = () => openDm(friend);
+  if (friend.nao_lidas) message.append(el('span', 'badge', String(friend.nao_lidas)));
+  row.append(message);
   const actions = el('span', 'room-actions');
   const remove = iconButton(ICON_X, `Desfazer amizade com ${accountFriendName(friend)}`);
   remove.onclick = () => {

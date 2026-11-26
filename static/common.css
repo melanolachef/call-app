@@ -257,3 +257,24 @@ html.app-titlebar { --titlebar-h: 32px; }
 .age-block-text { max-width: 520px; margin: 18vh auto 0; padding: 0 24px; text-align: center; }
 .age-block h1 { font-size: 26px; }
 .age-block p { color: var(--muted); }
+
+/* ---------- mensagens diretas (amigos.js) ---------- */
+.dm-dialog { width: min(520px, calc(100vw - 24px)); height: min(640px, calc(100dvh - 48px)); display: none; flex-direction: column; }
+.dm-dialog[open] { display: flex; }
+.dm-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--border); }
+.dm-head .avatar { width: 32px; height: 32px; font-size: 13px; }
+.dm-who { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; }
+.dm-who .muted { font-size: 12px; }
+.dm-list { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.dm-empty { margin: auto; font-size: 13px; }
+.dm-msg-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.dm-msg.mine .dm-msg-head strong { color: var(--muted); }
+.dm-msg-time { font: 11px var(--mono); color: var(--faint); }
+.dm-msg-text { margin: 2px 0 0; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dm-form { flex: none; display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.dm-form input { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg); color: var(--text); font-size: 14px; }
+.dm-form .btn { height: 36px; }
+.dm-form input:focus { outline: none; border-color: var(--muted); }
+.dm-note { flex: none; margin: 0; padding: 0 12px 10px; font-size: 11px; }
+.dm-badge, .dm-btn .badge { margin-left: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-sm); background: var(--live); color: #000; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+@media (max-width: 520px) { .dm-head #dm-report, .dm-head #dm-delete { padding: 0 6px; font-size: 11px; } }

@@ -13,7 +13,8 @@ do Fly):
 |---|---|---|
 | `users` | id interno, identificador opaco da conta Google (`sub`), @usuário, nome que aparece, foto e banner do perfil, data de criação | e-mail, nome do Google, foto do Google, IP |
 | `sessions` | hash SHA-256 do token de sessão, a quem pertence, criação, último uso | o token em si |
-| `friendships` | par de contas, quem pediu, quando pediu e quando aceitou | mensagens, histórico de salas |
+| `friendships` | par de contas, quem pediu, quando pediu e quando aceitou | histórico de salas |
+| `messages` | mensagens diretas entre amigos: texto, remetente, destinatário, quando, quando foi lida; **apagadas depois de 30 dias** | fotos, mensagens do chat das salas |
 
 Continua sem guardar: mensagens, salas, quem esteve em qual sala, vídeo, voz.
 "Apagar conta" apaga a linha do usuário e, em cascata, sessões (e, na fase 2,
