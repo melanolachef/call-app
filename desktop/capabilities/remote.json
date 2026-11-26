@@ -6,5 +6,5 @@
   "remote": {
     "urls": ["https://cpx-call.fly.dev/*", "http://localhost:3000/*"]
   },
-  "permissions": ["allow-set-ptt-key", "allow-window-control"]
+  "permissions": ["allow-set-ptt-key", "allow-window-control", "allow-open-url"]
 }
