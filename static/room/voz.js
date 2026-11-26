@@ -31,8 +31,15 @@ function micOpen() {
   return !(voice.muted || voice.deafened) && (!voice.ptt || voice.pttHeld);
 }
 
+// Mute, deafen and push-to-talk close the mic with a gain in the mix, never
+// with track.enabled: on iPhones (WebKit) a disabled capture track counts as
+// "muted capture", and the voices that were allowed to play because the mic
+// was on get paused — you had to unmute to hear the call. The capture now
+// stays live and only what goes out is silenced (the soundpad still plays).
 function applyTrackEnabled() {
-  if (voice.track) voice.track.enabled = micOpen();
+  if (!voice.mix) return;
+  const gain = voice.mix.micGain.gain;
+  gain.setTargetAtTime(micOpen() ? 1 : 0, voice.ctx.currentTime, 0.005); // no click
 }
 
 // Voice wants the opposite of the screen's sound: echo cancellation, noise
@@ -68,27 +75,31 @@ function broadcastVoice() {
 }
 
 // What goes out to the others: the mic plus the soundpad (soundpad.js),
-// mixed in Web Audio into one track. Mute and push-to-talk still close only
-// the mic (track.enabled), so sounds play even with the mic muted.
+// mixed in Web Audio into one track. Mute and push-to-talk close only the
+// mic's gain (applyTrackEnabled), so sounds play even with the mic muted.
 function buildVoiceMix(micTrack) {
   const out = voice.ctx.createMediaStreamDestination();
   const sounds = voice.ctx.createGain();
   sounds.connect(out);
+  const micGain = voice.ctx.createGain();
+  micGain.gain.value = 0; // opened by applyTrackEnabled
+  micGain.connect(out);
   const track = out.stream.getAudioTracks()[0];
   track.contentHint = 'speech';
-  voice.mix = { out, sounds, mic: null, track };
+  voice.mix = { out, sounds, mic: null, micGain, track };
   plugMic(micTrack);
 }
 
 function plugMic(micTrack) {
   voice.mix.mic?.disconnect();
   voice.mix.mic = voice.ctx.createMediaStreamSource(new MediaStream([micTrack]));
-  voice.mix.mic.connect(voice.mix.out);
+  voice.mix.mic.connect(voice.mix.micGain);
 }
 
 function dropVoiceMix() {
   if (!voice.mix) return;
   voice.mix.mic?.disconnect();
+  voice.mix.micGain.disconnect();
   voice.mix.sounds.disconnect();
   voice.mix.track.stop();
   voice.mix = null;
@@ -112,9 +123,34 @@ function applyVoiceOutput() {
     peer.voiceAudio.muted = silenced || level > 1; // above 100%, Web Audio plays it
     peer.voiceAudio.volume = Math.min(1, level);
     setVoiceBoost(peer, level);
-    if (!silenced) peer.voiceAudio.play().catch(() => {});
+    if (!silenced) playVoice(peer.voiceAudio);
   });
 }
+
+// Phones (and some browsers) only let sound start from a tap. A friend who
+// joined the voice after you stayed silent until your next tap, which was
+// usually "unmute": it looked like you had to be unmuted to hear. Any tap
+// now resumes the audio and starts every voice that should be playing; if
+// the browser still refuses, a banner asks for one tap.
+const voiceUnlock = document.body.appendChild(el('button', 'voice-unlock', 'Toque para ouvir a call'));
+voiceUnlock.type = 'button';
+voiceUnlock.hidden = true;
+
+function playVoice(audio) {
+  audio.play().then(() => {
+    voiceUnlock.hidden = true;
+  }, (err) => {
+    if (err.name === 'NotAllowedError' && voice.joined && !voice.deafened) voiceUnlock.hidden = false;
+  });
+}
+
+function unlockVoiceAudio() {
+  if (!voice.joined) return;
+  voice.ctx?.resume().catch(() => {});
+  applyVoiceOutput(); // play() again, now inside the gesture
+}
+document.addEventListener('pointerdown', unlockVoiceAudio, true);
+document.addEventListener('keydown', unlockVoiceAudio, true);
 
 function analyserFor(track) {
   const analyser = voice.ctx.createAnalyser();
@@ -171,6 +207,7 @@ async function joinVoice() {
 function leaveVoice() {
   if (!voice.joined) return;
   voice.joined = false;
+  voiceUnlock.hidden = true;
   voice.pttHeld = false;
   stopSound();
   voice.track?.stop();
@@ -226,11 +263,15 @@ $('me-mic').onclick = micClick;
 $('rail-mic').onclick = micClick;
 $('deafen').onclick = () => setDeafened(!voice.deafened);
 $('me-deafen').onclick = () => setDeafened(!voice.deafened);
-document.addEventListener('keydown', (e) => { // Ctrl+Shift+M, like Discord
-  if (voice.joined && e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'm') {
-    e.preventDefault();
-    toggleMic();
-  }
+// Shortcuts like Discord's: Ctrl+Shift+M mutes the mic, Ctrl+Shift+D the
+// headphones (everyone). In the Windows app they also work with a game in
+// front (desktop/src/keys.rs → window.cpxDesktop).
+const VOICE_SHORTCUTS = { m: () => toggleMic(), d: () => setDeafened(!voice.deafened) };
+document.addEventListener('keydown', (e) => {
+  const run = VOICE_SHORTCUTS[e.key.toLowerCase()];
+  if (!run || !voice.joined || !e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return;
+  e.preventDefault(); // Ctrl+Shift+D would bookmark every tab
+  run();
 });
 
 // Speaking rings: a cheap level check 10 times a second, only while in voice.
@@ -246,7 +287,7 @@ setInterval(() => {
       changed = true;
     }
   };
-  check(voice, voice.analyser, !voice.muted && !voice.deafened);
+  check(voice, voice.analyser, micOpen()); // the ring shows what the others hear
   peers.forEach((peer) => {
     if (peer.voiceIn && peer.voiceTransceiver && !peer.voiceAnalyser) {
       peer.voiceAnalyser = analyserFor(peer.voiceTransceiver.receiver.track);
@@ -299,7 +340,7 @@ function renderVoiceUi() {
     button.innerHTML = voice.deafened ? ICONS.headphonesOff : ICONS.headphones;
     button.setAttribute('aria-pressed', String(voice.deafened));
     button.setAttribute('aria-label', label);
-    button.title = label;
+    button.title = `${label} (Ctrl+Shift+D)`;
   }
   if (!$('voice-settings-btn').innerHTML) $('voice-settings-btn').innerHTML = ICONS.sliders;
   if (!$('voice-leave').innerHTML) $('voice-leave').innerHTML = ICONS.hangup;

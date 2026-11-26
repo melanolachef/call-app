@@ -13,6 +13,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod keys;
+mod links;
 mod titlebar;
 
 use tauri::{Manager, Url};
@@ -28,7 +29,8 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             set_ptt_key,
-            titlebar::window_control
+            titlebar::window_control,
+            links::open_url
         ])
         .setup(|app| {
             let window = app
