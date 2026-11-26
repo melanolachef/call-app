@@ -117,6 +117,7 @@ const ROOM_JS: &str = concat!(
     include_str!("../static/room/celular.js"),
     include_str!("../static/room/denuncia.js"),
     include_str!("../static/room/ajustes.js"),
+    include_str!("../static/room/sala-larga.js"),
     include_str!("../static/room/inicio.js"),
 );
 const LOBBY_JS: &str = include_str!("../static/lobby.js");

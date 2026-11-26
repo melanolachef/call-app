@@ -225,7 +225,7 @@ function onMessage(ev) {
       announcePresence();
       if (!timer) { // keeps counting across reconnections
         const joinedAt = Date.now();
-        const tick = () => ($('timer').textContent = $('sub-timer').textContent = clock(joinedAt));
+        const tick = () => ($('timer').textContent = $('sub-timer').textContent = $('heading-timer').textContent = clock(joinedAt));
         tick();
         timer = setInterval(tick, 1000); // one text node a second: no layout work
       }

@@ -34,6 +34,7 @@ function hudItem(room) {
 
 function renderHud() {
   $('hud-rooms').replaceChildren(...orderedRooms().map(hudItem));
+  renderRoomRail(); // sala-larga.js
 }
 
 async function updateHudCounts() {

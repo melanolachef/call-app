@@ -63,21 +63,28 @@ a green test card, so override `getDisplayMedia` to return
 
 ## Estado atual
 
-_Atualizado em 2026-11-26._
+_Atualizado em 2026-11-27._
 
 - **No ar (main):** tudo até o design do celular (#146), Pix em `/apoiar`
   (#148), contas opcionais com Google e @usuário (#160, SQLite no volume
   `dados` do Fly), `/privacidade` e `/termos` (#161), limites contra abuso
   (#164). Login com Google funcionando em produção (app em modo Teste no
   Google Cloud: só entra quem está em "Usuários de teste" até publicar).
-- **Na development (falta publicar):** cabeçalhos de segurança/CSP (#166),
-  TURN só dentro da sala (#167, credenciais no `welcome`; `/api/ice` só
-  STUN), contas fases 2–4 — amizades por @usuário (#168), "online" com o
-  Início aberto via `/ws/presenca` (#169), perfil (nick, foto, banner) salvo
-  na conta com imagens conferidas no servidor (#170) —, dono da sala trancar
-  e expulsar (#171, código `?dono=` por sala, hash só em memória), botão
-  Denunciar por e-mail + SaferNet e idade 13+ no primeiro acesso (#172).
-  A CSP libera o IPC do Tauri, mas o app Windows não foi testado com ela.
+- **Na development (falta publicar):** CSP (#166), TURN só na sala (#167),
+  contas fases 2–4 (#168–#170: amizades por @, "online", perfil na conta),
+  dono da sala (#171), Denunciar + idade 13+ (#172), nome em toda mensagem do
+  chat (#178), foto/GIF no chat por canal P2P `arquivos` (#179,
+  `static/room/fotos.js`), mensagens diretas guardadas 30 dias (#181,
+  `src/contas/mensagens.rs`) e as **novas telas** de
+  `docs/design/cpx-call-novas-telas.html` (#176): configurações em página
+  própria (`static/configuracoes.js` + `static/room/ajustes.js`, que pegam
+  emprestados os controles existentes), Início largo (`static/painel.js`,
+  só ≥ 761 px; o celular mantém `.lobby`) e sala larga
+  (`static/room/sala-larga.js`, só ≥ 1200 px; abaixo, o layout antigo).
+- **Revisão de segurança de 26/11:** 15 problemas achados; corrigidos
+  #8, #12 e #13 (limites, presença ao apagar conta). Os outros esperam
+  (lista na memória do agente); o mais grave é a fila cheia expulsar quem
+  recebe em vez de quem inunda (`rooms.rs`).
 - **Produção sem TURN:** falta pôr `TURN_KEY_ID`/`TURN_KEY_API_TOKEN` (já
   seguro depois do #167; criar alerta de gastos na Cloudflare antes).
 - **Falta testar:** app Windows com a CSP, Android real e "relay" numa rede
@@ -91,10 +98,11 @@ _Atualizado em 2026-11-26._
 
 ## Próximos passos
 
-0. **Abrir para o público:** publicar a development (PR para a main +
-   deploy) e testar o app Windows com a CSP; publicar o app no Google Cloud
-   (sair do modo Teste); depois primeira vez para quem não é da turma
-   (#153) e operação (#154: alerta de queda, números sem dados pessoais).
+0. **Publicar e corrigir:** publicar a development (PR para a main + deploy),
+   testar o app Windows com a CSP e o layout novo; corrigir o resto da
+   revisão de segurança (fila/inundação, pong, sala trancada ao reconectar,
+   TURN por conexão, expulsão); GIF próprio no perfil (#175); depois #153
+   (primeira vez) e #154 (operação).
 1. **Fase 1 do app nativo ("o mais Rust possível"):** ao clicar em
    "Compartilhar tela" dentro do app, o Rust captura e codifica (protótipo
    acima) e envia com `str0m` (proposta do estudo em docs/nativo) numa conexão extra por pessoa que assiste,

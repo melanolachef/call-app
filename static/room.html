@@ -396,6 +396,85 @@
       .brand { width: auto; }
     }
 
+    /* ---------- grupos da lista de pessoas (sala-larga.js) ---------- */
+    .people-group { padding: 12px 12px 4px; font-size: 11px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .02em; }
+    #people li.people-group + li .person::before, #people li.people-group + li .live-row::before { display: none; }
+    .live-row { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--r-md); background: none; color: var(--muted); font-size: 14px; text-align: left; }
+    .live-row:hover:not(:disabled) { background: var(--raised); color: var(--text); }
+    .live-row.watching { color: var(--text); font-weight: 600; background: var(--raised); }
+    .live-row:disabled { cursor: default; }
+    .live-dot { flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--live); }
+    .live-state { margin-left: auto; flex: none; font-size: 11px; font-weight: 400; color: var(--faint); }
+    .live-row.watching .live-state { color: var(--online); }
+
+    /* ---------- sala em telas largas (sala-larga.js; docs/design/cpx-call-novas-telas.html) ---------- */
+    .room-rail, .voice-panel, .more-btn, .room-heading { display: none; }
+    .more-pop { position: fixed; z-index: 9; min-width: 220px; padding: 4px; display: flex; flex-direction: column; box-shadow: 0 12px 32px rgb(0 0 0 / .5); }
+    .more-item { height: 36px; padding: 0 12px; border-radius: var(--r-sm); background: none; color: var(--text); font-size: 14px; text-align: left; }
+    .more-item:hover { background: var(--raised); }
+    .more-item.danger { color: var(--danger); }
+    @media (min-width: 1200px) {
+      .app, body.chat-collapsed .app { grid-template-columns: 72px 248px minmax(0, 1fr) 300px; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "rail top stage chat" "rail side stage chat" "rail side dock chat"; }
+      body.chat-collapsed .app { grid-template-columns: 72px 248px minmax(0, 1fr); grid-template-areas: "rail top stage" "rail side stage" "rail side dock"; }
+      .room-rail { grid-area: rail; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0; overflow-y: auto; background: var(--bg); }
+      .room-rail .rail-logo { position: relative; display: flex; width: 46px; height: 46px; border-radius: 12px; }
+      .room-rail .rail-logo img { width: 100%; height: 100%; border-radius: 12px; image-rendering: pixelated; }
+      .room-rail .rail-sep { width: 28px; height: 2px; border-radius: 1px; background: var(--raised-2); }
+      .room-rail .rail-rooms { display: flex; flex-direction: column; gap: 8px; }
+      .room-rail .rail-room, .room-rail .rail-btn { position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--raised); color: var(--text); font-size: 15px; font-weight: 600; text-decoration: none; transition: border-radius .15s, background .15s; }
+      .room-rail .rail-room:hover, .room-rail .rail-btn:hover { border-radius: 14px; background: var(--raised-2); }
+      .room-rail .rail-room.current { background: var(--text); color: var(--bg); }
+      .room-rail .rail-room.current::before { content: ''; position: absolute; left: -14px; top: 7px; width: 4px; height: 30px; border-radius: 0 3px 3px 0; background: var(--text); }
+      .room-rail .rail-badge { position: absolute; right: -3px; bottom: -3px; min-width: 16px; height: 16px; padding: 0 4px; border: 2px solid var(--bg); border-radius: 5px; background: var(--online); color: #000; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+      .room-rail .rail-btn { background: none; border: 1px dashed var(--raised-2); color: var(--muted); }
+      .room-rail .rail-btn svg { width: 18px; height: 18px; }
+      .room-rail .rail-gear { margin-top: auto; border: 0; }
+      /* Top of the side panel: name, people and time, the link. */
+      .topbar { grid-area: top; grid-column: auto; flex-direction: column; align-items: stretch; gap: 10px; padding: 14px 12px 10px; border-bottom: 0; border-right: 1px solid var(--line); background: var(--frame); }
+      .brand, .seats, #live, #net, #notify-btn, .top-end .vsep, #online, #timer { display: none !important; }
+      .room-heading { display: flex; align-items: baseline; gap: 6px; }
+      .room-heading strong { flex: 1; min-width: 0; font-size: 16px; font-weight: 700; }
+      .room-heading .mono { flex: none; font-size: 11px; color: var(--faint); }
+      #heading-timer:not(:empty)::before { content: '· '; }
+      .room-link { flex: none; }
+      .room-id { font-size: 12px; }
+      .top-end { margin: 0; justify-content: flex-start; }
+      .top-end:not(:has(> :not([hidden]):not(#live):not(#net):not(#notify-btn):not(.seats):not(.vsep):not(#online):not(#timer))) { display: none; }
+      #lock-btn { position: absolute; }
+      .topbar { position: relative; }
+      #lock-btn { top: 10px; right: 8px; }
+      .room-heading { padding-right: 36px; }
+      .side { grid-area: side; padding: 0 8px; gap: 0; background: var(--frame); border-right: 1px solid var(--line); }
+      #friends-hud, #hud { display: none !important; }
+      .side-block > h2 { display: none; }
+      .side-block .card { border: 0; background: none; }
+      #people { max-height: none; }
+      #people li + li .person::before { display: none; }
+      .person { padding: 7px 12px; border-radius: var(--r-md); }
+      .person:hover { background: var(--raised); }
+      .voice-panel { display: flex; align-items: center; gap: 8px; margin: auto 0 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card); }
+      .vp-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+      .vp-text strong { font-weight: 600; }
+      .vp-text strong.online { color: var(--online); }
+      .vp-text .mono { font-size: 11px; color: var(--faint); }
+      #vp-leave { background: none; color: var(--danger); }
+      .me { margin: 0 -8px; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--bg); }
+      .me .avatar { cursor: pointer; }
+      #me-mic, #me-deafen { display: inline-flex; }
+      #edit, #voice-leave { display: none !important; }
+      /* Connection quality only when it fails ("sem P2P"): less noise. */
+      .person .p2p, .person .p2p-kind { display: none; }
+      .stage { grid-area: stage; padding: 16px; }
+      body.chat-collapsed .stage { padding-right: 16px; }
+      .dock { grid-area: dock; padding: 0 16px 16px; border-top: 0; }
+      .chat, body.chat-collapsed .chat { grid-area: chat; margin: 0; border-width: 0 0 0 1px; border-radius: 0; }
+      body.chat-collapsed .chat { display: none; }
+      .chat-head { display: none; }
+      #voice-join, #mic, #deafen, .quality-btn, #invite-bar, #chat-toggle, #leave, .ctl-sep { display: none !important; }
+      .more-btn { display: inline-flex; }
+      .controls { gap: 6px; }
+    }
+
     /* ---------- celular (docs/design/cpx-call-mobile.html) ----------
        Phones get tabs (Palco, Chat, Sons), a voice bar over the tab bar and,
        lying down, a rail of buttons over the picture. The pieces below are
@@ -618,7 +697,16 @@
 </head>
 <body data-tab="palco">
   <div class="app">
+    <nav class="room-rail" id="room-rail" aria-label="Salas">
+      <a class="rail-logo" href="/" id="rail-home" title="Início" aria-label="Início"><img src="/favicon.svg" alt=""></a>
+      <span class="rail-sep" aria-hidden="true"></span>
+      <div class="rail-rooms" id="rail-rooms"></div>
+      <button type="button" class="rail-btn" id="rail-new" title="Nova sala" aria-label="Nova sala"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button type="button" class="rail-btn" id="rail-paste" title="Entrar com convite" aria-label="Entrar com convite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
+      <button type="button" class="rail-btn rail-gear" id="rail-settings" title="Configurações" aria-label="Configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    </nav>
     <header class="topbar">
+      <div class="room-heading" id="room-heading"><strong class="ellipsis" id="heading-name"></strong><span class="mono" id="heading-meta"></span><span class="mono" id="heading-timer"></span></div>
       <a class="brand" href="/" id="home" title="Voltar ao início" aria-label="Voltar ao início"><svg class="back" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span class="logo" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span>CPX Call</span></a>
       <div class="room-link">
         <div class="room-title">
@@ -666,6 +754,11 @@
         </div>
       </section>
 
+      <div class="voice-panel" id="voice-panel">
+        <span class="vp-text"><strong id="vp-title"></strong><span class="mono" id="vp-sub"></span></span>
+        <button type="button" class="btn small primary" id="vp-join">Entrar na voz</button>
+        <button type="button" class="icon-btn" id="vp-leave" title="Sair da voz" aria-label="Sair da voz" hidden></button>
+      </div>
       <section class="me" aria-label="Seu perfil">
         <div class="avatar" id="me-avatar" aria-hidden="true"></div>
         <div class="me-text">
@@ -752,6 +845,7 @@
         <span class="ctl-sep" aria-hidden="true"></span>
         <button class="ctl" id="leave" title="Sair da sala">Sair</button>
         <button class="ctl" id="dock-hangup" title="Sair da voz" aria-label="Sair da voz" hidden></button>
+        <button class="ctl more-btn" id="more-btn" title="Mais" aria-label="Mais opções" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg></button>
       </div>
     </footer>
   </div>
@@ -774,6 +868,12 @@
   </div>
 
   <div class="react-pop card" id="react-pop" role="group" aria-label="Reações" hidden></div>
+  <div class="more-pop card" id="more-pop" role="menu" hidden>
+    <button type="button" class="more-item" role="menuitem" id="more-quality">Qualidade da transmissão</button>
+    <button type="button" class="more-item" role="menuitem" id="more-invite">Copiar convite</button>
+    <button type="button" class="more-item" role="menuitem" id="more-chat">Esconder chat</button>
+    <button type="button" class="more-item danger" role="menuitem" id="more-leave">Sair da sala</button>
+  </div>
   <div class="quality-pop card" id="quality-pop" role="group" aria-labelledby="q-title" hidden>
     <h2 id="q-title">Qualidade ao compartilhar</h2>
     <div class="q-presets" id="q-presets"></div>
