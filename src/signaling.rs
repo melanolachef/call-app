@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 
 use std::sync::Arc;
 
+use crate::contas::grupos::Access;
 use crate::contas::Contas;
 use crate::ice::Ice;
 use crate::limits::{too_many, Bucket, ClientIp, Connection, Kind, Limits};
@@ -57,6 +58,13 @@ struct AdminMsg {
 enum AdminCmd {
     Kick(u32),
     Lock(bool),
+}
+
+/// `name=value` from a query string.
+fn query_value<'a>(query: Option<&'a str>, name: &str) -> Option<&'a str> {
+    query?
+        .split('&')
+        .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
 }
 
 /// The owner key a browser keeps for this room (`?dono=`, 32 to 64 hex), as
@@ -119,11 +127,18 @@ pub async fn ws_handler(
     };
     // Signed in: friends with an account see this room too (same rules as
     // friend codes: only while here, and not when invisible).
+    // Group rooms only let members in (#189); the others are open by link.
+    let access = contas.as_ref().map_or(Access::Open, |c| {
+        let device = query_value(query.as_deref(), "aparelho");
+        c.access(&room_id, c.member(&headers, device).as_ref())
+    });
     let account = contas.and_then(|c| c.account_id(&headers).map(|id| (c, id)));
     let key = owner_key(query.as_deref());
     ws.max_message_size(MAX_MESSAGE_SIZE)
         .on_upgrade(move |socket| {
-            handle_socket(socket, room_id, rooms, presence, ice, slot, account, key)
+            handle_socket(
+                socket, room_id, rooms, presence, ice, slot, account, key, access,
+            )
         })
 }
 
@@ -137,9 +152,19 @@ async fn handle_socket(
     _slot: Connection, // held until the socket ends
     account: Option<(Arc<Contas>, i64)>,
     key: Option<String>,
+    access: Access,
 ) {
     let (tx, rx) = queue();
-    match rooms.join_as(&room_id, tx, key) {
+    let joined = match access {
+        Access::Open => rooms.join_as(&room_id, tx, key),
+        Access::Member { key, owner } => rooms.join_group(&room_id, tx, key, owner),
+        Access::Denied => {
+            let _ = socket.send(text(&json!({ "type": "forbidden" }))).await;
+            let _ = socket.send(Message::Close(None)).await;
+            return;
+        }
+    };
+    match joined {
         Join::Locked => {
             let _ = socket.send(text(&json!({ "type": "locked" }))).await;
             let _ = socket.send(Message::Close(None)).await;

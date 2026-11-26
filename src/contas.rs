@@ -26,6 +26,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 pub mod amizades;
+pub mod grupos;
 pub mod mensagens;
 pub mod perfil;
 
@@ -100,6 +101,32 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX messages_pair ON messages(sender, recipient, id);
     CREATE INDEX messages_unread ON messages(recipient, read_at);
     CREATE INDEX messages_age ON messages(created_at);
+",
+    "
+    CREATE TABLE groups (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        invite TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX groups_owner ON groups(owner);
+    CREATE TABLE group_members (
+        group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        member TEXT NOT NULL,
+        nick TEXT NOT NULL DEFAULT '',
+        joined_at INTEGER NOT NULL,
+        PRIMARY KEY (group_id, member)
+    );
+    CREATE INDEX group_members_member ON group_members(member);
+    CREATE TABLE group_rooms (
+        room_id TEXT PRIMARY KEY,
+        group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX group_rooms_group ON group_rooms(group_id, position);
 ",
 ];
 
@@ -268,9 +295,16 @@ impl Contas {
     }
 
     pub fn delete_user(&self, id: i64) -> rusqlite::Result<()> {
-        self.db()
-            .execute("DELETE FROM users WHERE id = ?1", params![id])?;
-        Ok(())
+        let mut db = self.db();
+        let tx = db.transaction()?;
+        // Groups name members by text ("u:<id>"), so no foreign key does this.
+        tx.execute("DELETE FROM groups WHERE owner = 'u:' || ?1", params![id])?;
+        tx.execute(
+            "DELETE FROM group_members WHERE member = 'u:' || ?1",
+            params![id],
+        )?;
+        tx.execute("DELETE FROM users WHERE id = ?1", params![id])?;
+        tx.commit()
     }
 
     /// Sets the @username and/or the display name.
@@ -335,6 +369,13 @@ pub enum Problem {
     BadImage,
     NotFriends,
     EmptyMessage,
+    /// Not a group you belong to (or it no longer exists).
+    NoGroup,
+    NotOwner,
+    BadName,
+    NoInvite,
+    /// A group limit, with what to tell the person.
+    Limit(&'static str),
     Database,
 }
 
@@ -357,6 +398,11 @@ impl IntoResponse for Problem {
             Problem::NotFriends => (StatusCode::FORBIDDEN, "Só dá para mandar mensagem para amigos."),
             Problem::EmptyMessage => (StatusCode::BAD_REQUEST, "A mensagem está vazia."),
             Problem::BadImage => (StatusCode::BAD_REQUEST, "Essa imagem não parece uma foto válida."),
+            Problem::NoGroup => (StatusCode::NOT_FOUND, "Esse grupo não existe ou você não faz parte dele."),
+            Problem::NotOwner => (StatusCode::FORBIDDEN, "Só o dono do grupo pode fazer isso."),
+            Problem::BadName => (StatusCode::BAD_REQUEST, "O nome precisa ter de 1 a 32 caracteres."),
+            Problem::NoInvite => (StatusCode::NOT_FOUND, "Esse convite não vale mais. Peça um novo para quem te chamou."),
+            Problem::Limit(why) => (StatusCode::CONFLICT, why),
             Problem::Database => (StatusCode::INTERNAL_SERVER_ERROR, "Algo deu errado. Tente de novo."),
         };
         (status, Json(json!({ "error": error }))).into_response()
