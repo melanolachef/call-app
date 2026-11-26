@@ -298,6 +298,9 @@ function accountFriendItem(friend) {
   const status = el('span', `friend-status ellipsis${friend.sala ? ' online' : ''}`);
   if (friend.sala) {
     status.append('em ', el('b', null, displayRoomName(friend.sala)), el('span', 'm-hide', ` · ${friend.pessoas} ${friend.pessoas === 1 ? 'pessoa' : 'pessoas'} · ${friendSince(friend.desde)}`));
+  } else if (friend.online) {
+    status.classList.add('online');
+    status.textContent = 'online';
   } else {
     status.textContent = `@${friend.username}`;
   }
@@ -349,11 +352,13 @@ function renderFriends() {
   if ($('friends-section').hidden) return;
   // Requests first; then friends in a call, then by name (accounts and codes together).
   const inCall = (item) => (item.account ? !!item.account.sala : !!friendPresence[item.code.code]);
+  const online = (item) => !!item.account?.online;
   const label = (item) => (item.account ? accountFriendName(item.account) : friendLabel(item.code));
   const everyone = [
     ...(accountFriends?.amigos ?? []).map((account) => ({ account })),
     ...(friendsSupported ? loadFriends() : []).map((code) => ({ code })),
-  ].sort((a, b) => Number(inCall(b)) - Number(inCall(a)) || label(a).localeCompare(label(b), 'pt-BR'));
+  ].sort((a, b) => Number(inCall(b)) - Number(inCall(a)) || Number(online(b)) - Number(online(a))
+    || label(a).localeCompare(label(b), 'pt-BR'));
   const requests = accountFriends?.recebidos ?? [];
   $('friends').replaceChildren(...requests.map(requestItem), ...everyone.map((item) => (item.account ? accountFriendItem(item.account) : friendItem(item.code))));
   $('friends-empty').hidden = requests.length + everyone.length > 0;
@@ -366,6 +371,9 @@ function renderFriends() {
   renderTagline();
 }
 window.addEventListener('account-friends-changed', renderFriends);
+// The lobby (and the Windows app on it) keeps you "online" for friends.
+onAccountChange(syncOnline);
+window.addEventListener('friends-changed', syncOnline); // invisible toggled
 
 async function updateFriends() {
   if (!friendsSupported || document.hidden) return;

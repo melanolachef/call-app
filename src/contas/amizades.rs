@@ -215,6 +215,40 @@ impl Contas {
         self.online().remove(&(room.to_owned(), conn));
     }
 
+    /// The page is open somewhere (lobby, app) for account `user`. Counted,
+    /// so two tabs don't cancel each other; `went_away` undoes it.
+    pub fn came_online(&self, user: i64) {
+        *self
+            .lobby
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(user)
+            .or_default() += 1;
+    }
+
+    pub fn went_away(&self, user: i64) {
+        let mut lobby = self
+            .lobby
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(count) = lobby.get_mut(&user) {
+            *count -= 1;
+            if *count == 0 {
+                lobby.remove(&user);
+            }
+        }
+    }
+
+    /// Online: the page open somewhere, or in a room (not invisible).
+    pub fn is_online(&self, user: i64) -> bool {
+        let in_lobby = self
+            .lobby
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains_key(&user);
+        in_lobby || self.where_is(user).is_some()
+    }
+
     /// The room `user` joined most recently, and for how long.
     pub fn where_is(&self, user: i64) -> Option<(String, u64)> {
         self.online()
@@ -280,6 +314,7 @@ async fn list(
         let mut entry = person(user);
         match relation {
             Relation::Friend => {
+                entry["online"] = contas.is_online(user.id).into();
                 if let Some((room, secs)) = contas.where_is(user.id) {
                     let count = rooms.counts(&[room.as_str()]).first().map_or(0, |c| c.1);
                     entry["sala"] = room.into();
@@ -439,5 +474,19 @@ mod tests {
         assert_eq!(contas.where_is(7).unwrap().0, "churrasco-k3f9x2");
         contas.absent("churrasco-k3f9x2", 1);
         assert_eq!(contas.where_is(7), None);
+    }
+
+    #[test]
+    fn online_counts_open_pages() {
+        let contas = memory("http://nada");
+        assert!(!contas.is_online(7));
+        contas.came_online(7);
+        contas.came_online(7); // a second tab
+        contas.went_away(7);
+        assert!(contas.is_online(7), "one tab still open");
+        contas.went_away(7);
+        assert!(!contas.is_online(7));
+        contas.present("sala", 3, 7);
+        assert!(contas.is_online(7), "in a room counts as online");
     }
 }

@@ -399,3 +399,33 @@ $('fd-pick').onclick = () => {
   $('friends-dialog').close();
   openUsernameDialog();
 };
+
+// ---------- online (#158) ----------
+
+// While this page is open (lobby, the Windows app) and you're signed in and
+// not invisible, a quiet connection tells the server you're around, so
+// friends see "online". It carries nothing; closing it is going away.
+let onlineSocket = null;
+let onlineRetry = 0;
+let onlineTimer = null;
+
+function syncOnline() {
+  const want = !!account?.signedIn && !isInvisible();
+  if (want && !onlineSocket) {
+    const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/presenca`);
+    onlineSocket = socket;
+    socket.onopen = () => (onlineRetry = 0);
+    socket.onclose = () => {
+      if (onlineSocket !== socket) return; // closed on purpose
+      onlineSocket = null;
+      clearTimeout(onlineTimer);
+      onlineRetry = Math.min(onlineRetry + 1, 6);
+      onlineTimer = setTimeout(syncOnline, 1000 * 2 ** onlineRetry); // 2 s up to ~1 min
+    };
+  } else if (!want && onlineSocket) {
+    const socket = onlineSocket;
+    onlineSocket = null;
+    socket.close();
+  }
+}
+
