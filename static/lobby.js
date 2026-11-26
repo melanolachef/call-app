@@ -1,7 +1,7 @@
 'use strict';
 
-// The lobby: your profile, create a room, join by link, and the rooms you
-// have been in (saved in this browser) with how many people are in each now.
+// The lobby: your profile, create a group, join by invite, and your groups
+// (#189) with their rooms and how many people are in each now.
 
 const COUNTS_EVERY_MS = 15_000;
 let nick = load('nick');
@@ -21,7 +21,7 @@ function greeting(hour = new Date().getHours()) {
 // lines only fit some hours; the same line doesn't show twice in a row.
 const TAGLINES = {
   any: [
-    'Abra uma sala e mande o link para a galera.',
+    'Crie um grupo e mande o convite para a galera.',
     'Bora juntar o grupo?',
     'A sala está pronta. Falta só a galera.',
     'Quem chamar primeiro escolhe o jogo.',
@@ -107,44 +107,54 @@ $('edit').onclick = () => openProfileDialog({
     nick = newNick;
     photo = newPhoto;
     renderProfile();
-    ensureHomeRoom(nick); // the fixed room is named after the first nick
-    renderRooms();
-    updateCounts();
+    syncGroupNick();
   },
 });
 
 // ---------- criar / entrar ----------
 
-// Accepts a full invite link or just the room code.
+// Accepts a full room link or just the room code (old links still open).
 function parseRoom(input) {
   const text = input.trim();
   const id = text.match(/\/room\/([A-Za-z0-9_-]{1,64})/)?.[1] ?? text;
   return validRoomId(id) ? id : null;
 }
 
-$('create-form').onsubmit = (e) => {
-  e.preventDefault();
-  location.assign(`/room/${newRoomId($('room-name').value)}`);
-};
-
-$('join-form').onsubmit = (e) => {
-  e.preventDefault();
-  const id = parseRoom($('join-link').value);
-  if (id) location.assign(`/room/${id}`);
-  else toast('Esse link não parece um convite do CPX Call.');
-};
-
-// ---------- suas salas ----------
-
-const ago = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' });
-function timeAgo(at) {
-  const minutes = Math.round((Date.now() - at) / 60_000);
-  if (minutes < 1) return 'agora há pouco';
-  const text = minutes < 60 ? ago.format(-minutes, 'minute')
-    : minutes < 24 * 60 ? ago.format(-Math.round(minutes / 60), 'hour')
-      : ago.format(-Math.round(minutes / (24 * 60)), 'day');
-  return `visitada ${text}`; // "visitada ontem", "visitada há 3 horas"
+// A new group opens its window, with the invite ready to send.
+async function newGroup(name) {
+  const group = await createGroup(name);
+  if (group) {
+    window.dispatchEvent(new CustomEvent('group-created', { detail: group.id })); // painel.js shows it
+    openGroup(group.id);
+  }
+  return group;
 }
+
+// An invite link: join, then straight into the group's first room.
+async function joinInvite(text) {
+  const code = parseInvite(text);
+  if (!code) {
+    const old = text.includes('/room/') && parseRoom(text);
+    if (old) location.assign(`/room/${old}`);
+    else toast('Esse link não parece um convite do CPX Call.');
+    return !!old;
+  }
+  const group = await acceptInvite(code);
+  if (group?.salas?.[0]) location.assign(`/room/${group.salas[0].id}`);
+  return !!group;
+}
+
+$('create-form').onsubmit = async (e) => {
+  e.preventDefault();
+  if (await newGroup($('room-name').value)) $('room-name').value = '';
+};
+
+$('join-form').onsubmit = async (e) => {
+  e.preventDefault();
+  if (await joinInvite($('join-link').value)) $('join-link').value = '';
+};
+
+// ---------- seus grupos ----------
 
 // Right side of a row: "● 3 agora" in green, or "Vazia".
 function peopleText(id) {
@@ -154,9 +164,8 @@ function peopleText(id) {
 }
 
 const SVG = (paths) => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`; // fixed markup only
-const ICON_HOME = SVG('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>');
-const ICON_PIN = SVG('<path d="M12 17v5M8 3h8l-1 6 3 3v2H6v-2l3-3z"/>');
 const ICON_X = SVG('<path d="M18 6L6 18M6 6l12 12"/>');
+const ICON_DOTS = SVG('<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>');
 
 function iconButton(svg, label, pressed) {
   const button = el('button', 'ghost');
@@ -168,7 +177,7 @@ function iconButton(svg, label, pressed) {
 }
 
 // One square per person in the room (up to 3). Only counts: the server
-// doesn't know names, and the lobby shouldn't expose who is where.
+// doesn't say who is where.
 function presence(count) {
   const faces = el('span', 'presence');
   faces.setAttribute('aria-hidden', 'true');
@@ -177,56 +186,46 @@ function presence(count) {
 }
 
 function roomItem(room) {
-  const name = displayRoomName(room.id);
   const li = el('li');
   const row = el('div', 'room-item');
   const link = el('a', 'room-link');
   link.href = `/room/${room.id}`;
-  const icon = el('span', 'room-icon');
+  const icon = el('span', 'room-icon', '#');
   icon.setAttribute('aria-hidden', 'true');
-  if (room.home) icon.innerHTML = ICON_HOME;
-  else icon.textContent = Array.from(name)[0] ?? '#';
-  // "Block [fixa]" over the room code in mono ("block-q81zd0 · visitada
-  // ontem"), then who is there and "Entrar", as in the design.
   const text = el('span', 'room-text');
   const title = el('span', 'room-title');
-  title.append(el('strong', 'ellipsis', name));
-  if (room.home) title.append(el('span', 'tag', 'fixa'));
-  else if (room.pinned) title.append(el('span', 'tag', 'fixada'));
-  const meta = el('span', 'room-meta ellipsis');
-  meta.append(el('span', 'mono', room.id));
-  if (!room.home) meta.append(el('span', 'm-hide', ` · ${timeAgo(room.at)}`));
-  text.append(title, meta);
+  title.append(el('strong', 'ellipsis', room.name));
+  text.append(title);
   const [people, cls] = peopleText(room.id);
   const chevron = el('span', 'm-only');
   chevron.innerHTML = '<svg class="chevron m-only" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
   link.append(icon, text, presence(counts[room.id]), el('span', `room-count ${cls}`, people), el('span', 'room-enter', 'Entrar'), chevron.firstChild);
   row.append(link);
-
-  if (!room.home) { // the fixed room can't be pinned or removed
-    const actions = el('span', 'room-actions');
-    const pin = iconButton(ICON_PIN, `${room.pinned ? 'Desafixar' : 'Fixar'} ${name}`, !!room.pinned);
-    pin.onclick = () => {
-      saveRooms(loadRooms().map((r) => (r.id === room.id ? { ...r, pinned: !r.pinned } : r)));
-      renderRooms();
-    };
-    const remove = iconButton(ICON_X, `Tirar ${name} da lista`);
-    remove.onclick = () => {
-      saveRooms(loadRooms().filter((r) => r.id !== room.id));
-      renderRooms();
-    };
-    actions.append(pin, remove);
-    row.append(actions);
-  }
   li.append(row);
+  return li;
+}
+
+// The group's name (opens it), how many people, and "Convidar".
+function groupHead(group) {
+  const li = el('li', 'group-head');
+  const open = el('button', 'group-open');
+  open.type = 'button';
+  open.append(el('strong', 'ellipsis', group.nome), el('span', 'muted', `${group.membros} ${group.membros === 1 ? 'pessoa' : 'pessoas'}${group.dono ? ' · dono' : ''}`));
+  open.onclick = () => openGroup(group.id);
+  const invite = el('button', 'btn small ghost', 'Convidar');
+  invite.type = 'button';
+  invite.onclick = () => inviteToGroup(group);
+  const more = iconButton(ICON_DOTS, `Abrir ${group.nome}`);
+  more.className = 'icon-btn';
+  more.onclick = () => openGroup(group.id);
+  li.append(open, invite, more);
   return li;
 }
 
 function renderRooms() {
   lobbyChanged();
-  const list = orderedRooms();
-  $('rooms-empty').hidden = list.some((r) => !r.home);
-  $('rooms').replaceChildren(...list.map(roomItem));
+  $('rooms-empty').hidden = groups.length > 0;
+  $('rooms').replaceChildren(...groups.flatMap((g) => [groupHead(g), ...g.salas.map((s) => roomItem({ id: s.id, name: s.nome }))]));
 }
 
 async function updateCounts() {
@@ -237,6 +236,11 @@ async function updateCounts() {
   counts = fresh;
   renderRooms();
 }
+
+window.addEventListener('groups-changed', () => {
+  renderRooms();
+  updateCounts();
+});
 
 // ---------- amigos ----------
 
@@ -250,10 +254,11 @@ function friendLabel(friend) {
 
 function friendItem(friend) {
   const seen = friendPresence[friend.code];
+  const joinable = seen && canJoinRoom(seen.room);
   const li = el('li');
   const row = el('div', 'room-item friend-item');
-  const link = el(seen ? 'a' : 'div', 'room-link');
-  if (seen) link.href = `/room/${seen.room}`;
+  const link = el(joinable ? 'a' : 'div', 'room-link');
+  if (joinable) link.href = `/room/${seen.room}`;
   const icon = el('span', 'room-icon');
   icon.setAttribute('aria-hidden', 'true');
   icon.textContent = initials(friendLabel(friend));
@@ -269,7 +274,7 @@ function friendItem(friend) {
   }
   text.append(status);
   link.append(icon, text);
-  if (seen) {
+  if (joinable) {
     const enter = el('span', 'room-enter', 'Entrar');
     enter.append(el('span', 'm-only', '\u00a0junto'));
     link.append(enter);
@@ -291,8 +296,9 @@ function friendItem(friend) {
 function accountFriendItem(friend) {
   const li = el('li');
   const row = el('div', 'room-item friend-item');
-  const link = el(friend.sala ? 'a' : 'div', 'room-link');
-  if (friend.sala) link.href = `/room/${friend.sala}`;
+  const joinable = friend.sala && canJoinRoom(friend.sala);
+  const link = el(joinable ? 'a' : 'div', 'room-link');
+  if (joinable) link.href = `/room/${friend.sala}`;
   const icon = el('span', 'room-icon');
   icon.setAttribute('aria-hidden', 'true');
   icon.textContent = initials(accountFriendName(friend));
@@ -311,7 +317,7 @@ function accountFriendItem(friend) {
   }
   text.append(status);
   link.append(icon, text);
-  if (friend.sala) {
+  if (joinable) {
     const enter = el('span', 'room-enter', 'Entrar');
     enter.append(el('span', 'm-only', '\u00a0junto'));
     link.append(enter);
@@ -456,44 +462,39 @@ $('m-form').onsubmit = (e) => {
 };
 $('m-cancel').onclick = () => $('m-dialog').close();
 
-$('m-new').onclick = () => askMobile('Nova sala', 'Nome (opcional)', 'Criar sala', (name) => {
-  location.assign(`/room/${newRoomId(name)}`);
+$('m-new').onclick = () => askMobile('Novo grupo', 'Nome do grupo', 'Criar grupo', (name) => {
+  if (!name.trim()) return false;
+  newGroup(name);
 });
-
-function joinInvite(text) {
-  const id = parseRoom(text);
-  if (id) {
-    location.assign(`/room/${id}`);
-    return true;
-  }
-  toast('Esse link não parece um convite do CPX Call.');
-  return false;
-}
 // Reads the clipboard when the browser lets it; otherwise asks for the link.
 $('m-paste').onclick = async () => {
   let text = '';
   try {
     text = await navigator.clipboard.readText();
   } catch { /* no permission: ask */ }
-  if (text && parseRoom(text) && text.includes('/room/')) {
+  if (text && (parseInvite(text) || text.includes('/room/'))) {
     joinInvite(text);
     return;
   }
-  askMobile('Entrar com convite', 'Cole o link ou o código', 'Entrar', (value) => joinInvite(value));
+  askMobile('Entrar com convite', 'Cole o link do convite', 'Entrar', (value) => {
+    joinInvite(value);
+  });
 };
 
-$('rooms-edit').onclick = () => {
-  const on = document.body.classList.toggle('editing');
-  $('rooms-edit').setAttribute('aria-pressed', String(on));
-  $('rooms-edit').textContent = on ? 'Pronto' : 'Editar';
-};
 mobile.addEventListener('change', renderRooms);
 
 // ---------- início ----------
 
 renderProfile();
-whenAgeOk();
-if (nick) ensureHomeRoom(nick);
+// An invite link ("/?convite=3fa9c01b2d4e"): offer to join, after the age question.
+(() => {
+  const code = parseInvite(new URLSearchParams(location.search).get('convite'));
+  if (code) history.replaceState(null, '', location.pathname);
+  whenAgeOk(code ? () => joinInvite(code) : undefined);
+})();
+loadGroups();
+setInterval(() => !document.hidden && loadGroups(), 60_000);
+onAccountChange((value) => value?.signedIn && loadGroups()); // signed in: the browser's groups go to the account
 onProfileChangedElsewhere(() => { // edited in a room open in another tab
   nick = cleanNick(load('nick'));
   photo = validPhoto(load('photo'));

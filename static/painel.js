@@ -12,7 +12,8 @@ const PANEL_ICONS = {
   rooms: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
   dots: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>',
 };
-let panelView = 'amigos'; // or 'salas'
+let panelView = 'amigos'; // or 'salas' (your groups)
+let panelGroup = null; // a group picked in the column on the left
 let panelTab = 'online'; // or 'todos'
 let panelSearch = '';
 let panelQueued = false;
@@ -70,15 +71,27 @@ function whoIsThere(room) {
 
 // ---------- coluna de salas ----------
 
+// One button per group (#189), like Discord's servers: opens it in the middle.
+function groupCount(group) {
+  return group.salas.reduce((sum, room) => sum + (counts[room.id] || 0), 0);
+}
+
 function renderRail() {
-  $('rail-rooms').replaceChildren(...orderedRooms().map((r) => {
-    const name = displayRoomName(r.id);
-    const link = el('a', 'rail-room', Array.from(name.replace(/[^\p{L}\p{N}]/gu, '')).slice(0, 2).join('').toLowerCase() || '#');
-    link.href = `/room/${r.id}`;
-    link.title = counts[r.id] ? `${name} · ${counts[r.id]} agora` : name;
-    link.setAttribute('aria-label', link.title);
-    if (counts[r.id] > 0) link.append(el('span', 'rail-badge', String(counts[r.id])));
-    return link;
+  $('rail-rooms').replaceChildren(...groups.map((g) => {
+    const here = panelView === 'salas' && panelGroup === g.id;
+    const button = el('button', `rail-room${here ? ' current' : ''}`, shortName(g.nome));
+    button.type = 'button';
+    const n = groupCount(g);
+    button.title = n ? `${g.nome} · ${n} agora` : g.nome;
+    button.setAttribute('aria-label', button.title);
+    if (here) button.setAttribute('aria-current', 'true');
+    if (n > 0) button.append(el('span', 'rail-badge', String(n)));
+    button.onclick = () => {
+      panelView = 'salas';
+      panelGroup = g.id;
+      queuePanel();
+    };
+    return button;
   }));
 }
 
@@ -91,8 +104,8 @@ function renderSide(people, calls) {
   const shown = calls.filter((c) => matches(displayRoomName(c.id)) || c.friends.some((f) => matches(f.name)));
   $('panel-calls-title').hidden = !shown.length;
   $('panel-calls').replaceChildren(...shown.map((room) => {
-    const link = el('a', 'panel-call');
-    link.href = `/room/${room.id}`;
+    const link = el(canJoinRoom(room.id) ? 'a' : 'div', 'panel-call');
+    if (canJoinRoom(room.id)) link.href = `/room/${room.id}`;
     const text = el('span', 'panel-call-text');
     text.append(el('span', 'ellipsis', displayRoomName(room.id)), el('span', 'panel-call-sub ellipsis', whoIsThere(room)));
     const faces = el('span', 'panel-faces');
@@ -171,7 +184,7 @@ function friendRowWide(person) {
     msg.onclick = () => openDm(person.account);
     row.append(msg);
   }
-  if (person.state === 'call') {
+  if (person.state === 'call' && canJoinRoom(person.room)) {
     const join = el('a', 'btn small primary', 'Entrar junto');
     join.href = `/room/${person.room}`;
     row.append(join);
@@ -233,57 +246,82 @@ function renderFriendsView(people) {
   $('panel-body').replaceChildren(...body);
 }
 
-// ---------- salas ----------
+// ---------- grupos ----------
 
-function renderRoomsView() {
-  const list = orderedRooms().filter((r) => matches(displayRoomName(r.id)) || matches(r.id));
-  const rows = list.map((r) => {
-    const row = el('li', 'panel-room');
-    const link = el('a', 'panel-room-link');
-    link.href = `/room/${r.id}`;
-    const text = el('span', 'panel-friend-text');
-    const title = el('strong', 'ellipsis', displayRoomName(r.id));
-    if (r.home) title.append(el('span', 'tag', 'fixa'));
-    text.append(title, el('span', 'panel-friend-status mono ellipsis', r.id));
-    const n = counts[r.id];
-    link.append(text, el('span', `panel-room-count${n ? ' online' : ''}`, n === undefined ? '' : n ? `${n} agora` : 'vazia'));
-    row.append(link);
-    if (!r.home) {
-      const pin = el('button', 'icon-btn friend-more', null);
-      pin.type = 'button';
-      pin.innerHTML = ICON_PIN; // fixed markup
-      pin.classList.toggle('pinned', !!r.pinned);
-      pin.title = r.pinned ? 'Desafixar' : 'Fixar';
-      pin.setAttribute('aria-label', `${pin.title} ${displayRoomName(r.id)}`);
-      pin.onclick = () => {
-        saveRooms(loadRooms().map((x) => (x.id === r.id ? { ...x, pinned: !x.pinned } : x)));
-        renderRooms();
-      };
-      const remove = el('button', 'icon-btn friend-more', null);
-      remove.type = 'button';
-      remove.innerHTML = ICON_X; // fixed markup
-      remove.title = 'Tirar da lista';
-      remove.setAttribute('aria-label', `Tirar ${displayRoomName(r.id)} da lista`);
-      remove.onclick = () => {
-        saveRooms(loadRooms().filter((x) => x.id !== r.id));
-        renderRooms();
-      };
-      row.append(pin, remove);
-    }
-    return row;
-  });
+function roomRow(room) {
+  const row = el('li', 'panel-room');
+  const link = el('a', 'panel-room-link');
+  link.href = `/room/${room.id}`;
+  const text = el('span', 'panel-friend-text');
+  text.append(el('strong', 'ellipsis', room.nome));
+  const n = counts[room.id];
+  link.append(el('span', 'panel-room-hash', '#'), text, el('span', `panel-room-count${n ? ' online' : ''}`, n === undefined ? '' : n ? `${n} agora` : 'vazia'));
+  row.append(link);
+  return row;
+}
+
+function groupActions(g) {
+  const bar = el('div', 'panel-group-actions');
+  const invite = el('button', 'btn small primary', 'Convidar');
+  invite.type = 'button';
+  invite.onclick = () => inviteToGroup(g);
+  const open = el('button', 'btn small ghost', g.dono ? 'Salas e pessoas' : 'Ver grupo');
+  open.type = 'button';
+  open.onclick = () => openGroup(g.id);
+  bar.append(invite, open);
+  return bar;
+}
+
+function groupForms() {
   const create = el('form', 'panel-create');
   const input = el('input', 'input');
-  input.maxLength = 40;
-  input.placeholder = 'Nome da sala nova (opcional)';
-  input.setAttribute('aria-label', 'Nome da sala nova');
-  const go = el('button', 'btn small primary', 'Criar sala');
-  create.append(input, go);
+  input.maxLength = 32;
+  input.required = true;
+  input.placeholder = 'Nome do grupo novo';
+  input.setAttribute('aria-label', 'Nome do grupo novo');
+  create.append(input, el('button', 'btn small primary', 'Criar grupo'));
   create.onsubmit = (e) => {
     e.preventDefault();
-    location.assign(`/room/${newRoomId(input.value)}`);
+    newGroup(input.value);
   };
-  $('panel-body').replaceChildren(create, ...group('Suas salas', rows));
+  const join = el('form', 'panel-create');
+  const link = el('input', 'input');
+  link.placeholder = 'Cole o link de um convite';
+  link.setAttribute('aria-label', 'Link do convite');
+  join.append(link, el('button', 'btn small', 'Entrar'));
+  join.onsubmit = (e) => {
+    e.preventDefault();
+    joinInvite(link.value);
+  };
+  return [create, join];
+}
+
+function renderGroupsView() {
+  const one = groups.find((g) => g.id === panelGroup);
+  if (one) {
+    const rooms = one.salas.filter((r) => matches(r.nome));
+    $('panel-body').replaceChildren(groupActions(one), ...group('Salas', rooms.map(roomRow)));
+    return;
+  }
+  const body = [];
+  for (const g of groups.filter((x) => matches(x.nome) || x.salas.some((r) => matches(r.nome)))) {
+    const head = el('button', 'panel-group-title');
+    head.type = 'button';
+    head.append(el('strong', 'ellipsis', g.nome), el('span', 'muted', `${g.membros} ${g.membros === 1 ? 'pessoa' : 'pessoas'}`));
+    head.onclick = () => {
+      panelGroup = g.id;
+      queuePanel();
+    };
+    const list = el('ul', 'panel-list');
+    list.append(...g.salas.map(roomRow));
+    body.push(head, list);
+  }
+  if (!groups.length) {
+    body.push(el('p', 'panel-empty', groupsOn
+      ? 'Você ainda não está em nenhum grupo. Crie um e mande o convite para a galera, ou cole um convite que te mandaram.'
+      : 'Grupos estão desligados neste servidor.'));
+  }
+  $('panel-body').replaceChildren(...(groupsOn ? groupForms() : []), ...body);
 }
 
 // ---------- coluna "Agora" ----------
@@ -295,16 +333,24 @@ function renderNow(calls) {
     const minutes = Math.round((room.secs || 0) / 60);
     text.append(el('strong', 'ellipsis', displayRoomName(room.id)),
       el('span', 'panel-friend-status ellipsis', `${whoIsThere(room)}${minutes ? ` · ${minutes} min` : ''}`));
-    const join = el('a', `btn small ${i === 0 ? 'primary' : 'ghost'}`, 'Entrar');
-    join.href = `/room/${room.id}`;
-    card.append(text, join);
+    card.append(text);
+    if (canJoinRoom(room.id)) {
+      const join = el('a', `btn small ${i === 0 ? 'primary' : 'ghost'}`, 'Entrar');
+      join.href = `/room/${room.id}`;
+      card.append(join);
+    }
     return card;
   });
   if (!cards.length) {
     const empty = el('div', 'now-empty');
-    empty.append(el('p', null, 'Ninguém em call agora. Abra uma sala e chame a galera.'));
-    const create = el('button', 'btn small', 'Nova sala');
-    create.onclick = () => $('rail-new').click();
+    empty.append(el('p', null, groups.length ? 'Ninguém em call agora. Entre numa sala do seu grupo e chame a galera.' : 'Ninguém em call agora. Crie um grupo e chame a galera.'));
+    const create = el('button', 'btn small', groups.length ? 'Ver grupos' : 'Novo grupo');
+    create.onclick = () => {
+      if (!groups.length) return $('rail-new').click();
+      panelView = 'salas';
+      panelGroup = null;
+      queuePanel();
+    };
     empty.append(create);
     cards.push(empty);
   }
@@ -322,12 +368,14 @@ function renderPanel() {
   const calls = panelCalls(people);
   renderRail();
   renderSide(people, calls);
-  $('panel-title').textContent = panelView === 'amigos' ? 'Amigos' : 'Salas';
+  const picked = panelView === 'salas' && groups.find((g) => g.id === panelGroup);
+  if (panelView === 'salas' && !picked) panelGroup = null; // left or deleted
+  $('panel-title').textContent = panelView === 'amigos' ? 'Amigos' : picked ? picked.nome : 'Grupos';
   $('panel-title-icon').innerHTML = panelView === 'amigos' ? PANEL_ICONS.friends : PANEL_ICONS.rooms; // fixed markup
   $('panel-tabs').hidden = panelView !== 'amigos';
   document.querySelectorAll('.panel-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === panelTab)));
   if (panelView === 'amigos') renderFriendsView(people);
-  else renderRoomsView();
+  else renderGroupsView();
   renderNow(calls);
 }
 
@@ -338,6 +386,12 @@ function queuePanel() {
 }
 
 window.addEventListener('lobby-changed', queuePanel);
+window.addEventListener('groups-changed', queuePanel);
+window.addEventListener('group-created', (e) => {
+  panelView = 'salas';
+  panelGroup = e.detail;
+  queuePanel();
+});
 window.addEventListener('account-friends-changed', queuePanel);
 window.addEventListener('friends-changed', queuePanel);
 onAccountChange(queuePanel);
@@ -345,6 +399,7 @@ matchMedia('(max-width: 760px), (max-height: 500px) and (pointer: coarse)').addE
 
 document.querySelectorAll('.panel-nav').forEach((b) => (b.onclick = () => {
   panelView = b.dataset.view;
+  panelGroup = null;
   queuePanel();
 }));
 document.querySelectorAll('.panel-tab').forEach((b) => (b.onclick = () => {

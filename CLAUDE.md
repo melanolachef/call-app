@@ -81,6 +81,12 @@ _Atualizado em 2026-11-27._
   emprestados os controles existentes), Início largo (`static/painel.js`,
   só ≥ 761 px; o celular mantém `.lobby`) e sala larga
   (`static/room/sala-larga.js`, só ≥ 1200 px; abaixo, o layout antigo).
+- **Grupos (#189, PR aberto em `feat/grupos`):** salas só dentro de grupos
+  (estilo servidor do Discord), sem login obrigatório (membro = conta ou
+  hash da chave do navegador), convite `/?convite=`, dono gerencia salas e
+  pessoas (`src/contas/grupos.rs`, `static/grupos.js`). Banco sempre ligado
+  (`cpx.db` por padrão), Google opcional. Falta: regressão da sala avulsa e
+  teste com 2+ pessoas reais.
 - **Revisão de segurança de 26/11:** 15 problemas achados; corrigidos
   #8, #12 e #13 (limites, presença ao apagar conta). Os outros esperam
   (lista na memória do agente); o mais grave é a fila cheia expulsar quem

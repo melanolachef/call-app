@@ -118,7 +118,7 @@ let reconnectAt = 0; // when the next attempt starts (for the countdown)
 
 async function join() {
   hwH264 = await hwH264Ready; // needed before any peer (ICE servers come in the welcome)
-  const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/${roomId}?dono=${ownerKey()}`);
+  const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/${roomId}?dono=${ownerKey()}&aparelho=${deviceKey()}`);
   ws = socket;
   ws.onmessage = onMessage;
   ws.onclose = () => {
@@ -137,9 +137,16 @@ async function join() {
       [...peers.keys()].forEach(removePeer);
       myId = null;
       refresh();
+      const home = { label: 'Ir para o início', run: () => location.assign('/') };
       if (why === 'kicked') {
         left = true; // don't come back by ourselves
-        showNotice('Você foi removido da sala', 'O dono da sala tirou você daqui.', { label: 'Ir para o início', run: () => location.assign('/') });
+        showNotice('Você foi removido da sala', 'O dono tirou você daqui.', home);
+      } else if (why === 'forbidden') { // a group room (#189), and you're not in the group
+        left = true;
+        showNotice('Sala de um grupo', 'Só quem está no grupo entra nesta sala. Peça o convite do grupo para alguém de lá.', home);
+      } else if (why === 'closed') {
+        left = true;
+        showNotice('Sala apagada', 'O dono apagou esta sala (ou o grupo inteiro).', home);
       } else {
         showNotice('Sala trancada', 'O dono trancou esta sala: ninguém novo entra agora. Peça para destrancar e tente de novo.');
       }
@@ -230,7 +237,6 @@ function onMessage(ev) {
         timer = setInterval(tick, 1000); // one text node a second: no layout work
       }
       for (const id of msg.peers) createPeer(id, true);
-      rememberRoom(roomId); // shows up in the lobby's "Suas salas"
       renderHud();
       setChatEnabled(true);
       addSystem(reconnecting ? 'Reconectado.' : 'Você entrou na sala. As mensagens do chat não ficam salvas.');
@@ -264,6 +270,8 @@ function onMessage(ev) {
       break;
     case 'locked': // the owner locked the room (#151)
     case 'kicked':
+    case 'forbidden': // group room, not a member (#189)
+    case 'closed': // the group room was deleted
       turnedAway = msg.type;
       break;
     case 'room': {
