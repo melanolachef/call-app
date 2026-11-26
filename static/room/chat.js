@@ -3,13 +3,10 @@
 // Chat goes through the signaling WebSocket (one copy per participant), so it
 // works even when the direct video connection fails. Nothing is stored.
 const MAX_CHAT = 500;
-const GROUP_MS = 5 * 60_000; // consecutive messages from the same person share a header
 const messagesEl = $('messages');
 const chatInput = $('chat-input');
 // Phones, upright or sideways (keep in sync with the CSS in room.html).
 const mobile = matchMedia('(max-width: 760px), (max-height: 500px) and (pointer: coarse)');
-let lastAuthor = null;
-let lastAt = 0;
 let unread = 0;
 
 function cleanChat(value) {
@@ -74,22 +71,16 @@ function appendToChat(item) {
 
 function addMessage({ authorId, name, photo, text = '', gif = null, self = false }) {
   const now = Date.now();
-  const grouped = authorId === lastAuthor && now - lastAt < GROUP_MS;
-  lastAuthor = authorId;
-  lastAt = now;
-
-  // No bubbles: a small photo, the name and the time on the first message of
-  // a run, then just the text.
-  const li = el('li', `msg${self ? ' self' : ''}${grouped ? ' grouped' : ''}`);
+  // No bubbles: a small photo, the name and the time on every message, so a
+  // long message that wraps never runs into the next one.
+  const li = el('li', `msg${self ? ' self' : ''}`);
   const time = new Date(now).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  if (!grouped) {
-    const avatar = el('div', 'avatar');
-    avatar.setAttribute('aria-hidden', 'true');
-    paintAvatar(avatar, name, authorId, photo);
-    const head = el('div', 'msg-head');
-    head.append(el('span', 'ellipsis', self ? `${name}` : name), el('span', 'msg-time', time));
-    li.append(avatar, head);
-  }
+  const avatar = el('div', 'avatar');
+  avatar.setAttribute('aria-hidden', 'true');
+  paintAvatar(avatar, name, authorId, photo);
+  const head = el('div', 'msg-head');
+  head.append(el('span', 'ellipsis', name), el('span', 'msg-time', time));
+  li.append(avatar, head);
   if (gif) {
     // Sized before it loads, so the chat doesn't jump when it arrives.
     const img = el('img', 'msg-gif');
@@ -116,7 +107,6 @@ function addMessage({ authorId, name, photo, text = '', gif = null, self = false
 }
 
 function addSystem(text) {
-  lastAuthor = null; // the next message starts a new group
   appendToChat(el('li', 'system', text));
 }
 
