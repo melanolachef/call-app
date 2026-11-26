@@ -13,6 +13,7 @@ do Fly):
 |---|---|---|
 | `users` | id interno, identificador opaco da conta Google (`sub`), @usuário, nome que aparece, data de criação | e-mail, nome do Google, foto do Google, IP |
 | `sessions` | hash SHA-256 do token de sessão, a quem pertence, criação, último uso | o token em si |
+| `friendships` | par de contas, quem pediu, quando pediu e quando aceitou | mensagens, histórico de salas |
 
 Continua sem guardar: mensagens, salas, quem esteve em qual sala, vídeo, voz.
 "Apagar conta" apaga a linha do usuário e, em cascata, sessões (e, na fase 2,
@@ -44,9 +45,13 @@ letra; único sem diferenciar maiúsculas; alguns nomes reservados.
 
 ## Próximas fases
 
-- **2 (#157) Amizades:** pedido por @usuário (busca exata, ninguém é listado),
-  aceitar, recusar, remover, link de convite. Os códigos de amigo atuais
-  continuam para quem não tem conta.
+- **2 (#157) Amizades — feita:** busca exata por @usuário
+  (`GET /api/usuarios/{u}`, sem listar nem completar nomes), pedido, aceitar
+  (só quem recebeu), recusar/cancelar/desfazer (`/api/amigos`), pedidos
+  mútuos viram amizade, até 50 pedidos pendentes por conta, link
+  `/?u=usuario`. Onde o amigo está vem do mesmo aviso de presença da sala
+  (respeita o invisível), só em memória. Os códigos de amigo continuam para
+  quem não tem conta.
 - **3 (#158) Presença:** uma conexão leve aberta também no Início; amigos veem
   online, em qual sala, ou nada (invisível). Só em memória.
 - **4 (#159) Perfil na conta:** foto, banner e nick sincronizados entre aparelhos.

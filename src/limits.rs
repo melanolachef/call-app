@@ -53,6 +53,9 @@ impl Kind {
     }
 
     fn for_path(path: &str) -> Option<Self> {
+        if path.starts_with("/api/usuarios/") || path.starts_with("/api/amigos") {
+            return Some(Kind::Conta);
+        }
         match path {
             "/api/gifs" => Some(Kind::Gifs),
             "/api/friends" => Some(Kind::Friends),

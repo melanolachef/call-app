@@ -162,8 +162,32 @@ document.body.insertAdjacentHTML('beforeend', `
     <form method="dialog" class="dialog-body">
       <div class="heading">
         <h2 id="fd-title">Amigos</h2>
-        <span class="muted">Quem tem o seu código vê em que sala você está. Ninguém mais.</span>
+        <span class="muted">Seus amigos veem em que sala você está. Ninguém mais.</span>
       </div>
+      <div class="fd-account" id="fd-account" hidden>
+        <div id="fd-acc-out">
+          <p class="muted fd-note">Com uma conta, seus amigos te acham pelo @usuário em qualquer aparelho.</p>
+          <a class="btn small" id="fd-signin" href="/auth/google">Entrar com Google</a>
+        </div>
+        <div id="fd-acc-noname" hidden>
+          <p class="muted fd-note">Escolha seu @usuário para adicionar amigos.</p>
+          <button type="button" class="btn small" id="fd-pick">Escolher @usuário</button>
+        </div>
+        <div class="fd-acc-in" id="fd-acc-in" hidden>
+          <label class="field"><span class="muted">Adicionar por @usuário</span>
+            <span class="fd-search"><span aria-hidden="true">@</span><input id="fd-user" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="usuario" aria-label="@usuário do amigo"></span></label>
+          <div class="fd-found" id="fd-found" role="status" hidden></div>
+          <div class="field">
+            <span class="muted">Seu link de amizade</span>
+            <div class="fd-code"><span class="mono ellipsis" id="fd-mylink"></span><button type="button" class="btn small ghost" id="fd-copy-user">Copiar</button></div>
+          </div>
+          <div class="fd-list" id="fd-received"></div>
+          <div class="fd-list" id="fd-sent"></div>
+        </div>
+      </div>
+      <label class="switch-row">Invisível (amigos não veem onde você está)<input type="checkbox" role="switch" id="fd-invisible"></label>
+      <details class="fd-codes" id="fd-codes" open>
+        <summary>Código de amigo (sem conta)</summary>
       <div class="field">
         <span class="muted">Seu código</span>
         <div class="fd-code"><strong class="mono" id="fd-code"></strong><button type="button" class="btn small ghost" id="fd-copy">Copiar link</button></div>
@@ -173,7 +197,6 @@ document.body.insertAdjacentHTML('beforeend', `
       <label class="field"><span class="muted">Nome (opcional)</span>
         <input id="fd-add-name" autocomplete="off" maxlength="24" placeholder="Como ele aparece para você"></label>
       <button type="button" class="btn" id="fd-add">Adicionar</button>
-      <label class="switch-row">Invisível (amigos não veem onde você está)<input type="checkbox" role="switch" id="fd-invisible"></label>
       <details class="fd-transfer">
         <summary>Usar em outro aparelho (app, celular)</summary>
         <p class="muted">O app e cada navegador guardam o código separado. Copie aqui e cole no outro aparelho para usar o mesmo código e a mesma lista de amigos. Não mande para ninguém: quem tiver isso aparece como você.</p>
@@ -182,6 +205,7 @@ document.body.insertAdjacentHTML('beforeend', `
         </div>
         <input id="fd-import" autocomplete="off" placeholder="Colar o texto do outro aparelho">
         <button type="button" class="btn small" id="fd-import-btn">Usar este</button>
+      </details>
       </details>
       <button class="btn primary">Pronto</button>
     </form>
@@ -197,6 +221,10 @@ async function copyText(text, done) {
 }
 
 async function openFriendsDialog(prefill) {
+  renderAccountFriendsDialog();
+  $('fd-user').value = prefill?.username || '';
+  $('fd-found').hidden = true;
+  if (prefill?.username) lookupUser();
   $('fd-code').textContent = formatFriendCode(await myFriendCode());
   $('fd-invisible').checked = isInvisible();
   $('fd-add-code').value = prefill?.code ? formatFriendCode(prefill.code) : '';
@@ -230,4 +258,144 @@ $('fd-import-btn').onclick = async () => {
   } else {
     toast('Esse texto não veio de "Copiar para outro aparelho".');
   }
+};
+
+// ---------- amigos com conta (@usuário, #157) ----------
+
+// { amigos: [{ id, username, nick, sala?, pessoas?, desde? }], recebidos, enviados },
+// or null while signed out / accounts off.
+let accountFriends = null;
+
+const accountFriendName = (f) => f.nick || `@${f.username}`;
+
+async function loadAccountFriends() {
+  if (!account?.signedIn) {
+    accountFriends = null;
+  } else {
+    try {
+      const res = await fetch('/api/amigos', { cache: 'no-store' });
+      if (res.ok) accountFriends = await res.json();
+      else if (res.status === 401) accountFriends = null;
+    } catch { /* offline: keep the last list */ }
+  }
+  renderAccountFriendsDialog();
+  window.dispatchEvent(new Event('account-friends-changed'));
+  return accountFriends;
+}
+onAccountChange(() => loadAccountFriends());
+
+function friendLinkFor(username) {
+  return `${location.origin}/?u=${username}`;
+}
+
+function personRow(f, ...buttons) {
+  const row = el('div', 'fd-person');
+  const face = el('span', 'avatar');
+  face.textContent = initials(accountFriendName(f));
+  face.style.background = colorFor(`u${f.id}`);
+  const text = el('span', 'fd-person-text');
+  text.append(el('strong', 'ellipsis', accountFriendName(f)), el('span', 'muted ellipsis', `@${f.username}`));
+  row.append(face, text, ...buttons);
+  return row;
+}
+
+function actionButton(label, cls, onClick) {
+  const button = el('button', `btn small ${cls}`, label);
+  button.type = 'button';
+  if (onClick) button.onclick = onClick;
+  else button.disabled = true;
+  return button;
+}
+
+async function friendAction(method, path, body, done) {
+  const { ok, data } = await accountRequest(method, path, body);
+  if (!ok) {
+    toast(data.error || 'Não deu agora. Tente de novo.');
+    return false;
+  }
+  if (done) toast(done);
+  await loadAccountFriends();
+  return data;
+}
+
+function renderAccountFriendsDialog() {
+  const box = $('fd-account');
+  if (!box) return;
+  box.hidden = !account;
+  if (!account) return;
+  const named = account.signedIn && !!account.username;
+  $('fd-acc-out').hidden = account.signedIn;
+  $('fd-acc-noname').hidden = !account.signedIn || named;
+  $('fd-acc-in').hidden = !named;
+  // With an account, the codes are the old way: tucked away but still there.
+  $('fd-codes').open = !named;
+  if (!named) return;
+  $('fd-mylink').textContent = friendLinkFor(account.username).replace(/^https?:\/\//, '');
+  const received = accountFriends?.recebidos ?? [];
+  const sent = accountFriends?.enviados ?? [];
+  $('fd-received').replaceChildren(...(received.length ? [el('span', 'muted fd-list-title', 'Pedidos recebidos')] : []),
+    ...received.map((f) => personRow(f,
+      actionButton('Aceitar', 'primary', () => friendAction('POST', `/api/amigos/${f.id}/aceitar`, null, `Agora você e ${accountFriendName(f)} são amigos.`)),
+      actionButton('Recusar', 'ghost', () => friendAction('DELETE', `/api/amigos/${f.id}`)))));
+  $('fd-sent').replaceChildren(...(sent.length ? [el('span', 'muted fd-list-title', 'Pedidos enviados')] : []),
+    ...sent.map((f) => personRow(f, actionButton('Cancelar', 'ghost', () => friendAction('DELETE', `/api/amigos/${f.id}`)))));
+}
+
+// Exact @username only: the server never lists or completes names.
+let lookupTimer = null;
+let lookupSeq = 0;
+async function lookupUser() {
+  const name = $('fd-user').value.trim().replace(/^@/, '').toLowerCase();
+  const found = $('fd-found');
+  if (!/^[a-z][a-z0-9_]{2,19}$/.test(name)) {
+    found.hidden = true;
+    return;
+  }
+  const seq = ++lookupSeq;
+  let res;
+  try {
+    res = await fetch(`/api/usuarios/${name}`, { cache: 'no-store' });
+  } catch {
+    return;
+  }
+  if (seq !== lookupSeq) return; // typed more meanwhile
+  found.hidden = false;
+  if (!res.ok) {
+    found.replaceChildren(el('span', 'muted', res.status === 404 ? 'Ninguém com esse @usuário.' : 'Não deu para procurar agora.'));
+    return;
+  }
+  const user = await res.json();
+  const ask = async () => {
+    const data = await friendAction('POST', '/api/amigos', { username: user.username });
+    if (data) toast(data.relacao === 'amigo' ? `Agora você e ${accountFriendName(user)} são amigos.` : `Pedido enviado para @${user.username}.`);
+    lookupUser();
+  };
+  const button = {
+    nenhuma: actionButton('Mandar pedido', 'primary', ask),
+    recebido: actionButton('Aceitar', 'primary', ask),
+    enviado: actionButton('Pedido enviado', 'ghost'),
+    amigo: actionButton('Já são amigos', 'ghost'),
+    voce: actionButton('É você', 'ghost'),
+  }[user.relacao] ?? actionButton('Mandar pedido', 'primary', ask);
+  found.replaceChildren(personRow(user, button));
+}
+$('fd-user').oninput = () => {
+  clearTimeout(lookupTimer);
+  lookupTimer = setTimeout(lookupUser, 350);
+};
+$('fd-user').onkeydown = (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault(); // the dialog's form would close
+    clearTimeout(lookupTimer);
+    lookupUser();
+  }
+};
+$('fd-copy-user').onclick = () => copyText(friendLinkFor(account.username), 'Link copiado. Quem abrir pode te mandar um pedido.');
+$('fd-signin').onclick = (e) => {
+  e.preventDefault();
+  location.assign(signInUrl());
+};
+$('fd-pick').onclick = () => {
+  $('friends-dialog').close();
+  openUsernameDialog();
 };
