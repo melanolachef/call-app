@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 
 use std::sync::Arc;
 
+use crate::contas::Contas;
 use crate::ice::Ice;
 use crate::limits::{too_many, Bucket, ClientIp, Connection, Kind, Limits};
 use crate::presence::Presence;
@@ -64,6 +65,7 @@ pub async fn ws_handler(
     State(presence): State<Presence>,
     State(ice): State<Arc<Ice>>,
     State(limits): State<Limits>,
+    State(contas): State<Option<Arc<Contas>>>,
     ClientIp(ip): ClientIp,
     headers: HeaderMap,
 ) -> Response {
@@ -84,8 +86,13 @@ pub async fn ws_handler(
             return too_many();
         }
     };
+    // Signed in: friends with an account see this room too (same rules as
+    // friend codes: only while here, and not when invisible).
+    let account = contas.and_then(|c| c.account_id(&headers).map(|id| (c, id)));
     ws.max_message_size(MAX_MESSAGE_SIZE)
-        .on_upgrade(move |socket| handle_socket(socket, room_id, rooms, presence, ice, slot))
+        .on_upgrade(move |socket| {
+            handle_socket(socket, room_id, rooms, presence, ice, slot, account)
+        })
 }
 
 async fn handle_socket(
@@ -95,6 +102,7 @@ async fn handle_socket(
     presence: Presence,
     ice: Arc<Ice>,
     _slot: Connection, // held until the socket ends
+    account: Option<(Arc<Contas>, i64)>,
 ) {
     let (tx, rx) = queue();
     match rooms.join(&room_id, tx) {
@@ -121,10 +129,14 @@ async fn handle_socket(
                 id,
                 &others,
                 &servers,
+                account.as_ref(),
                 rx,
             )
             .await;
             presence.forget(&room_id, id);
+            if let Some((contas, _)) = &account {
+                contas.absent(&room_id, id);
+            }
             rooms.leave(&room_id, id);
         }
     }
@@ -139,6 +151,7 @@ async fn run(
     id: u32,
     others: &[u32],
     ice: &Value,
+    account: Option<&(Arc<Contas>, i64)>,
     mut rx: Rx,
 ) -> Result<(), axum::Error> {
     let welcome = json!({ "type": "welcome", "id": id, "peers": others, "max": rooms.max_peers(), "ice": ice });
@@ -167,8 +180,18 @@ async fn run(
                         rooms.relay(room_id, id, msg.to, msg.data);
                     } else if let Ok(msg) = serde_json::from_str::<PresenceMsg>(msg.as_str()) {
                         match msg.presence {
-                            Some(a) => presence.announce(room_id, id, &a.secret, &a.nick),
-                            None => presence.forget(room_id, id),
+                            Some(a) => {
+                                presence.announce(room_id, id, &a.secret, &a.nick);
+                                if let Some((contas, user)) = account {
+                                    contas.present(room_id, id, *user);
+                                }
+                            }
+                            None => {
+                                presence.forget(room_id, id);
+                                if let Some((contas, _)) = account {
+                                    contas.absent(room_id, id);
+                                }
+                            }
                         }
                     }
                 }

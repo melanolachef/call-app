@@ -214,6 +214,7 @@ fn app_full(
 ) -> Router {
     Router::new()
         .merge(contas::routes())
+        .merge(contas::amizades::routes())
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
         .route("/apoiar", get(|| async { Html(APOIAR_HTML) }))
@@ -885,6 +886,111 @@ mod tests {
         let (head, _) = http(&addr, "GET", "/api/ice", "", "").await;
         assert!(head.starts_with("HTTP/1.1 429"), "{head}");
         assert!(head.contains("retry-after: 60"));
+    }
+
+    #[tokio::test]
+    async fn friends_by_username_and_where_they_are() {
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        let contas = contas::tests::memory("http://nada");
+        let session = |sub: &str, username: &str| {
+            let id = contas.user_for_google(sub).unwrap();
+            contas
+                .update_user(id, Some(username), Some(username))
+                .unwrap();
+            (
+                id,
+                format!("cpx_sessao={}", contas.new_session(id).unwrap()),
+            )
+        };
+        let (_, lucas) = session("g-1", "lucas");
+        let (rafa_id, rafa) = session("g-2", "rafa");
+        let addr = start_app(app_full(
+            Rooms::default(),
+            Ice::stun_only(),
+            Gifs::disabled(),
+            None,
+            Some(contas.clone()),
+            Limits::default(),
+        ))
+        .await;
+
+        let (head, body) = http(&addr, "GET", "/api/usuarios/Rafa", &lucas, "").await;
+        assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+        let found: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(
+            (found["username"].as_str(), found["relacao"].as_str()),
+            (Some("rafa"), Some("nenhuma"))
+        );
+        let (head, _) = http(&addr, "GET", "/api/usuarios/ninguem", &lucas, "").await;
+        assert!(head.starts_with("HTTP/1.1 404"));
+        let (head, _) = http(&addr, "GET", "/api/usuarios/rafa", "", "").await;
+        assert!(
+            head.starts_with("HTTP/1.1 401"),
+            "signed out can't look anyone up"
+        );
+
+        let (_, body) = http(
+            &addr,
+            "POST",
+            "/api/amigos",
+            &lucas,
+            r#"{"username":"@rafa"}"#,
+        )
+        .await;
+        assert_eq!(
+            serde_json::from_str::<Value>(&body).unwrap()["relacao"],
+            "enviado"
+        );
+        let (_, body) = http(&addr, "GET", "/api/amigos", &rafa, "").await;
+        let rafa_view: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(rafa_view["recebidos"][0]["username"], "lucas");
+        let lucas_id = rafa_view["recebidos"][0]["id"].as_i64().unwrap();
+
+        // Only the one who received the request can accept it.
+        let path = format!("/api/amigos/{rafa_id}/aceitar");
+        let (head, _) = http(&addr, "POST", &path, &lucas, "").await;
+        assert!(head.starts_with("HTTP/1.1 404"));
+        let path = format!("/api/amigos/{lucas_id}/aceitar");
+        let (head, _) = http(&addr, "POST", &path, &rafa, "").await;
+        assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+
+        // Rafa joins a room: Lucas sees where. Invisible: he doesn't.
+        let mut request = format!("ws://{addr}/ws/churrasco-k3f9x2")
+            .into_client_request()
+            .unwrap();
+        request
+            .headers_mut()
+            .insert("cookie", rafa.parse().unwrap());
+        let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+        recv(&mut ws).await; // welcome
+        let secret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        send(
+            &mut ws,
+            json!({ "presence": { "secret": secret, "nick": "Rafa" } }),
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let (_, body) = http(&addr, "GET", "/api/amigos", &lucas, "").await;
+        let friend = &serde_json::from_str::<Value>(&body).unwrap()["amigos"][0];
+        assert_eq!(
+            (friend["sala"].as_str(), friend["pessoas"].as_u64()),
+            (Some("churrasco-k3f9x2"), Some(1))
+        );
+
+        send(&mut ws, json!({ "presence": null })).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let (_, body) = http(&addr, "GET", "/api/amigos", &lucas, "").await;
+        assert!(serde_json::from_str::<Value>(&body).unwrap()["amigos"][0]
+            .get("sala")
+            .is_none());
+
+        let path = format!("/api/amigos/{rafa_id}");
+        http(&addr, "DELETE", &path, &lucas, "").await;
+        let (_, body) = http(&addr, "GET", "/api/amigos", &lucas, "").await;
+        assert_eq!(
+            serde_json::from_str::<Value>(&body).unwrap()["amigos"],
+            json!([])
+        );
     }
 
     #[tokio::test]

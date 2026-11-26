@@ -86,7 +86,9 @@ function renderProfile() {
 // "2 amigos em call agora." replaces the line under the greeting while any are.
 const tagline = $('tagline').textContent;
 function renderTagline() {
-  const n = Object.values(friendPresence).filter(Boolean).length;
+  const byCode = Object.values(friendPresence).filter(Boolean).length;
+  const byAccount = (accountFriends?.amigos ?? []).filter((f) => f.sala).length;
+  const n = byCode + byAccount;
   $('tagline').textContent = n ? `${n} ${n === 1 ? 'amigo' : 'amigos'} em call agora.` : tagline;
 }
 
@@ -279,15 +281,91 @@ function friendItem(friend) {
   return li;
 }
 
-function renderFriends() {
-  $('friends-section').hidden = !friendsSupported;
-  if (!friendsSupported) return;
-  // In a call first, then by name.
-  const list = loadFriends().sort((a, b) => Number(!!friendPresence[b.code]) - Number(!!friendPresence[a.code])
-    || friendLabel(a).localeCompare(friendLabel(b), 'pt-BR'));
-  $('friends').replaceChildren(...list.map(friendItem));
-  $('friends-empty').hidden = list.length > 0;
+// A friend with an account: same card as a code friend (enter their room),
+// removing asks the server.
+function accountFriendItem(friend) {
+  const li = el('li');
+  const row = el('div', 'room-item friend-item');
+  const link = el(friend.sala ? 'a' : 'div', 'room-link');
+  if (friend.sala) link.href = `/room/${friend.sala}`;
+  const icon = el('span', 'room-icon');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = initials(accountFriendName(friend));
+  icon.style.background = colorFor(`u${friend.id}`);
+  icon.classList.toggle('live', !!friend.sala);
+  const text = el('span', 'room-text');
+  text.append(el('strong', 'ellipsis', accountFriendName(friend)));
+  const status = el('span', `friend-status ellipsis${friend.sala ? ' online' : ''}`);
+  if (friend.sala) {
+    status.append('em ', el('b', null, displayRoomName(friend.sala)), el('span', 'm-hide', ` · ${friend.pessoas} ${friend.pessoas === 1 ? 'pessoa' : 'pessoas'} · ${friendSince(friend.desde)}`));
+  } else {
+    status.textContent = `@${friend.username}`;
+  }
+  text.append(status);
+  link.append(icon, text);
+  if (friend.sala) {
+    const enter = el('span', 'room-enter', 'Entrar');
+    enter.append(el('span', 'm-only', '\u00a0junto'));
+    link.append(enter);
+  }
+  row.append(link);
+  const actions = el('span', 'room-actions');
+  const remove = iconButton(ICON_X, `Desfazer amizade com ${accountFriendName(friend)}`);
+  remove.onclick = () => {
+    if (window.confirm(`Desfazer a amizade com ${accountFriendName(friend)} (@${friend.username})?`)) friendAction('DELETE', `/api/amigos/${friend.id}`);
+  };
+  actions.append(remove);
+  row.append(actions);
+  li.append(row);
+  return li;
 }
+
+// Someone asked to be your friend: answer right in the list.
+function requestItem(friend) {
+  const li = el('li');
+  const row = el('div', 'room-item friend-item friend-request');
+  const box = el('div', 'room-link');
+  const icon = el('span', 'room-icon');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = initials(accountFriendName(friend));
+  icon.style.background = colorFor(`u${friend.id}`);
+  const text = el('span', 'room-text');
+  text.append(el('strong', 'ellipsis', accountFriendName(friend)), el('span', 'friend-status ellipsis', `@${friend.username} quer ser seu amigo`));
+  const buttons = el('span', 'request-actions');
+  const yes = el('button', 'btn small primary', 'Aceitar');
+  yes.onclick = () => friendAction('POST', `/api/amigos/${friend.id}/aceitar`, null, `Agora você e ${accountFriendName(friend)} são amigos.`);
+  const no = el('button', 'btn small ghost', 'Recusar');
+  no.onclick = () => friendAction('DELETE', `/api/amigos/${friend.id}`);
+  buttons.append(yes, no);
+  box.append(icon, text, buttons);
+  row.append(box);
+  li.append(row);
+  return li;
+}
+
+function renderFriends() {
+  const withAccount = !!accountFriends;
+  $('friends-section').hidden = !friendsSupported && !withAccount;
+  if ($('friends-section').hidden) return;
+  // Requests first; then friends in a call, then by name (accounts and codes together).
+  const inCall = (item) => (item.account ? !!item.account.sala : !!friendPresence[item.code.code]);
+  const label = (item) => (item.account ? accountFriendName(item.account) : friendLabel(item.code));
+  const everyone = [
+    ...(accountFriends?.amigos ?? []).map((account) => ({ account })),
+    ...(friendsSupported ? loadFriends() : []).map((code) => ({ code })),
+  ].sort((a, b) => Number(inCall(b)) - Number(inCall(a)) || label(a).localeCompare(label(b), 'pt-BR'));
+  const requests = accountFriends?.recebidos ?? [];
+  $('friends').replaceChildren(...requests.map(requestItem), ...everyone.map((item) => (item.account ? accountFriendItem(item.account) : friendItem(item.code))));
+  $('friends-empty').hidden = requests.length + everyone.length > 0;
+  $('friends-empty').textContent = account?.signedIn
+    ? 'Adicione amigos pelo @usuário deles, ou mande o seu link de amizade.'
+    : 'Adicione amigos pelo código deles para ver em que call estão agora. Mande o seu para eles também.';
+  const btn = $('friends-btn');
+  btn.replaceChildren(account?.signedIn ? 'Adicionar amigos' : 'Seu código · adicionar');
+  if (requests.length) btn.append(el('span', 'badge', String(requests.length)));
+  renderTagline();
+}
+window.addEventListener('account-friends-changed', renderFriends);
 
 async function updateFriends() {
   if (!friendsSupported || document.hidden) return;
@@ -314,6 +392,21 @@ window.addEventListener('friends-changed', () => {
   renderFriends();
   updateFriends();
 });
+
+// A friend link with an account ("/?u=rafa"): open "Adicionar" with it.
+(() => {
+  const params = new URLSearchParams(location.search);
+  const username = (params.get('u') || '').replace(/^@/, '').toLowerCase();
+  if (!/^[a-z][a-z0-9_]{2,19}$/.test(username)) return;
+  history.replaceState(null, '', location.pathname);
+  let opened = false;
+  onAccountChange((value) => {
+    if (opened || value === undefined) return;
+    opened = true;
+    if (value && !value.signedIn) toast(`Entre com Google para adicionar @${username}.`, 5000);
+    openFriendsDialog({ username });
+  });
+})();
 
 // A friend link (".../?amigo=7K3F9X2A&nome=Rafa"): offer to add them.
 (() => {
@@ -393,6 +486,7 @@ document.addEventListener('visibilitychange', updateCounts);
 renderFriends();
 updateFriends();
 setInterval(updateFriends, COUNTS_EVERY_MS);
+setInterval(() => !document.hidden && loadAccountFriends(), COUNTS_EVERY_MS);
 document.addEventListener('visibilitychange', updateFriends);
 window.addEventListener('storage', (e) => { // changed in another tab
   renderRooms();

@@ -228,3 +228,23 @@ html.app-titlebar { --titlebar-h: 32px; }
 .account-label { color: var(--muted); font-size: 13px; }
 .account-row strong { margin-right: auto; font-weight: 600; }
 .account-error { margin: 0; min-height: 1em; color: var(--danger) !important; font-size: 13px; }
+
+/* ---------- amigos com conta (amigos.js) ---------- */
+.fd-account, .fd-acc-in, #fd-acc-out, #fd-acc-noname { display: flex; flex-direction: column; gap: 12px; }
+.fd-note { margin: 0; font-size: 13px; line-height: 1.5; }
+.fd-search { display: flex; align-items: center; height: 40px; padding-left: 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg); color: var(--muted); }
+.fd-search:focus-within { border-color: var(--muted); }
+.field .fd-search input { flex: 1; min-width: 0; height: 100%; padding: 0 12px 0 2px; border: 0; background: transparent; }
+.fd-found { font-size: 13px; }
+.fd-list { display: flex; flex-direction: column; gap: 8px; }
+.fd-list:empty { display: none; }
+.fd-list-title { font-size: 12px; }
+.fd-person { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.fd-person .avatar { width: 32px; height: 32px; font-size: 13px; }
+.fd-person-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; }
+.fd-person-text strong { font-weight: 600; }
+.fd-person-text .muted { font-size: 12px; }
+.fd-codes { display: flex; flex-direction: column; gap: 12px; font-size: 13px; }
+.fd-codes > summary { cursor: pointer; color: var(--muted); }
+.fd-codes[open] > summary { margin-bottom: 12px; }
+.fd-codes .field + .field, .fd-codes .btn { margin-top: 12px; }

@@ -25,6 +25,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+pub mod amizades;
+
 const SESSION_COOKIE: &str = "cpx_sessao";
 const STATE_COOKIE: &str = "cpx_oauth";
 const BACK_COOKIE: &str = "cpx_volta";
@@ -49,7 +51,8 @@ const RESERVED: &[&str] = &[
 
 /// Schema, one entry per version (`PRAGMA user_version`). Never edit an
 /// entry that shipped: add a new one.
-const MIGRATIONS: &[&str] = &["
+const MIGRATIONS: &[&str] = &[
+    "
     CREATE TABLE users (
         id INTEGER PRIMARY KEY,
         google_sub TEXT NOT NULL UNIQUE,
@@ -64,7 +67,20 @@ const MIGRATIONS: &[&str] = &["
         last_seen INTEGER NOT NULL
     );
     CREATE INDEX sessions_user ON sessions(user_id);
-"];
+",
+    "
+    CREATE TABLE friendships (
+        user_a INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_b INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        requested_by INTEGER NOT NULL,
+        accepted_at INTEGER,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (user_a, user_b),
+        CHECK (user_a < user_b)
+    );
+    CREATE INDEX friendships_b ON friendships(user_b);
+",
+];
 
 pub struct Google {
     pub client_id: String,
@@ -78,6 +94,8 @@ pub struct Contas {
     google: Google,
     /// Where Google sends people back to (`PUBLIC_URL`), e.g. https://cpx-call.fly.dev.
     public_url: String,
+    /// Which room connections belong to which account (memory only).
+    online: Mutex<amizades::Online>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -145,6 +163,7 @@ impl Contas {
             db: Mutex::new(db),
             google,
             public_url: public_url.trim_end_matches('/').to_owned(),
+            online: Mutex::default(),
         })
     }
 
@@ -280,6 +299,10 @@ pub enum Problem {
     BadUsername,
     UsernameTaken,
     BadNick,
+    NotFound,
+    SelfFriend,
+    NeedUsername,
+    TooManyRequests,
     Database,
 }
 
@@ -292,6 +315,13 @@ impl IntoResponse for Problem {
             ),
             Problem::UsernameTaken => (StatusCode::CONFLICT, "Esse @usuário já é de outra pessoa."),
             Problem::BadNick => (StatusCode::BAD_REQUEST, "O nome precisa ter de 1 a 32 caracteres."),
+            Problem::NotFound => (StatusCode::NOT_FOUND, "Não encontramos ninguém com esse @usuário."),
+            Problem::SelfFriend => (StatusCode::BAD_REQUEST, "Esse @usuário é o seu."),
+            Problem::NeedUsername => (StatusCode::BAD_REQUEST, "Escolha seu @usuário antes de adicionar amigos."),
+            Problem::TooManyRequests => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Você tem pedidos demais esperando resposta. Espere alguns serem aceitos.",
+            ),
             Problem::Database => (StatusCode::INTERNAL_SERVER_ERROR, "Algo deu errado. Tente de novo."),
         };
         (status, Json(json!({ "error": error }))).into_response()
@@ -452,6 +482,13 @@ fn off() -> Response {
 
 fn signed_out() -> Response {
     (StatusCode::UNAUTHORIZED, Json(json!({}))).into_response()
+}
+
+impl Contas {
+    /// The signed-in account behind a request (by its session cookie).
+    pub fn account_id(&self, headers: &HeaderMap) -> Option<i64> {
+        current(self, headers).map(|user| user.id)
+    }
 }
 
 fn current(contas: &Contas, headers: &HeaderMap) -> Option<User> {
