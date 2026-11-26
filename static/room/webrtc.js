@@ -161,6 +161,7 @@ async function handleSignal(peer, data) {
     await pc.addIceCandidate(data.candidate);
   } else if ('sharing' in data) {
     const started = !!data.sharing && !peer.sharing;
+    const stopped = !data.sharing && peer.sharing;
     peer.sharing = !!data.sharing;
     peer.hasAudio = peer.sharing && !!data.audio;
     peer.shareInfo = peer.sharing ? cleanShareInfo(data) : null;
@@ -169,6 +170,7 @@ async function handleSignal(peer, data) {
       addSystem(`${displayName(peer)} começou a compartilhar a tela`);
       notify(`${displayName(peer)} começou a compartilhar a tela`, `Sala ${displayRoomName(roomId)}`, `share-${peer.id}`);
     }
+    if (started || stopped) shareSound(started);
     refresh();
   } else if ('chat' in data) {
     const text = cleanChat(data.chat);
