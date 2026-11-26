@@ -77,7 +77,11 @@ function pickTagline(hour = new Date().getHours()) {
 
 $('tagline').textContent = pickTagline();
 
+// The wide-screen home (painel.js) redraws from the same data.
+const lobbyChanged = () => window.dispatchEvent(new Event('lobby-changed'));
+
 function renderProfile() {
+  lobbyChanged();
   paintAvatar($('me-avatar'), nick || '?', 1, photo);
   $('me-nick').textContent = nick || 'Escolher nick';
   $('greeting').textContent = nick ? `${greeting()}, ${nick}.` : `${greeting()}.`;
@@ -219,6 +223,7 @@ function roomItem(room) {
 }
 
 function renderRooms() {
+  lobbyChanged();
   const list = orderedRooms();
   $('rooms-empty').hidden = list.some((r) => !r.home);
   $('rooms').replaceChildren(...list.map(roomItem));
@@ -352,6 +357,7 @@ function requestItem(friend) {
 }
 
 function renderFriends() {
+  lobbyChanged();
   const withAccount = !!accountFriends;
   $('friends-section').hidden = !friendsSupported && !withAccount;
   if ($('friends-section').hidden) return;
