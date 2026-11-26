@@ -7,6 +7,7 @@ mod ice;
 mod limits;
 mod presence;
 mod rooms;
+mod seguranca;
 mod signaling;
 
 use std::{error::Error, net::SocketAddr, sync::Arc};
@@ -89,6 +90,7 @@ const DEFAULT_PORT: u16 = 3000;
 const INDEX_HTML: &str = include_str!("../static/index.html");
 const ROOM_HTML: &str = include_str!("../static/room.html");
 const APOIAR_HTML: &str = include_str!("../static/apoiar.html");
+const APOIAR_JS: &str = include_str!("../static/apoiar.js");
 const PRIVACIDADE_HTML: &str = include_str!("../static/privacidade.html");
 const TERMOS_HTML: &str = include_str!("../static/termos.html");
 // The room script is kept as one file per area under static/room/ and served as a
@@ -112,6 +114,7 @@ const ROOM_JS: &str = concat!(
     include_str!("../static/room/interface.js"),
     include_str!("../static/room/rede.js"),
     include_str!("../static/room/celular.js"),
+    include_str!("../static/room/denuncia.js"),
     include_str!("../static/room/inicio.js"),
 );
 const LOBBY_JS: &str = include_str!("../static/lobby.js");
@@ -212,9 +215,12 @@ fn app_full(
 ) -> Router {
     Router::new()
         .merge(contas::routes())
+        .merge(contas::amizades::routes())
+        .merge(contas::perfil::routes())
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
         .route("/apoiar", get(|| async { Html(APOIAR_HTML) }))
+        .route("/apoiar.js", get(|| async { javascript(APOIAR_JS) }))
         .route("/privacidade", get(|| async { Html(PRIVACIDADE_HTML) }))
         .route("/termos", get(|| async { Html(TERMOS_HTML) }))
         .route("/api/apoio", get(apoio_info))
@@ -273,6 +279,7 @@ fn app_full(
         .route("/api/ice", get(ice_servers))
         .route("/api/gifs", get(gif_search))
         .route("/api/friends", get(friends))
+        .route("/ws/presenca", get(signaling::presence_handler))
         .route("/ws/{id}", get(signaling::ws_handler))
         // For the hosting platform's health checks.
         .route("/health", get(|| async { "ok" }))
@@ -281,6 +288,7 @@ fn app_full(
             limits.clone(),
             limits::limit_api,
         ))
+        .layer(axum::middleware::from_fn(seguranca::headers))
         .with_state(AppState {
             rooms,
             ice,
@@ -491,8 +499,10 @@ fn percent_decode(text: &str) -> String {
 }
 
 /// `GET /api/ice` -> `{"iceServers": [...]}` for `RTCPeerConnection`.
-async fn ice_servers(State(ice): State<Arc<Ice>>) -> Response {
-    let body = serde_json::json!({ "iceServers": ice.servers().await });
+/// `GET /api/ice`: STUN only. TURN credentials go to people inside a room,
+/// in the WebSocket's welcome (#150); this stays for pages opened before.
+async fn ice_servers() -> Response {
+    let body = serde_json::json!({ "iceServers": ice::stun_servers() });
     (
         [
             (header::CONTENT_TYPE, "application/json"),
@@ -574,7 +584,11 @@ mod tests {
             }
         };
 
-        assert!(get("/").await.starts_with("HTTP/1.1 200"));
+        let home = get("/").await;
+        assert!(home.starts_with("HTTP/1.1 200"));
+        assert!(home.contains("content-security-policy: default-src 'self'"));
+        assert!(home.contains("x-frame-options: DENY"));
+        assert!(get("/apoiar.js").await.contains("text/javascript"));
         assert!(get("/apoiar").await.contains("Apoiar o CPX Call"));
         assert!(get("/privacidade")
             .await
@@ -622,13 +636,13 @@ mod tests {
         let mut a = connect(&addr, "room1").await;
         assert_eq!(
             recv(&mut a).await,
-            json!({ "type": "welcome", "id": 1, "peers": [], "max": rooms::DEFAULT_MAX_PEERS })
+            json!({ "type": "welcome", "id": 1, "peers": [], "max": rooms::DEFAULT_MAX_PEERS, "ice": ice::stun_servers(), "owner": null, "locked": false })
         );
 
         let mut b = connect(&addr, "room1").await;
         assert_eq!(
             recv(&mut b).await,
-            json!({ "type": "welcome", "id": 2, "peers": [1], "max": rooms::DEFAULT_MAX_PEERS })
+            json!({ "type": "welcome", "id": 2, "peers": [1], "max": rooms::DEFAULT_MAX_PEERS, "ice": ice::stun_servers(), "owner": null, "locked": false })
         );
         assert_eq!(
             recv(&mut a).await,
@@ -878,6 +892,205 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn friends_by_username_and_where_they_are() {
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        let contas = contas::tests::memory("http://nada");
+        let session = |sub: &str, username: &str| {
+            let id = contas.user_for_google(sub).unwrap();
+            contas
+                .update_user(id, Some(username), Some(username))
+                .unwrap();
+            (
+                id,
+                format!("cpx_sessao={}", contas.new_session(id).unwrap()),
+            )
+        };
+        let (_, lucas) = session("g-1", "lucas");
+        let (rafa_id, rafa) = session("g-2", "rafa");
+        let addr = start_app(app_full(
+            Rooms::default(),
+            Ice::stun_only(),
+            Gifs::disabled(),
+            None,
+            Some(contas.clone()),
+            Limits::default(),
+        ))
+        .await;
+
+        let (head, body) = http(&addr, "GET", "/api/usuarios/Rafa", &lucas, "").await;
+        assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+        let found: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(
+            (found["username"].as_str(), found["relacao"].as_str()),
+            (Some("rafa"), Some("nenhuma"))
+        );
+        let (head, _) = http(&addr, "GET", "/api/usuarios/ninguem", &lucas, "").await;
+        assert!(head.starts_with("HTTP/1.1 404"));
+        let (head, _) = http(&addr, "GET", "/api/usuarios/rafa", "", "").await;
+        assert!(
+            head.starts_with("HTTP/1.1 401"),
+            "signed out can't look anyone up"
+        );
+
+        let (_, body) = http(
+            &addr,
+            "POST",
+            "/api/amigos",
+            &lucas,
+            r#"{"username":"@rafa"}"#,
+        )
+        .await;
+        assert_eq!(
+            serde_json::from_str::<Value>(&body).unwrap()["relacao"],
+            "enviado"
+        );
+        let (_, body) = http(&addr, "GET", "/api/amigos", &rafa, "").await;
+        let rafa_view: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(rafa_view["recebidos"][0]["username"], "lucas");
+        let lucas_id = rafa_view["recebidos"][0]["id"].as_i64().unwrap();
+
+        // Only the one who received the request can accept it.
+        let path = format!("/api/amigos/{rafa_id}/aceitar");
+        let (head, _) = http(&addr, "POST", &path, &lucas, "").await;
+        assert!(head.starts_with("HTTP/1.1 404"));
+        let path = format!("/api/amigos/{lucas_id}/aceitar");
+        let (head, _) = http(&addr, "POST", &path, &rafa, "").await;
+        assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+
+        // Rafa joins a room: Lucas sees where. Invisible: he doesn't.
+        let mut request = format!("ws://{addr}/ws/churrasco-k3f9x2")
+            .into_client_request()
+            .unwrap();
+        request
+            .headers_mut()
+            .insert("cookie", rafa.parse().unwrap());
+        let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+        recv(&mut ws).await; // welcome
+        let secret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        send(
+            &mut ws,
+            json!({ "presence": { "secret": secret, "nick": "Rafa" } }),
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let (_, body) = http(&addr, "GET", "/api/amigos", &lucas, "").await;
+        let friend = &serde_json::from_str::<Value>(&body).unwrap()["amigos"][0];
+        assert_eq!(
+            (friend["sala"].as_str(), friend["pessoas"].as_u64()),
+            (Some("churrasco-k3f9x2"), Some(1))
+        );
+
+        send(&mut ws, json!({ "presence": null })).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let (_, body) = http(&addr, "GET", "/api/amigos", &lucas, "").await;
+        assert!(serde_json::from_str::<Value>(&body).unwrap()["amigos"][0]
+            .get("sala")
+            .is_none());
+
+        let path = format!("/api/amigos/{rafa_id}");
+        http(&addr, "DELETE", &path, &lucas, "").await;
+        let (_, body) = http(&addr, "GET", "/api/amigos", &lucas, "").await;
+        assert_eq!(
+            serde_json::from_str::<Value>(&body).unwrap()["amigos"],
+            json!([])
+        );
+    }
+
+    #[tokio::test]
+    async fn friends_see_you_online_while_the_page_is_open() {
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        let contas = contas::tests::memory("http://nada");
+        let session = |sub: &str, username: &str| {
+            let id = contas.user_for_google(sub).unwrap();
+            contas
+                .update_user(id, Some(username), Some(username))
+                .unwrap();
+            let user = contas
+                .user_by_token(&contas.new_session(id).unwrap())
+                .unwrap();
+            (
+                user,
+                format!("cpx_sessao={}", contas.new_session(id).unwrap()),
+            )
+        };
+        let (lucas, lucas_cookie) = session("g-1", "lucas");
+        let (bia, bia_cookie) = session("g-2", "bia");
+        contas.request(&lucas, "bia").unwrap();
+        contas.accept(bia.id, lucas.id).unwrap();
+        let addr = start_app(app_full(
+            Rooms::default(),
+            Ice::stun_only(),
+            Gifs::disabled(),
+            None,
+            Some(contas.clone()),
+            Limits::default(),
+        ))
+        .await;
+        let online = || async {
+            let (_, body) = http(&addr, "GET", "/api/amigos", &bia_cookie, "").await;
+            serde_json::from_str::<Value>(&body).unwrap()["amigos"][0]["online"] == json!(true)
+        };
+        assert!(!online().await);
+
+        let err = tokio_tungstenite::connect_async(format!("ws://{addr}/ws/presenca"))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("401"), "signed out: {err}");
+
+        let mut request = format!("ws://{addr}/ws/presenca")
+            .into_client_request()
+            .unwrap();
+        request
+            .headers_mut()
+            .insert("cookie", lucas_cookie.parse().unwrap());
+        let (ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert!(online().await, "page open: online");
+        drop(ws);
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert!(!online().await, "closed: gone");
+    }
+
+    #[tokio::test]
+    async fn room_owner_locks_and_kicks_over_websocket() {
+        let addr = start_server().await;
+        const OWNER: &str = "0123456789abcdef0123456789abcdef";
+        const OTHER: &str = "fedcba9876543210fedcba9876543210";
+        let join = |key: &str| {
+            let url = format!("ws://{addr}/ws/sala-dono?dono={key}");
+            async move { tokio_tungstenite::connect_async(url).await.unwrap().0 }
+        };
+        let mut owner = join(OWNER).await;
+        let welcome = recv(&mut owner).await;
+        assert_eq!(
+            (welcome["owner"].as_u64(), welcome["locked"].as_bool()),
+            (Some(1), Some(false))
+        );
+        let mut other = join(OTHER).await;
+        assert_eq!(recv(&mut other).await["owner"], 1);
+        recv(&mut owner).await; // peer-joined
+
+        // Not the owner: ignored. The owner: everyone learns the room is locked.
+        send(&mut other, json!({ "admin": { "lock": true } })).await;
+        send(&mut owner, json!({ "admin": { "lock": true } })).await;
+        assert_eq!(
+            recv(&mut owner).await,
+            json!({ "type": "room", "owner": 1, "locked": true })
+        );
+        let mut late = join("11111111111111111111111111111111").await;
+        assert_eq!(recv(&mut late).await["type"], "locked");
+
+        send(&mut owner, json!({ "admin": { "kick": 2 } })).await;
+        loop {
+            if recv(&mut other).await["type"] == "kicked" {
+                break;
+            }
+        }
+        let mut again = join(OTHER).await;
+        assert_eq!(recv(&mut again).await["type"], "kicked");
+    }
+
+    #[tokio::test]
     async fn accounts_are_off_without_configuration() {
         let addr = start_server().await;
         let (head, _) = http(&addr, "GET", "/api/me", "", "").await;
@@ -1048,17 +1261,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ice_endpoint_with_turn_key_uses_cloudflare_once() {
+    async fn turn_credentials_only_inside_a_room() {
         let (api, calls) = fake_cloudflare(201).await;
         let addr = start_app(app(
             Rooms::default(),
             Ice::with_turn("key123", "secret-token", &api),
         ))
         .await;
-        let (_, first) = http_get(&addr, "/api/ice").await;
-        let (_, second) = http_get(&addr, "/api/ice").await;
+        // The public endpoint never hands out TURN.
+        let (_, public) = http_get(&addr, "/api/ice").await;
+        assert!(public["iceServers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|s| s.get("username").is_none()));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+
+        let mut a = connect(&addr, "sala1").await;
+        let first = recv(&mut a).await["ice"].clone();
+        let mut b = connect(&addr, "sala2").await;
+        let second = recv(&mut b).await["ice"].clone();
         assert_eq!(
-            first["iceServers"],
+            first,
             json!([
                 { "urls": ["stun:stun.cloudflare.com:3478"] },
                 { "urls": ["turn:turn.cloudflare.com:3478?transport=udp", "turns:turn.cloudflare.com:443?transport=tcp"],
@@ -1071,6 +1295,7 @@ mod tests {
             1,
             "credentials are reused"
         );
+        drop((a, b));
     }
 
     #[tokio::test]
@@ -1081,8 +1306,9 @@ mod tests {
             Ice::with_turn("key123", "secret-token", &api),
         ))
         .await;
-        let (_, body) = http_get(&addr, "/api/ice").await;
-        let servers = body["iceServers"].as_array().unwrap();
+        let mut ws = connect(&addr, "sala1").await;
+        let welcome = recv(&mut ws).await;
+        let servers = welcome["ice"].as_array().unwrap();
         assert!(!servers.is_empty());
         assert!(servers.iter().all(|s| s.get("username").is_none()));
     }

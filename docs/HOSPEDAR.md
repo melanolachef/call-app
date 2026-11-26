@@ -66,8 +66,13 @@ fly secrets set TURN_KEY_ID=<id da chave> TURN_KEY_API_TOKEN=<token da chave>
 ```
 
 O servidor gera credenciais temporárias (24 h) pela API da Cloudflare e as
-entrega em `GET /api/ice`; a chave nunca vai para o navegador. Rodando
-localmente, as mesmas variáveis funcionam.
+entrega só para quem entrou numa sala, na mensagem de boas-vindas do
+WebSocket (`GET /api/ice` responde só STUN); a chave nunca vai para o
+navegador. Rodando localmente, as mesmas variáveis funcionam.
+
+Mesmo assim, quem entra numa sala recebe uma credencial que vale 24 h e poderia
+usá-la fora do app. Para não ter surpresa na conta, crie um **alerta de
+gastos** na Cloudflare (Notifications, billing/usage) antes de pôr a chave.
 
 ## GIFs no chat (opcional)
 

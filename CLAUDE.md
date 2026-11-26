@@ -63,41 +63,24 @@ a green test card, so override `getDisplayMedia` to return
 
 ## Estado atual
 
-_Atualizado em 2026-11-24._
+_Atualizado em 2026-11-26._
 
-- **No ar (main, publicado em 2026-11-18):** design novo
-  (`docs/design/cpx-call-componentes.html`: quem assiste, direto/relay,
-  reconexão, resolução antes de assistir), caixa de qualidade (resolução, FPS,
-  Fluidez/Nitidez), soundpad, volume individual por pessoa, GIFs no chat
-  (KLIPY via `/api/gifs`, chave em `fly secrets`), celular com tela cheia/modo
-  cinema e PWA, frases no "Boa noite", câmera sob demanda, emojis, perfil com
-  recorte, banner e cartão de perfil.
-- **App Windows `app-v0.2.0`** (release publicado): barra de título desenhada
-  pela página. Quem tem a 0.1.0 precisa reinstalar (sem atualização
-  automática ainda).
-- **Na development (falta publicar):** amigos sem conta (#132): código de
-  amigo por aparelho, `/api/friends`, presença só em memória
-  (`src/presence.rs`), invisível, "Usar em outro aparelho" para o app.
-  GIF como foto de perfil e banner (#135), com o seletor do KLIPY no diálogo.
-  Design novo do celular (#146, `docs/design/cpx-call-mobile.html`, abas
-  Palco/Chat/Sons em `static/room/celular.js`). Apoio por Pix em `/apoiar`
-  (#148; `PIX_*` já no `fly secrets`).
-- **PR aberto #160 — contas opcionais com Google (fase 1 de 4,
-  `docs/CONTAS.md`):** SQLite em volume do Fly, só o `sub` do Google,
-  @usuário. **Não mergear na development antes de criar o volume `dados`**
-  (o `fly.toml` passa a montar `/data`) e o cliente OAuth no Google Cloud.
-- **Branch `feat/limites` (#149, estacionado):** `src/limits.rs` e filas
-  limitadas nas salas prontos; falta ligar em `signaling.rs`/`main.rs`.
-- **Design mobile novo (branch `feat/design-mobile`, PR aberto):**
-  `docs/design/cpx-call-mobile.html` implementado só no layout de celular
-  (computador igual): sala com abas Palco/Chat/Sons, barra de voz, carrossel
-  de telas, folha de sons com reações, trilho deitado em tela cheia
-  (`static/room/celular.js`); início com amigos em cartões e "Nova sala" /
-  "Colar convite" fixos. Falta testar em celular real (iPhone e Android).
-- **Produção sem TURN:** `/api/ice` só entrega STUN (faltam `TURN_KEY_ID` e
-  `TURN_KEY_API_TOKEN` em `fly secrets`). Quem está em CGNAT/4G ou rede que
-  bloqueia UDP fica em "falha na conexão · sem P2P".
-- **Falta testar:** Android real (tela cheia, instalar) e "relay" numa rede
+- **No ar (main):** tudo até o design do celular (#146), Pix em `/apoiar`
+  (#148), contas opcionais com Google e @usuário (#160, SQLite no volume
+  `dados` do Fly), `/privacidade` e `/termos` (#161), limites contra abuso
+  (#164). Login com Google funcionando em produção (app em modo Teste no
+  Google Cloud: só entra quem está em "Usuários de teste" até publicar).
+- **Na development (falta publicar):** cabeçalhos de segurança/CSP (#166),
+  TURN só dentro da sala (#167, credenciais no `welcome`; `/api/ice` só
+  STUN), contas fases 2–4 — amizades por @usuário (#168), "online" com o
+  Início aberto via `/ws/presenca` (#169), perfil (nick, foto, banner) salvo
+  na conta com imagens conferidas no servidor (#170) —, dono da sala trancar
+  e expulsar (#171, código `?dono=` por sala, hash só em memória), botão
+  Denunciar por e-mail + SaferNet e idade 13+ no primeiro acesso (#172).
+  A CSP libera o IPC do Tauri, mas o app Windows não foi testado com ela.
+- **Produção sem TURN:** falta pôr `TURN_KEY_ID`/`TURN_KEY_API_TOKEN` (já
+  seguro depois do #167; criar alerta de gastos na Cloudflare antes).
+- **Falta testar:** app Windows com a CSP, Android real e "relay" numa rede
   que bloqueie P2P.
 - **Assinatura do instalador:** falta a inscrição na SignPath (o mantenedor faz).
 - **Branch local `feat/compartilhar-nativo`** (só no Windows principal, ainda
@@ -108,12 +91,10 @@ _Atualizado em 2026-11-24._
 
 ## Próximos passos
 
-0. **Abrir para o público sem susto:** terminar #149 (limites) e #150 (TURN
-   só para quem está em sala, antes de pôr a chave da Cloudflare); depois
-   contas fases 2–4 (#157 amizades por @usuário, #158 presença online/em
-   call/invisível, #159 perfil na conta), dono da sala (#151), termos e
-   privacidade (#152, obrigatório antes de ligar as contas em produção),
-   primeira vez (#153), operação (#154).
+0. **Abrir para o público:** publicar a development (PR para a main +
+   deploy) e testar o app Windows com a CSP; publicar o app no Google Cloud
+   (sair do modo Teste); depois primeira vez para quem não é da turma
+   (#153) e operação (#154: alerta de queda, números sem dados pessoais).
 1. **Fase 1 do app nativo ("o mais Rust possível"):** ao clicar em
    "Compartilhar tela" dentro do app, o Rust captura e codifica (protótipo
    acima) e envia com `str0m` (proposta do estudo em docs/nativo) numa conexão extra por pessoa que assiste,
@@ -137,6 +118,6 @@ _Atualizado em 2026-11-24._
    em RAM sobre o pipeline da fase 1, tecla → MP4 pelo Media Foundation.
    Medir o custo com jogo rodando antes; se pesar, abandonar.
 5. Ideias registradas: canais fixos do servidor iguais para todos (estilo
-   servidor do Discord) e contas opcionais (Google + Neon). Para devs: quadro
+   servidor do Discord). Para devs: quadro
    colaborativo estilo Excalidraw (#127), código no chat (#128), cartões do
    GitHub (#129) e apontar sobre a tela compartilhada (#130).

@@ -713,10 +713,8 @@ $('profile-form').onsubmit = (e) => {
   if (stored.includes(false)) toast('O navegador não deixou guardar o perfil: ele vale só até fechar esta página.', 6000);
   $('profile').close();
   profileOnSave?.(nick, draftPhoto);
-  // With an account, the name friends see follows the nick.
-  if (account?.signedIn && nick !== account.nick) {
-    accountRequest('POST', '/api/me', { nick }).then(({ ok, data }) => ok && setAccount({ signedIn: true, ...data }));
-  }
+  // With an account, the profile is saved there too (every device gets it).
+  if (account?.signedIn) pushProfile();
 };
 
 // Another tab of this browser changed the profile: `callback` refreshes this one.
@@ -725,6 +723,7 @@ function onProfileChangedElsewhere(callback) {
   window.addEventListener('storage', (e) => {
     if (e.key === null || PROFILE_KEYS.includes(e.key)) callback();
   });
+  window.addEventListener('profile-synced', callback); // brought from the account
 }
 
 let toastTimer = null;
@@ -1142,4 +1141,85 @@ $('account-delete').onclick = async () => {
   }
 })();
 
+// ---------- perfil na conta (#159) ----------
+
+// Signed in, the profile lives in the account: on this device it is replaced
+// by the saved one; an account that never saved one gets this device's.
+async function pushProfile() {
+  const { ok, data } = await accountRequest('PUT', '/api/me/perfil', {
+    nick: load('nick'), photo: load('photo'), bannerColor: load('bannerColor'), bannerImage: load('bannerImage'),
+  });
+  if (!ok) toast(data.error ? `${data.error} O perfil ficou só neste aparelho.` : 'O perfil ficou só neste aparelho.', 5000);
+  else if (account?.signedIn && data.nick !== account.nick) setAccount({ ...account, nick: data.nick });
+}
+
+let profileChecked = false;
+async function syncProfileWithAccount(value) {
+  if (!value?.signedIn || profileChecked) return;
+  profileChecked = true;
+  const { ok, data } = await accountRequest('GET', '/api/me/perfil');
+  if (!ok) return;
+  if (!data.salvo) {
+    if (load('nick')) pushProfile();
+    return;
+  }
+  const saved = { nick: data.nick, photo: data.photo, bannerColor: data.bannerColor, bannerImage: data.bannerImage };
+  const changed = Object.entries(saved).filter(([key, value]) => (load(key) || '') !== (value || ''));
+  if (!changed.length) return;
+  changed.forEach(([key, value]) => save(key, value || ''));
+  window.dispatchEvent(new Event('profile-synced'));
+}
+onAccountChange(syncProfileWithAccount);
+
+// ---------- idade no primeiro acesso (#152) ----------
+
+// The terms ask for 13 or older. Asked once per browser; whoever answers
+// "under 13" can't use the app here. A declaration, not a check.
+document.body.insertAdjacentHTML('beforeend', `
+  <dialog id="age-dialog" aria-labelledby="age-title">
+    <div class="dialog-body">
+      <div class="heading">
+        <h2 id="age-title">Antes de começar</h2>
+        <span class="muted">O CPX Call é para quem tem 13 anos ou mais. Menores de 18 precisam da autorização dos pais ou responsáveis.</span>
+      </div>
+      <p class="muted age-links">Ao continuar, você concorda com os <a href="/termos" target="_blank">termos de uso</a> e a <a href="/privacidade" target="_blank">privacidade</a>.</p>
+      <div class="age-actions">
+        <button type="button" class="btn primary" id="age-yes" autofocus>Tenho 13 anos ou mais</button>
+        <button type="button" class="btn ghost" id="age-no">Tenho menos de 13</button>
+      </div>
+    </div>
+  </dialog>`);
+
+// A layer over the whole page (the page underneath keeps working, unseen;
+// the room never connects, since it waits for whenAgeOk).
+function blockUnderAge() {
+  if ($('age-block')) return;
+  const box = el('div', 'age-block');
+  box.id = 'age-block';
+  const text = el('div', 'age-block-text');
+  text.append(el('h1', null, 'O CPX Call é para quem tem 13 anos ou mais.'),
+    el('p', null, 'Quando você tiver 13, volta aqui. Até lá, chame um adulto se precisar de ajuda.'));
+  box.append(text);
+  document.body.append(box);
+}
+
+// Runs `then` once the age is declared (right away if it already was).
+function whenAgeOk(then) {
+  if (load('idade') === 'menor') return blockUnderAge();
+  if (load('idade') === '13+') return then?.();
+  const dialog = $('age-dialog');
+  dialog.oncancel = (e) => e.preventDefault(); // must answer
+  $('age-yes').onclick = () => {
+    save('idade', '13+');
+    dialog.close();
+    then?.();
+  };
+  $('age-no').onclick = () => {
+    save('idade', 'menor');
+    blockUnderAge();
+  };
+  dialog.showModal();
+}
+
 loadAccount();
+

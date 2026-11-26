@@ -1,23 +1,13 @@
 'use strict';
 
-// STUN until /api/ice answers; with a TURN key the server adds Cloudflare TURN,
-// which relays the video when a network blocks direct connections.
+// STUN until the room's welcome arrives; with a TURN key the server adds
+// Cloudflare TURN there (only people inside a room get it, #150), which
+// relays the video when a network blocks direct connections. Every
+// (re)connection brings fresh credentials.
 let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
-let iceLoadedAt = 0;
-const ICE_REFRESH_MS = 6 * 60 * 60_000; // credentials last a day; refresh well before
 
-async function loadIceServers() {
-  if (Date.now() - iceLoadedAt < ICE_REFRESH_MS) return;
-  try {
-    const res = await fetch('/api/ice', { cache: 'no-store' });
-    const data = res.ok ? await res.json() : null;
-    if (Array.isArray(data?.iceServers) && data.iceServers.length) {
-      iceServers = data.iceServers;
-      iceLoadedAt = Date.now();
-    }
-  } catch {
-    // Keep STUN: direct connections still work for most networks.
-  }
+function useIceServers(list) {
+  if (Array.isArray(list) && list.length) iceServers = list;
 }
 const roomId = location.pathname.split('/').pop();
 const canShare = !!navigator.mediaDevices?.getDisplayMedia;
@@ -32,6 +22,33 @@ let localTrack = null; // our screen's video track while sharing
 let localAudio = null; // its sound (tab or system audio), when the browser gave one
 let roomFull = false;
 let serverBusy = false;
+// Room owner (#151): who it is (participant id), whether it's locked, and why
+// we were turned away (locked / kicked) so the close shows the right notice.
+let roomOwner = null;
+let roomLocked = false;
+let turnedAway = '';
+
+// A random key per room, kept in this browser: whoever opens the room owns
+// it, and gets it back on reconnecting. The server only keeps its hash.
+function ownerKey() {
+  let keys = {};
+  try {
+    keys = JSON.parse(load('roomKeys') || '{}') || {};
+  } catch { /* start over */ }
+  if (!/^[0-9a-f]{32}$/.test(keys[roomId] || '')) {
+    keys[roomId] = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    const ids = Object.keys(keys);
+    for (const old of ids.slice(0, Math.max(0, ids.length - 50))) delete keys[old]; // keep the last 50 rooms
+    save('roomKeys', JSON.stringify(keys));
+  }
+  return keys[roomId];
+}
+
+const iOwnTheRoom = () => myId !== null && roomOwner === myId;
+
+function sendAdmin(command) {
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ admin: command }));
+}
 let maxPeers = 12; // the server sends the real limit in welcome/full
 let left = false;
 let timer = null;
