@@ -124,6 +124,7 @@ const LOBBY_JS: &str = include_str!("../static/lobby.js");
 const PAINEL_JS: &str = include_str!("../static/painel.js");
 const AMIGOS_JS: &str = include_str!("../static/amigos.js");
 const CONFIGURACOES_JS: &str = include_str!("../static/configuracoes.js");
+const GRUPOS_JS: &str = include_str!("../static/grupos.js");
 const COMMON_JS: &str = include_str!("../static/common.js");
 const COMMON_CSS: &str = include_str!("../static/common.css");
 const THEME_JS: &str = include_str!("../static/theme.js");
@@ -179,8 +180,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         println!("Apoio desligado (defina PIX_KEY para abrir /apoiar)");
     }
     let contas = Contas::from_env();
+    if contas.as_ref().is_some_and(|c| !c.google_on()) {
+        println!("Login com Google desligado (defina GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e PUBLIC_URL)");
+    }
     if contas.is_none() {
-        println!("Contas desligadas (defina DATABASE_PATH, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e PUBLIC_URL)");
+        println!("Banco desligado: grupos e contas não funcionam");
     }
     // The peer address is the client's IP for the limits (behind Fly's proxy
     // the real one comes in a header; see limits::ClientIp).
@@ -223,6 +227,7 @@ fn app_full(
         .merge(contas::amizades::routes())
         .merge(contas::perfil::routes())
         .merge(contas::mensagens::routes())
+        .merge(contas::grupos::routes())
         .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/room/{id}", get(room_page))
         .route("/apoiar", get(|| async { Html(APOIAR_HTML) }))
@@ -235,6 +240,7 @@ fn app_full(
         .route("/lobby.js", get(|| async { javascript(LOBBY_JS) }))
         .route("/painel.js", get(|| async { javascript(PAINEL_JS) }))
         .route("/amigos.js", get(|| async { javascript(AMIGOS_JS) }))
+        .route("/grupos.js", get(|| async { javascript(GRUPOS_JS) }))
         .route(
             "/configuracoes.js",
             get(|| async { javascript(CONFIGURACOES_JS) }),

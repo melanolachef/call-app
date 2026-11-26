@@ -408,7 +408,7 @@
     .live-row.watching .live-state { color: var(--online); }
 
     /* ---------- sala em telas largas (sala-larga.js; docs/design/cpx-call-novas-telas.html) ---------- */
-    .room-rail, .voice-panel, .more-btn, .room-heading { display: none; }
+    .room-rail, .voice-panel, .more-btn, .room-heading, .side-rooms { display: none; }
     .more-pop { position: fixed; z-index: 9; min-width: 220px; padding: 4px; display: flex; flex-direction: column; box-shadow: 0 12px 32px rgb(0 0 0 / .5); }
     .more-item { height: 36px; padding: 0 12px; border-radius: var(--r-sm); background: none; color: var(--text); font-size: 14px; text-align: left; }
     .more-item:hover { background: var(--raised); }
@@ -435,6 +435,21 @@
       .room-heading { display: flex; align-items: baseline; gap: 6px; }
       .room-heading strong { flex: 1; min-width: 0; font-size: 16px; font-weight: 700; }
       .room-heading .mono { flex: none; font-size: 11px; color: var(--faint); }
+      /* Name (and the group button) on top; people and time below. */
+      .room-heading { flex-wrap: wrap; row-gap: 2px; }
+      .room-heading::before { content: ''; flex-basis: 100%; order: 1; }
+      .room-heading strong { flex: 0 1 auto; }
+      #heading-meta, #heading-timer { order: 2; }
+      .room-heading .heading-group { margin-left: -4px; align-self: center; width: 24px; height: 24px; background: none; color: var(--muted); }
+      .room-heading .heading-group:hover { background: var(--raised); color: var(--text); }
+      .room-heading .heading-group svg { width: 16px; height: 16px; }
+      /* The group's rooms, like voice channels (#189). */
+      .side-rooms:not(:empty) { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 0; padding: 0; }
+      .side-room { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: var(--r-md); color: var(--muted); font-size: 14px; text-decoration: none; }
+      a.side-room:hover { background: var(--raised); color: var(--text); }
+      .side-room.current { background: var(--raised); color: var(--text); font-weight: 600; }
+      .side-room-hash { flex: none; color: var(--faint); font-weight: 400; }
+      .side-room-count { margin-left: auto; flex: none; font-size: 12px; font-weight: 400; color: var(--online); }
       #heading-timer:not(:empty)::before { content: '· '; }
       .room-link { flex: none; }
       .room-id { font-size: 12px; }
@@ -701,12 +716,13 @@
       <a class="rail-logo" href="/" id="rail-home" title="Início" aria-label="Início"><img src="/favicon.svg" alt=""></a>
       <span class="rail-sep" aria-hidden="true"></span>
       <div class="rail-rooms" id="rail-rooms"></div>
-      <button type="button" class="rail-btn" id="rail-new" title="Nova sala" aria-label="Nova sala"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button type="button" class="rail-btn" id="rail-new" title="Novo grupo" aria-label="Novo grupo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       <button type="button" class="rail-btn" id="rail-paste" title="Entrar com convite" aria-label="Entrar com convite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
       <button type="button" class="rail-btn rail-gear" id="rail-settings" title="Configurações" aria-label="Configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
     </nav>
     <header class="topbar">
-      <div class="room-heading" id="room-heading"><strong class="ellipsis" id="heading-name"></strong><span class="mono" id="heading-meta"></span><span class="mono" id="heading-timer"></span></div>
+      <div class="room-heading" id="room-heading"><strong class="ellipsis" id="heading-name"></strong><button type="button" class="icon-btn heading-group" id="heading-group" title="Salas e pessoas do grupo" aria-label="Salas e pessoas do grupo" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button><span class="mono" id="heading-meta"></span><span class="mono" id="heading-timer"></span></div>
+      <ul class="side-rooms" id="side-rooms" aria-label="Salas do grupo"></ul>
       <a class="brand" href="/" id="home" title="Voltar ao início" aria-label="Voltar ao início"><svg class="back" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span class="logo" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span>CPX Call</span></a>
       <div class="room-link">
         <div class="room-title">
@@ -744,11 +760,11 @@
       </section>
 
       <section class="side-block" id="hud" aria-labelledby="hud-title">
-        <h2 id="hud-title">Suas salas</h2>
+        <h2 class="side-head"><span id="hud-title" class="ellipsis">Seus grupos</span> <button class="btn small ghost" id="hud-group" hidden>Grupo</button></h2>
         <div class="card">
           <ul id="hud-rooms" aria-labelledby="hud-title"></ul>
           <form class="hud-new" id="hud-new">
-            <input id="hud-new-name" maxlength="40" placeholder="Nova sala (nome opcional)" autocomplete="off" aria-label="Nome da nova sala">
+            <input id="hud-new-name" maxlength="32" placeholder="Nova sala do grupo" autocomplete="off" aria-label="Nome da nova sala" required>
             <button class="btn small">Criar</button>
           </form>
         </div>
@@ -1015,6 +1031,7 @@
 
   <script src="/common.js"></script>
   <script src="/amigos.js"></script>
+  <script src="/grupos.js"></script>
   <script src="/configuracoes.js"></script>
   <script src="/room.js"></script>
 </body>

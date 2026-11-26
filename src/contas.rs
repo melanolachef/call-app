@@ -26,6 +26,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 pub mod amizades;
+pub mod grupos;
 pub mod mensagens;
 pub mod perfil;
 
@@ -101,6 +102,32 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX messages_unread ON messages(recipient, read_at);
     CREATE INDEX messages_age ON messages(created_at);
 ",
+    "
+    CREATE TABLE groups (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        invite TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX groups_owner ON groups(owner);
+    CREATE TABLE group_members (
+        group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        member TEXT NOT NULL,
+        nick TEXT NOT NULL DEFAULT '',
+        joined_at INTEGER NOT NULL,
+        PRIMARY KEY (group_id, member)
+    );
+    CREATE INDEX group_members_member ON group_members(member);
+    CREATE TABLE group_rooms (
+        room_id TEXT PRIMARY KEY,
+        group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX group_rooms_group ON group_rooms(group_id, position);
+",
 ];
 
 pub struct Google {
@@ -112,7 +139,8 @@ pub struct Google {
 
 pub struct Contas {
     db: Mutex<Connection>,
-    google: Google,
+    /// Signing in with Google; without it, only groups by browser key.
+    google: Option<Google>,
     /// Where Google sends people back to (`PUBLIC_URL`), e.g. https://cpx-call.fly.dev.
     public_url: String,
     /// Which room connections belong to which account (memory only).
@@ -151,17 +179,23 @@ fn hash_token(token: &str) -> String {
 }
 
 impl Contas {
-    /// Accounts are on only with a database path and a Google client.
+    /// The database is always on (groups need it, #189: `DATABASE_PATH`,
+    /// `cpx.db` by default); signing in with Google only with a client and
+    /// `PUBLIC_URL`.
     pub fn from_env() -> Option<Arc<Self>> {
         let var = |name| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
-        let path = var("DATABASE_PATH")?;
-        let google = Google {
-            client_id: var("GOOGLE_CLIENT_ID")?,
-            client_secret: var("GOOGLE_CLIENT_SECRET")?,
-            auth_url: var("GOOGLE_AUTH_URL").unwrap_or_else(|| GOOGLE_AUTH_URL.to_owned()),
-            token_url: var("GOOGLE_TOKEN_URL").unwrap_or_else(|| GOOGLE_TOKEN_URL.to_owned()),
-        };
-        let public_url = var("PUBLIC_URL")?;
+        let path = var("DATABASE_PATH").unwrap_or_else(|| "cpx.db".to_owned());
+        let public_url = var("PUBLIC_URL");
+        let google = (|| {
+            Some(Google {
+                client_id: var("GOOGLE_CLIENT_ID")?,
+                client_secret: var("GOOGLE_CLIENT_SECRET")?,
+                auth_url: var("GOOGLE_AUTH_URL").unwrap_or_else(|| GOOGLE_AUTH_URL.to_owned()),
+                token_url: var("GOOGLE_TOKEN_URL").unwrap_or_else(|| GOOGLE_TOKEN_URL.to_owned()),
+            })
+        })()
+        .filter(|_| public_url.is_some());
+        let public_url = public_url.unwrap_or_else(|| "http://localhost".to_owned());
         match Self::open(Path::new(&path), google, &public_url) {
             Ok(contas) => Some(Arc::new(contas)),
             Err(err) => {
@@ -171,7 +205,7 @@ impl Contas {
         }
     }
 
-    pub fn open(path: &Path, google: Google, public_url: &str) -> rusqlite::Result<Self> {
+    pub fn open(path: &Path, google: Option<Google>, public_url: &str) -> rusqlite::Result<Self> {
         let db = if path.as_os_str() == ":memory:" {
             Connection::open_in_memory()?
         } else {
@@ -198,6 +232,10 @@ impl Contas {
 
     fn db(&self) -> MutexGuard<'_, Connection> {
         self.db.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub fn google_on(&self) -> bool {
+        self.google.is_some()
     }
 
     fn secure(&self) -> bool {
@@ -268,9 +306,16 @@ impl Contas {
     }
 
     pub fn delete_user(&self, id: i64) -> rusqlite::Result<()> {
-        self.db()
-            .execute("DELETE FROM users WHERE id = ?1", params![id])?;
-        Ok(())
+        let mut db = self.db();
+        let tx = db.transaction()?;
+        // Groups name members by text ("u:<id>"), so no foreign key does this.
+        tx.execute("DELETE FROM groups WHERE owner = 'u:' || ?1", params![id])?;
+        tx.execute(
+            "DELETE FROM group_members WHERE member = 'u:' || ?1",
+            params![id],
+        )?;
+        tx.execute("DELETE FROM users WHERE id = ?1", params![id])?;
+        tx.commit()
     }
 
     /// Sets the @username and/or the display name.
@@ -335,6 +380,13 @@ pub enum Problem {
     BadImage,
     NotFriends,
     EmptyMessage,
+    /// Not a group you belong to (or it no longer exists).
+    NoGroup,
+    NotOwner,
+    BadName,
+    NoInvite,
+    /// A group limit, with what to tell the person.
+    Limit(&'static str),
     Database,
 }
 
@@ -357,6 +409,11 @@ impl IntoResponse for Problem {
             Problem::NotFriends => (StatusCode::FORBIDDEN, "Só dá para mandar mensagem para amigos."),
             Problem::EmptyMessage => (StatusCode::BAD_REQUEST, "A mensagem está vazia."),
             Problem::BadImage => (StatusCode::BAD_REQUEST, "Essa imagem não parece uma foto válida."),
+            Problem::NoGroup => (StatusCode::NOT_FOUND, "Esse grupo não existe ou você não faz parte dele."),
+            Problem::NotOwner => (StatusCode::FORBIDDEN, "Só o dono do grupo pode fazer isso."),
+            Problem::BadName => (StatusCode::BAD_REQUEST, "O nome precisa ter de 1 a 32 caracteres."),
+            Problem::NoInvite => (StatusCode::NOT_FOUND, "Esse convite não vale mais. Peça um novo para quem te chamou."),
+            Problem::Limit(why) => (StatusCode::CONFLICT, why),
             Problem::Database => (StatusCode::INTERNAL_SERVER_ERROR, "Algo deu errado. Tente de novo."),
         };
         (status, Json(json!({ "error": error }))).into_response()
@@ -533,6 +590,9 @@ fn current(contas: &Contas, headers: &HeaderMap) -> Option<User> {
 /// `GET /auth/google?volta=/room/x`: off to Google's account chooser.
 async fn login(State(contas): State<ContasState>, RawQuery(query): RawQuery) -> Response {
     let Some(contas) = contas else { return off() };
+    let Some(google) = &contas.google else {
+        return off();
+    };
     let query = query.unwrap_or_default();
     let back = query_param(&query, "volta")
         .and_then(clean_back)
@@ -540,8 +600,8 @@ async fn login(State(contas): State<ContasState>, RawQuery(query): RawQuery) -> 
     let state = random_hex(16);
     let url = format!(
         "{}?client_id={}&redirect_uri={}&response_type=code&scope=openid&state={state}&prompt=select_account",
-        contas.google.auth_url,
-        encode(&contas.google.client_id),
+        google.auth_url,
+        encode(&google.client_id),
         encode(&contas.redirect_uri()),
     );
     let secure = contas.secure();
@@ -582,9 +642,13 @@ async fn callback(
         return failed("state não confere");
     }
     let code = percent_decode(code);
+    let Some(client_id) = contas.google.as_ref().map(|g| g.client_id.clone()) else {
+        return off();
+    };
     let worker = contas.clone();
-    let exchanged = tokio::task::spawn_blocking(move || {
-        exchange_code(&worker.google, &code, &worker.redirect_uri())
+    let exchanged = tokio::task::spawn_blocking(move || match &worker.google {
+        Some(google) => exchange_code(google, &code, &worker.redirect_uri()),
+        None => Err("Google desligado".to_owned()),
     })
     .await;
     let id_token = match exchanged {
@@ -592,7 +656,7 @@ async fn callback(
         Ok(Err(err)) => return failed(&err),
         Err(_) => return failed("tarefa interrompida"),
     };
-    let Some(sub) = google_sub(&id_token, &contas.google.client_id) else {
+    let Some(sub) = google_sub(&id_token, &client_id) else {
         return failed("token inválido");
     };
     let session = contas
@@ -616,7 +680,9 @@ async fn callback(
 /// `GET /api/me` -> `{"id": 1, "username": "rafa"|null, "nick": "Rafa"}`;
 /// 401 signed out, 404 when accounts are off.
 async fn me(State(contas): State<ContasState>, headers: HeaderMap) -> Response {
-    let Some(contas) = contas else { return off() };
+    let Some(contas) = contas.filter(|c| c.google.is_some()) else {
+        return off(); // the pages read this as "no accounts here"
+    };
     match current(&contas, &headers) {
         Some(user) => Json(json!({ "id": user.id, "username": user.username, "nick": user.nick }))
             .into_response(),
@@ -714,7 +780,9 @@ pub mod tests {
             auth_url: "https://google.exemplo/auth".to_owned(),
             token_url: token_url.to_owned(),
         };
-        Arc::new(Contas::open(Path::new(":memory:"), google, "http://localhost:3001").unwrap())
+        Arc::new(
+            Contas::open(Path::new(":memory:"), Some(google), "http://localhost:3001").unwrap(),
+        )
     }
 
     /// An ID token as Google's token endpoint returns it (unsigned here).

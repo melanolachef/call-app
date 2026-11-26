@@ -115,6 +115,16 @@ impl Rooms {
     /// Like `join`, with the browser's owner key for this room (its hash):
     /// whoever opens the room owns it, and gets it back on reconnecting.
     pub fn join_as(&self, room_id: &str, tx: Tx, key: Option<String>) -> Join {
+        self.enter(room_id, tx, key, None)
+    }
+
+    /// A group room (#189): `key` is the member's, and the group's owner
+    /// always owns the room, whoever opened it.
+    pub fn join_group(&self, room_id: &str, tx: Tx, key: String, owner: String) -> Join {
+        self.enter(room_id, tx, Some(key), Some(owner))
+    }
+
+    fn enter(&self, room_id: &str, tx: Tx, key: Option<String>, fixed: Option<String>) -> Join {
         let (id, others, count, owner_now) = {
             let mut rooms = self.lock();
             if !rooms.contains_key(room_id) && rooms.len() >= self.max_rooms {
@@ -123,7 +133,9 @@ impl Rooms {
                 return Join::ServerFull;
             }
             let room = rooms.entry(room_id.to_owned()).or_default();
-            if room.peers.is_empty() {
+            if fixed.is_some() {
+                room.owner_key = fixed;
+            } else if room.peers.is_empty() {
                 room.owner_key = key.clone(); // opened it: owns it
             }
             let is_owner = key.is_some() && key == room.owner_key;
@@ -240,6 +252,57 @@ impl Rooms {
         }
         self.broadcast(room_id, &everyone, &self.state(room_id));
         true
+    }
+
+    /// Ends a room (its group room was deleted): everyone gets `closed`.
+    pub fn close(&self, room_id: &str) {
+        let Some(room) = self.lock().remove(room_id) else {
+            return;
+        };
+        for tx in room.peers.values() {
+            let _ = tx.try_send(json!({ "type": "closed" }).to_string());
+        }
+        println!("[sala {}] fechada", short(room_id));
+    }
+
+    /// Sends out whoever is in the room with `key` (taken out of its group).
+    pub fn remove_key(&self, room_id: &str, key: &str) {
+        let (gone, everyone) = {
+            let mut rooms = self.lock();
+            let Some(room) = rooms.get_mut(room_id) else {
+                return;
+            };
+            let ids: Vec<u32> = room
+                .keys
+                .iter()
+                .filter(|(_, k)| *k == key)
+                .map(|(&id, _)| id)
+                .collect();
+            let gone: Vec<Tx> = ids
+                .iter()
+                .filter_map(|id| {
+                    room.keys.remove(id);
+                    if room.owner == Some(*id) {
+                        room.owner = None;
+                    }
+                    room.peers.remove(id)
+                })
+                .collect();
+            let everyone: Vec<(u32, Tx)> = room
+                .peers
+                .iter()
+                .map(|(&id, tx)| (id, tx.clone()))
+                .collect();
+            (gone, everyone)
+        };
+        if gone.is_empty() {
+            return;
+        }
+        for tx in gone {
+            // As with a kick: their task reads this, sees the queue end, leaves.
+            let _ = tx.try_send(json!({ "type": "kicked" }).to_string());
+        }
+        self.broadcast(room_id, &everyone, &self.state(room_id));
     }
 
     /// How many people are in each room; rooms that don't exist count 0.
@@ -529,6 +592,30 @@ mod tests {
         assert_eq!(rooms.state("r")["owner"], Value::Null);
         rooms.join_as("r", c, key("dono"));
         assert_eq!(rooms.state("r")["owner"], 3);
+    }
+
+    #[test]
+    fn group_owner_owns_the_room_whoever_opens_it() {
+        let rooms = Rooms::default();
+        let (a, mut ra) = peer();
+        let (b, _rb) = peer();
+        let own = || "dono-do-grupo".to_owned();
+        rooms.join_group("g", a, "membro".to_owned(), own());
+        assert_eq!(rooms.state("g")["owner"], Value::Null, "a member opened it");
+        rooms.join_group("g", b, own(), own());
+        assert_eq!(rooms.state("g")["owner"], 2);
+
+        // Taken out of the group: out of the call too.
+        rooms.remove_key("g", "membro");
+        let mut got = Vec::new();
+        while let Ok(msg) = ra.try_recv() {
+            got.push(msg);
+        }
+        assert!(got.iter().any(|m| m.contains("kicked")));
+        assert_eq!(rooms.counts(&["g"]), vec![("g", 1)]);
+
+        rooms.close("g");
+        assert_eq!(rooms.counts(&["g"]), vec![("g", 0)]);
     }
 
     #[test]
