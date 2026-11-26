@@ -71,10 +71,13 @@ _Atualizado em 2026-11-26._
   (#164). Login com Google funcionando em produção (app em modo Teste no
   Google Cloud: só entra quem está em "Usuários de teste" até publicar).
 - **Na development (falta publicar):** cabeçalhos de segurança/CSP (#166),
-  TURN só dentro da sala (#167, credenciais no `welcome` do WebSocket;
-  `/api/ice` só STUN) e amizades por @usuário (#157: busca exata, pedidos,
-  amigo "em tal sala", link `/?u=usuario`). CSP libera o IPC do Tauri, mas o
-  app Windows não foi testado com ela.
+  TURN só dentro da sala (#167, credenciais no `welcome`; `/api/ice` só
+  STUN), contas fases 2–4 — amizades por @usuário (#168), "online" com o
+  Início aberto via `/ws/presenca` (#169), perfil (nick, foto, banner) salvo
+  na conta com imagens conferidas no servidor (#170) —, dono da sala trancar
+  e expulsar (#171, código `?dono=` por sala, hash só em memória), botão
+  Denunciar por e-mail + SaferNet e idade 13+ no primeiro acesso (#172).
+  A CSP libera o IPC do Tauri, mas o app Windows não foi testado com ela.
 - **Produção sem TURN:** falta pôr `TURN_KEY_ID`/`TURN_KEY_API_TOKEN` (já
   seguro depois do #167; criar alerta de gastos na Cloudflare antes).
 - **Falta testar:** app Windows com a CSP, Android real e "relay" numa rede
@@ -88,10 +91,10 @@ _Atualizado em 2026-11-26._
 
 ## Próximos passos
 
-0. **Abrir para o público:** contas fase 3 (#158, "online" fora de call
-   com uma conexão leve no Início) e 4 (#159, foto/banner na conta), dono
-   da sala (#151: expulsar e trancar), resto da #152 (botão Denunciar e
-   idade no primeiro acesso), primeira vez (#153), operação (#154).
+0. **Abrir para o público:** publicar a development (PR para a main +
+   deploy) e testar o app Windows com a CSP; publicar o app no Google Cloud
+   (sair do modo Teste); depois primeira vez para quem não é da turma
+   (#153) e operação (#154: alerta de queda, números sem dados pessoais).
 1. **Fase 1 do app nativo ("o mais Rust possível"):** ao clicar em
    "Compartilhar tela" dentro do app, o Rust captura e codifica (protótipo
    acima) e envia com `str0m` (proposta do estudo em docs/nativo) numa conexão extra por pessoa que assiste,
