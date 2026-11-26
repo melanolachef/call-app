@@ -481,6 +481,7 @@ mobile.addEventListener('change', renderRooms);
 // ---------- início ----------
 
 renderProfile();
+whenAgeOk();
 if (nick) ensureHomeRoom(nick);
 onProfileChangedElsewhere(() => { // edited in a room open in another tab
   nick = cleanNick(load('nick'));

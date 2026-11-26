@@ -23,4 +23,4 @@ try {
   takeover = sessionStorage.getItem('takeover') === '1';
   sessionStorage.removeItem('takeover');
 } catch { /* storage blocked: no takeover */ }
-if (myNick) enterRoom(takeover); else openProfile();
+whenAgeOk(() => (myNick ? enterRoom(takeover) : openProfile()));
