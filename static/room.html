@@ -708,6 +708,8 @@
       #rail-input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: rgb(11 11 12 / .9); color: var(--text); font-size: 16px; }
       #rail-form .btn { height: 40px; }
     }
+    /* Shown only if the browser refused to start the voices: one tap fixes it. */
+    .voice-unlock { position: fixed; left: 50%; top: 16px; transform: translateX(-50%); z-index: 30; padding: 10px 18px; border-radius: 999px; background: var(--online, #30D158); color: #000; font-weight: 600; box-shadow: 0 10px 30px rgb(0 0 0 / .5); }
   </style>
 </head>
 <body data-tab="palco">
