@@ -63,6 +63,33 @@ cargo tauri build      # target/release/bundle/nsis/CPX Call_<versão>_x64-setup
 Rodar o workflow pela aba **Actions** (sem tag) só gera o instalador como
 artefato, para testar antes de publicar.
 
+## Atualização automática
+
+Ao abrir, o app procura uma versão nova em
+`releases/latest/download/latest.json`. Se tiver, a página mostra **Nova versão
+do app · Reiniciar e atualizar**: o app baixa o instalador, confere a
+assinatura, instala sem assistente e reabre. As páginas não dependem disso (o
+app carrega o site); só a parte nativa (atalhos, barra de título, links) pede
+instalador novo.
+
+A assinatura do atualizador é **separada** da SignPath e liga cada instalador
+à sua versão (`requireSignedVersion`), para ninguém empurrar uma versão antiga
+como se fosse nova. Para ligar, uma vez:
+
+1. No Windows, com o `tauri-cli`: `cargo tauri signer generate -w %USERPROFILE%\.tauri\cpx-call.key`
+   (guarde o arquivo e a senha: sem eles, não dá para publicar atualizações).
+2. Em **Settings › Secrets and variables › Actions** do repositório:
+
+   | Tipo | Nome | Valor |
+   |---|---|---|
+   | Secret | `TAURI_SIGNING_PRIVATE_KEY` | conteúdo do arquivo `cpx-call.key` |
+   | Secret | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | a senha |
+   | Variable | `TAURI_UPDATER_PUBKEY` | conteúdo do arquivo `cpx-call.key.pub` |
+
+Sem esses três, o workflow publica o instalador como antes e o app não procura
+atualização. Quem está numa versão sem atualizador baixa a próxima à mão uma
+última vez; dali em diante, atualiza sozinho.
+
 ## Assinatura
 
 O instalador é assinado gratuitamente pela [SignPath Foundation](https://signpath.org),

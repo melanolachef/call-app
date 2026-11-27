@@ -7,7 +7,8 @@
 //! keyboard hook *observes* that key and Ctrl+Shift+M without consuming them
 //! (the game still gets them) and forwards them to the page. Nothing else is
 //! read: every other key is ignored right in the hook. The page also draws the
-//! window's title bar in the app's colors (`titlebar`).
+//! window's title bar in the app's colors (`titlebar`), and the app updates
+//! itself when a new version is released (`update`).
 
 // No console window behind the app in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -15,6 +16,7 @@
 mod keys;
 mod links;
 mod titlebar;
+mod update;
 
 use tauri::{Manager, Url};
 
@@ -26,11 +28,19 @@ fn set_ptt_key(code: String) {
 }
 
 fn main() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // Updates only for builds that carry the updater's public key (releases).
+    if let Some(key) = update::public_key() {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().pubkey(key).build());
+    }
+    builder
+        .manage(update::Pending::default())
         .invoke_handler(tauri::generate_handler![
             set_ptt_key,
             titlebar::window_control,
-            links::open_url
+            links::open_url,
+            update::update_status,
+            update::install_update
         ])
         .setup(|app| {
             let window = app
@@ -42,6 +52,9 @@ fn main() {
                 .and_then(|u| Url::parse(&u).ok())
             {
                 window.navigate(url)?;
+            }
+            if update::public_key().is_some() {
+                tauri::async_runtime::spawn(update::check(app.handle().clone(), window.clone()));
             }
             keys::start(window);
             Ok(())

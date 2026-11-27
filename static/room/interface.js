@@ -446,6 +446,7 @@ function refresh() {
   renderRoomLock();
 
   $('share-long').textContent = localTrack ? 'Parar compartilhamento' : 'Compartilhar tela';
+  $('share-switch').hidden = !localTrack;
   $('share-short').textContent = localTrack ? 'Parar' : 'Compartilhar';
   $('share').classList.toggle('sharing', !!localTrack);
 

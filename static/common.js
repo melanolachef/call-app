@@ -54,9 +54,109 @@ function gifUrlOk(url) {
 // cropGif): background position in % and width in % of the box.
 const GIF_CROP = /#p=(\d{1,3}(?:\.\d)?),(\d{1,3}(?:\.\d)?),(\d{1,5}(?:\.\d)?)$/;
 
-function profileGif(value) {
+function klipyGif(value) {
   return value.length <= 340 && /^https:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~/-]+\.gif(#p=[0-9.,]+)?$/.test(value) &&
     (!value.includes('#') || GIF_CROP.test(value)) && gifUrlOk(value);
+}
+
+// ---------- GIF próprio (#175) ----------
+
+// A GIF from your computer or phone, embedded like the photos (the server
+// hosts no files): small ones only, and walked block by block, here and in
+// src/contas/perfil.rs, so nobody can pass off something that isn't a plain
+// GIF, or one whose size or frame count would weigh on whoever is gaming.
+const MAX_OWN_GIF = 60_000; // characters, crop included; each image has its own message (< 64 KB)
+const OWN_GIF_MAX_SIDE = 640;
+const OWN_GIF_MAX_FRAMES = 300;
+const OWN_GIF = /^data:image\/gif;base64,([A-Za-z0-9+/]+=*)(#.*)?$/;
+const OWN_GIF_PREFIX = 'data:image/gif;base64,'.length;
+const ownGifChecked = new Map(); // value -> bool; a few recent ones (refresh() repaints often)
+
+// { width, height, frames } of a well-formed GIF, or null.
+function gifInfo(bytes) {
+  const head = String.fromCharCode(...bytes.slice(0, 6));
+  if (bytes.length < 13 || (head !== 'GIF87a' && head !== 'GIF89a')) return null;
+  const width = bytes[6] | (bytes[7] << 8);
+  const height = bytes[8] | (bytes[9] << 8);
+  let at = 13;
+  if (bytes[10] & 0x80) at += 3 << ((bytes[10] & 7) + 1); // global color table
+  const skipBlocks = () => {
+    while (at < bytes.length) {
+      const size = bytes[at++];
+      if (!size) return true;
+      at += size;
+    }
+    return false;
+  };
+  let frames = 0;
+  while (at < bytes.length) {
+    const kind = bytes[at];
+    if (kind === 0x3b) break; // trailer
+    if (kind === 0x21) { // extension: label, then sub-blocks
+      at += 2;
+      if (!skipBlocks()) return null;
+    } else if (kind === 0x2c) { // a frame: descriptor, color table, LZW data
+      if (at + 10 > bytes.length) return null;
+      const flags = bytes[at + 9];
+      at += 10;
+      if (flags & 0x80) at += 3 << ((flags & 7) + 1);
+      at += 1;
+      if (!skipBlocks()) return null;
+      frames++;
+    } else {
+      return null;
+    }
+  }
+  return frames && width && height ? { width, height, frames } : null;
+}
+
+function gifFits(info) {
+  return !!info && info.width <= OWN_GIF_MAX_SIDE && info.height <= OWN_GIF_MAX_SIDE && info.frames <= OWN_GIF_MAX_FRAMES;
+}
+
+function ownGif(value) {
+  if (value.length > MAX_OWN_GIF) return false;
+  if (ownGifChecked.has(value)) return ownGifChecked.get(value);
+  const match = OWN_GIF.exec(value);
+  let ok = !!match && (!match[2] || GIF_CROP.test(value));
+  if (ok) {
+    try {
+      ok = gifFits(gifInfo(Uint8Array.from(atob(match[1]), (c) => c.charCodeAt(0))));
+    } catch {
+      ok = false;
+    }
+  }
+  if (ownGifChecked.size > 16) ownGifChecked.delete(ownGifChecked.keys().next().value);
+  ownGifChecked.set(value, ok);
+  return ok;
+}
+
+// A GIF as photo or banner: from the picker, or your own.
+function profileGif(value) {
+  return klipyGif(value) || ownGif(value);
+}
+
+// An animated GIF file -> its data URL ('' when it isn't one: it becomes a
+// JPEG like any photo); null after telling why it can't be used.
+async function ownGifFromFile(file) {
+  if (file.type !== 'image/gif') return '';
+  const info = gifInfo(new Uint8Array(await file.arrayBuffer()));
+  if (!info || info.frames < 2) return '';
+  const maxKb = Math.floor((((MAX_OWN_GIF - OWN_GIF_PREFIX - 24) / 4) * 3) / 1000);
+  if (file.size > maxKb * 1000) {
+    toast(`Esse GIF tem ${Math.ceil(file.size / 1000)} KB; o limite é ${maxKb} KB. Tente um menor.`, 5000);
+    return null;
+  }
+  if (!gifFits(info)) {
+    toast(`Esse GIF é grande demais (até ${OWN_GIF_MAX_SIDE}×${OWN_GIF_MAX_SIDE} e ${OWN_GIF_MAX_FRAMES} quadros).`, 5000);
+    return null;
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 // "https://….gif#p=20,35,160" -> { url, x: 20, y: 35, size: 160 } (no crop: nulls).
@@ -551,7 +651,9 @@ async function pickImage(input, opts, apply) {
   input.value = ''; // picking the same file again still fires onchange
   if (!file) return;
   try {
-    const url = await cropImage(file, opts);
+    const gif = await ownGifFromFile(file);
+    if (gif === null) return;
+    const url = await cropImage(file, gif ? { ...opts, gif } : opts);
     if (url) {
       apply(url);
       updateProfilePreview();
@@ -612,7 +714,7 @@ async function loadPickerGifs(query, more) {
 function pickerChoice(item) {
   const preview = item.preview?.url;
   const url = picker.kind === 'photo' ? preview : item.gif?.url;
-  if (typeof url !== 'string' || !profileGif(url) || typeof preview !== 'string' || !gifUrlOk(preview)) return null;
+  if (typeof url !== 'string' || !klipyGif(url) || typeof preview !== 'string' || !gifUrlOk(preview)) return null;
   const button = el('button', 'gif-choice');
   button.type = 'button';
   button.title = item.title || 'GIF';
@@ -1382,4 +1484,44 @@ loadAccount();
     if (url) route(String(url));
     return null;
   };
+})();
+
+// ---------- atualização do app para Windows (#186) ----------
+
+// The app looks for a new version when it opens (desktop/src/update.rs) and
+// tells the page; the page offers to restart into it. Restarting ends the
+// call, so inside a call it asks first. Older apps have no such command.
+(() => {
+  const app = window.__TAURI__?.core;
+  if (!app) return;
+
+  function showUpdate(version) {
+    if (!version || document.getElementById('app-update')) return;
+    const bar = el('div', 'app-update');
+    bar.id = 'app-update';
+    bar.setAttribute('role', 'status');
+    bar.append(el('span', null, `Nova versão do app: ${version}`));
+    const go = el('button', 'btn small primary', 'Reiniciar e atualizar');
+    go.type = 'button';
+    go.onclick = async () => {
+      if (typeof okToLeave === 'function' && !okToLeave()) return;
+      go.disabled = true;
+      go.textContent = 'Atualizando…';
+      try {
+        await app.invoke('install_update'); // the app restarts when it's done
+      } catch (err) {
+        go.disabled = false;
+        go.textContent = 'Tentar de novo';
+        toast(String(err || 'Não deu para atualizar.'), 5000);
+      }
+    };
+    const later = el('button', 'btn small ghost', 'Depois');
+    later.type = 'button';
+    later.onclick = () => bar.remove();
+    bar.append(go, later);
+    document.body.append(bar);
+  }
+
+  window.cpxDesktop = Object.assign(window.cpxDesktop || {}, { updateReady: showUpdate });
+  app.invoke('update_status').then(showUpdate).catch(() => {});
 })();

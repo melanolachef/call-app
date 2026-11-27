@@ -116,11 +116,11 @@ function syncDesktopKeys() {
 }
 
 if (desktopApp) {
-  window.cpxDesktop = {
+  window.cpxDesktop = Object.assign(window.cpxDesktop || {}, {
     // Hidden windows run timers late: release at once instead of after the tail.
     ptt: (down) => (down ? pttDown() : pttUp(document.hidden)),
     toggleMute: () => { if (voice.joined) toggleMic(); },
     toggleDeafen: () => { if (voice.joined) setDeafened(!voice.deafened); },
-  };
+  });
   $('ptt-note').textContent = 'No app, funciona mesmo com o jogo em primeiro plano.';
 }

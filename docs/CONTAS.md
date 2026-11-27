@@ -60,7 +60,8 @@ letra; único sem diferenciar maiúsculas; alguns nomes reservados.
 - **4 (#159) Perfil na conta — feita:** `GET/PUT /api/me/perfil` (nick, foto,
   banner). O servidor confere as imagens como as páginas: só JPEG/PNG/WebP
   embutidos cujos primeiros bytes são mesmo daquele tipo (banner só JPEG),
-  ou GIF `https://` do KLIPY, nos mesmos tamanhos máximos. Ao entrar, o
+  ou GIF `https://` do KLIPY, ou um GIF próprio pequeno conferido
+  bloco a bloco (#175), nos mesmos tamanhos máximos. Ao entrar, o
   perfil salvo vale no aparelho; conta sem perfil recebe o do aparelho.
 
 Antes de abrir para o público: limites contra abuso (#149) e as páginas de
