@@ -542,6 +542,14 @@ localScreen.soundBtn.remove(); // your own sound is never played back to you
 localScreen.volume.remove();
 localScreen.unwatchBtn.textContent = 'Esconder prévia';
 localScreen.watchBtn.onclick = () => setPreview(true);
+// "Trocar tela" in words too, not only the ⇄ in the controls (easy to miss).
+for (const [box, cls] of [[localScreen.watchBtn, 'btn'], [localScreen.unwatchBtn, 'btn small']]) {
+  const again = el('button', cls, 'Trocar tela');
+  again.type = 'button';
+  again.title = 'Escolher outra janela ou monitor, sem parar de compartilhar';
+  again.onclick = switchShare;
+  box.before(again);
+}
 localScreen.unwatchBtn.onclick = () => setPreview(false);
 
 function setPreview(on) {
