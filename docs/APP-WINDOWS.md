@@ -51,6 +51,8 @@ cargo tauri build      # target/release/bundle/nsis/CPX Call_<versão>_x64-setup
 ## Publicar uma versão
 
 1. Suba a versão em [desktop/tauri.conf.json](../desktop/tauri.conf.json) e [desktop/Cargo.toml](../desktop/Cargo.toml).
+   Escreva as novidades da versão em [desktop/NOVIDADES.md](../desktop/NOVIDADES.md),
+   numa seção `## X.Y.Z` no topo: ela vira o texto do release.
 2. Depois do merge na `main`, crie a tag:
    ```sh
    git tag -a app-v0.2.0 origin/main -m "CPX Call para Windows 0.2.0"
