@@ -45,6 +45,7 @@ function viewersOfMine() {
 
 // Top of the side panel, the voice box and you.
 function renderWideSide(people) {
+  renderSideRooms();
   const here = groupOfRoom(roomId);
   $('heading-name').textContent = here ? here.group.nome : displayRoomName(roomId);
   $('heading-group').hidden = !here;
@@ -61,7 +62,22 @@ function renderWideSide(people) {
 
 // ---------- salas do grupo (#189) ----------
 
-// Under the group's name, its rooms like voice channels: "# geral  2".
+// Under the group's name, its rooms like Discord's voice channels: each of
+// the other rooms with who is in it (from the server every few seconds,
+// lateral.js). This room's people are the detailed list right below.
+function roomPeople(id) {
+  return (groupNow?.salas?.[id] ?? []).map((p) => p.nick || 'Alguém');
+}
+
+function sideRoomPerson(nick) {
+  const li = el('li', 'side-person');
+  const face = el('span', 'avatar');
+  face.setAttribute('aria-hidden', 'true');
+  paintAvatar(face, nick, 1, '');
+  li.append(face, el('span', 'ellipsis', nick));
+  return li;
+}
+
 function renderSideRooms() {
   const here = groupOfRoom(roomId);
   $('side-rooms').replaceChildren(...(here ? here.group.salas : []).map((room) => {
@@ -71,15 +87,22 @@ function renderSideRooms() {
       link.setAttribute('aria-current', 'page');
     } else {
       link.href = `/room/${room.id}`;
+      link.title = 'Entrar nesta sala';
       link.onclick = (e) => {
-        if (!okToLeave()) e.preventDefault();
+        if (!okToSwitchRoom()) e.preventDefault();
       };
     }
-    const n = hudCounts[room.id];
+    const people = current ? [] : roomPeople(room.id);
+    const n = current ? peers.size + (myId === null ? 0 : 1) : hudCounts[room.id];
     link.append(el('span', 'side-room-hash', '#'), el('span', 'ellipsis', room.nome));
     if (n > 0) link.append(el('span', 'side-room-count', String(n)));
     const li = el('li');
     li.append(link);
+    if (people.length) {
+      const list = el('ul', 'side-room-people');
+      list.append(...people.map(sideRoomPerson));
+      li.append(list);
+    }
     return li;
   }));
 }
@@ -95,7 +118,8 @@ function renderRoomRail() {
   const current = groupOfRoom(roomId)?.group.id;
   $('rail-rooms').replaceChildren(...groups.map((g) => {
     const here = g.id === current;
-    const link = el(here ? 'span' : 'a', `rail-room${here ? ' current' : ''}`, shortName(g.nome));
+    const link = el(here ? 'span' : 'a', `rail-room${here ? ' current' : ''}`);
+    paintGroupIcon(link, g);
     const count = g.salas.reduce((n, s) => n + (hudCounts[s.id] || 0), 0);
     link.title = count ? `${g.nome} · ${count} agora` : g.nome;
     link.setAttribute('aria-label', link.title);

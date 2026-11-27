@@ -41,6 +41,9 @@ struct Room {
     locked: bool,
     /// Each participant's key (hash), to keep someone kicked out.
     keys: HashMap<u32, String>,
+    /// The nick each participant of a group room gave on entering (#198), so
+    /// the group shows who is in each room. Memory only, like everything here.
+    nicks: HashMap<u32, String>,
     kicked: HashSet<String>,
 }
 
@@ -115,16 +118,30 @@ impl Rooms {
     /// Like `join`, with the browser's owner key for this room (its hash):
     /// whoever opens the room owns it, and gets it back on reconnecting.
     pub fn join_as(&self, room_id: &str, tx: Tx, key: Option<String>) -> Join {
-        self.enter(room_id, tx, key, None)
+        self.enter(room_id, tx, key, None, None)
     }
 
     /// A group room (#189): `key` is the member's, and the group's owner
     /// always owns the room, whoever opened it.
-    pub fn join_group(&self, room_id: &str, tx: Tx, key: String, owner: String) -> Join {
-        self.enter(room_id, tx, Some(key), Some(owner))
+    pub fn join_group(
+        &self,
+        room_id: &str,
+        tx: Tx,
+        key: String,
+        owner: String,
+        nick: Option<String>,
+    ) -> Join {
+        self.enter(room_id, tx, Some(key), Some(owner), nick)
     }
 
-    fn enter(&self, room_id: &str, tx: Tx, key: Option<String>, fixed: Option<String>) -> Join {
+    fn enter(
+        &self,
+        room_id: &str,
+        tx: Tx,
+        key: Option<String>,
+        fixed: Option<String>,
+        nick: Option<String>,
+    ) -> Join {
         let (id, others, count, owner_now) = {
             let mut rooms = self.lock();
             if !rooms.contains_key(room_id) && rooms.len() >= self.max_rooms {
@@ -163,6 +180,9 @@ impl Rooms {
             room.peers.insert(id, tx);
             if let Some(key) = key {
                 room.keys.insert(id, key);
+            }
+            if let Some(nick) = nick {
+                room.nicks.insert(id, nick);
             }
             let owner_now = is_owner && room.owner != Some(id);
             if is_owner {
@@ -282,6 +302,7 @@ impl Rooms {
                 .iter()
                 .filter_map(|id| {
                     room.keys.remove(id);
+                    room.nicks.remove(id);
                     if room.owner == Some(*id) {
                         room.owner = None;
                     }
@@ -303,6 +324,23 @@ impl Rooms {
             let _ = tx.try_send(json!({ "type": "kicked" }).to_string());
         }
         self.broadcast(room_id, &everyone, &self.state(room_id));
+    }
+
+    /// Who is in a room, in arrival order: (member key, nick) — what a group
+    /// shows under each of its rooms (#198). Empty if the room doesn't exist.
+    pub fn occupants(&self, room_id: &str) -> Vec<(Option<String>, String)> {
+        let rooms = self.lock();
+        let Some(room) = rooms.get(room_id) else {
+            return Vec::new();
+        };
+        let mut ids: Vec<u32> = room.peers.keys().copied().collect();
+        ids.sort_unstable();
+        ids.into_iter()
+            .map(|id| {
+                let nick = room.nicks.get(&id).cloned().unwrap_or_default();
+                (room.keys.get(&id).cloned(), nick)
+            })
+            .collect()
     }
 
     /// How many people are in each room; rooms that don't exist count 0.
@@ -363,6 +401,7 @@ impl Rooms {
             };
             room.peers.remove(&id);
             room.keys.remove(&id);
+            room.nicks.remove(&id);
             let owner_left = room.owner == Some(id);
             if owner_left {
                 room.owner = None;
@@ -600,10 +639,19 @@ mod tests {
         let (a, mut ra) = peer();
         let (b, _rb) = peer();
         let own = || "dono-do-grupo".to_owned();
-        rooms.join_group("g", a, "membro".to_owned(), own());
+        rooms.join_group("g", a, "membro".to_owned(), own(), Some("Rafa".to_owned()));
         assert_eq!(rooms.state("g")["owner"], Value::Null, "a member opened it");
-        rooms.join_group("g", b, own(), own());
+        rooms.join_group("g", b, own(), own(), None);
         assert_eq!(rooms.state("g")["owner"], 2);
+        // Who is in it, for the group's room list (#198).
+        assert_eq!(
+            rooms.occupants("g"),
+            vec![
+                (Some("membro".to_owned()), "Rafa".to_owned()),
+                (Some(own()), String::new()),
+            ]
+        );
+        assert!(rooms.occupants("nenhuma").is_empty());
 
         // Taken out of the group: out of the call too.
         rooms.remove_key("g", "membro");
@@ -613,6 +661,8 @@ mod tests {
         }
         assert!(got.iter().any(|m| m.contains("kicked")));
         assert_eq!(rooms.counts(&["g"]), vec![("g", 1)]);
+
+        assert_eq!(rooms.occupants("g"), vec![(Some(own()), String::new())]);
 
         rooms.close("g");
         assert_eq!(rooms.counts(&["g"]), vec![("g", 0)]);

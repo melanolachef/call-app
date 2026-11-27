@@ -67,6 +67,21 @@ fn query_value<'a>(query: Option<&'a str>, name: &str) -> Option<&'a str> {
         .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
 }
 
+/// The nick shown under a group room (`?nick=`, #198): decoded, without
+/// control characters, at most 32 characters; nothing if empty.
+fn nick_param(query: Option<&str>) -> Option<String> {
+    let raw = query_value(query, "nick")?.replace('+', " ");
+    let nick: String = crate::percent_decode(&raw)
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect::<String>()
+        .trim()
+        .chars()
+        .take(32)
+        .collect();
+    (!nick.is_empty()).then_some(nick)
+}
+
 /// The owner key a browser keeps for this room (`?dono=`, 32 to 64 hex), as
 /// a hash: the raw key never stays on the server.
 fn owner_key(query: Option<&str>) -> Option<String> {
@@ -134,10 +149,11 @@ pub async fn ws_handler(
     });
     let account = contas.and_then(|c| c.account_id(&headers).map(|id| (c, id)));
     let key = owner_key(query.as_deref());
+    let nick = nick_param(query.as_deref());
     ws.max_message_size(MAX_MESSAGE_SIZE)
         .on_upgrade(move |socket| {
             handle_socket(
-                socket, room_id, rooms, presence, ice, slot, account, key, access,
+                socket, room_id, rooms, presence, ice, slot, account, key, access, nick,
             )
         })
 }
@@ -153,11 +169,12 @@ async fn handle_socket(
     account: Option<(Arc<Contas>, i64)>,
     key: Option<String>,
     access: Access,
+    nick: Option<String>,
 ) {
     let (tx, rx) = queue();
     let joined = match access {
         Access::Open => rooms.join_as(&room_id, tx, key),
-        Access::Member { key, owner } => rooms.join_group(&room_id, tx, key, owner),
+        Access::Member { key, owner } => rooms.join_group(&room_id, tx, key, owner, nick),
         Access::Denied => {
             let _ = socket.send(text(&json!({ "type": "forbidden" }))).await;
             let _ = socket.send(Message::Close(None)).await;
