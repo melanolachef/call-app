@@ -9,10 +9,16 @@ document.body.insertAdjacentHTML('beforeend', `
   <dialog id="group-dialog" class="group-dialog" aria-labelledby="gd-title">
     <div class="dialog-body">
       <div class="gd-head">
+        <span class="gd-icon" id="gd-icon" aria-hidden="true"></span>
         <h2 id="gd-title" class="ellipsis"></h2>
         <button type="button" class="icon-btn" id="gd-close" aria-label="Fechar">${GD_X}</button>
       </div>
       <p class="muted" id="gd-sub"></p>
+      <div class="gd-icon-actions" id="gd-icon-actions" hidden>
+        <button type="button" class="btn small ghost" id="gd-icon-pick">Trocar ícone</button>
+        <button type="button" class="btn small ghost" id="gd-icon-remove">Remover ícone</button>
+        <input type="file" id="gd-icon-input" accept="image/*" hidden>
+      </div>
       <div class="gd-invite">
         <input class="input mono" id="gd-link" readonly aria-label="Link do convite">
         <button type="button" class="btn small primary" id="gd-copy">Convidar</button>
@@ -85,6 +91,10 @@ function renderGroupDialog() {
   const g = gdGroup;
   const base = `/api/grupos/${g.id}`;
   $('gd-title').textContent = g.nome;
+  $('gd-icon').replaceChildren();
+  paintGroupIcon($('gd-icon'), g);
+  $('gd-icon-actions').hidden = !g.dono;
+  $('gd-icon-remove').hidden = !validGroupIcon(g.icone);
   $('gd-sub').textContent = `${g.membros.length} ${g.membros.length === 1 ? 'pessoa' : 'pessoas'}${g.dono ? ' · você é o dono' : ''}`;
   $('gd-link').value = inviteUrl(g.convite);
   $('gd-add-room').hidden = !g.dono;
@@ -98,7 +108,9 @@ function renderGroupDialog() {
     } else {
       link.href = `/room/${room.id}`;
       link.onclick = (e) => {
-        if (!okToGo()) e.preventDefault();
+        // Another room of the group you are in: a channel switch (#198).
+        const sameGroup = typeof okToSwitchRoom === 'function' && groupOfRoom(roomId)?.group.id === g.id;
+        if (!(sameGroup ? okToSwitchRoom() : okToGo())) e.preventDefault();
       };
     }
     li.append(link);
@@ -179,6 +191,25 @@ async function openGroup(id) {
 }
 
 $('gd-close').onclick = () => $('group-dialog').close();
+
+// The group's icon (#199): the owner picks a picture, cuts a square of it.
+$('gd-icon-pick').onclick = () => $('gd-icon-input').click();
+$('gd-icon-input').onchange = async () => {
+  const file = $('gd-icon-input').files[0];
+  $('gd-icon-input').value = '';
+  if (!file || !gdGroup) return;
+  let url = null;
+  try {
+    url = await cropImage(file, { title: 'Ícone do grupo', aspect: 1, round: false, width: 128, height: 128, max: 60_000 });
+  } catch {
+    toast('Não deu para usar essa imagem.');
+    return;
+  }
+  if (url) groupChange('PUT', `/api/grupos/${gdGroup.id}/icone`, { icone: url }, 'Ícone trocado.');
+};
+$('gd-icon-remove').onclick = () => {
+  if (gdGroup) groupChange('PUT', `/api/grupos/${gdGroup.id}/icone`, { icone: '' }, 'Ícone removido.');
+};
 $('gd-copy').onclick = () => gdGroup && inviteToGroup(gdGroup);
 $('gd-add-room').onsubmit = async (e) => {
   e.preventDefault();

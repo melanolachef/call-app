@@ -79,7 +79,8 @@ function groupCount(group) {
 function renderRail() {
   $('rail-rooms').replaceChildren(...groups.map((g) => {
     const here = panelView === 'salas' && panelGroup === g.id;
-    const button = el('button', `rail-room${here ? ' current' : ''}`, shortName(g.nome));
+    const button = el('button', `rail-room${here ? ' current' : ''}`);
+    paintGroupIcon(button, g);
     button.type = 'button';
     const n = groupCount(g);
     button.title = n ? `${g.nome} · ${n} agora` : g.nome;
@@ -257,7 +258,59 @@ function roomRow(room) {
   const n = counts[room.id];
   link.append(el('span', 'panel-room-hash', '#'), text, el('span', `panel-room-count${n ? ' online' : ''}`, n === undefined ? '' : n ? `${n} agora` : 'vazia'));
   row.append(link);
+  // Who is in it, like a voice channel in Discord (#198).
+  const inside = panelNow?.salas?.[room.id] ?? [];
+  if (inside.length) {
+    const list = el('ul', 'panel-room-people');
+    list.append(...inside.map((p) => {
+      const li = el('li');
+      li.append(face({ name: p.nick || 'Alguém', key: String(p.membro ?? p.nick) }, 'small'), el('span', 'ellipsis', p.nick || 'Alguém'));
+      return li;
+    }));
+    row.append(list);
+  }
   return row;
+}
+
+// ---------- um grupo aberto: quem está onde, membros online/offline (#198) ----------
+
+let panelNow = null; // { salas: { room: [{ nick, membro }] }, online: [membro] }
+let panelDetail = null; // the open group with its members
+let panelDetailFor = null;
+
+async function refreshOpenGroup() {
+  const id = panelView === 'salas' ? panelGroup : null;
+  if (!id || document.hidden) return;
+  const [now, detail] = await Promise.all([
+    fetchGroupNow(id),
+    panelDetailFor === id && panelDetail ? panelDetail : groupRequest('GET', `/api/grupos/${id}`).then((r) => (r.ok ? r.data : null)),
+  ]);
+  if (panelGroup !== id) return; // switched meanwhile
+  panelNow = now;
+  panelDetail = detail;
+  panelDetailFor = id;
+  queuePanel();
+}
+setInterval(refreshOpenGroup, 8000);
+
+function memberRow(member, online) {
+  const row = el('li', `panel-member${online ? '' : ' offline'}`);
+  const who = face({ name: member.nick || '?', key: String(member.id) });
+  row.append(who, el('span', 'ellipsis', member.nick || 'Sem nick'));
+  if (member.dono) row.append(el('span', 'tag', 'dono'));
+  if (member.voce) row.append(el('span', 'muted', 'você'));
+  return row;
+}
+
+function membersColumn() {
+  if (!panelDetail?.membros) return [];
+  const online = new Set(panelNow?.online ?? []);
+  const on = panelDetail.membros.filter((m) => online.has(m.id));
+  const off = panelDetail.membros.filter((m) => !online.has(m.id));
+  return [
+    ...group('Online', on.map((m) => memberRow(m, true))),
+    ...group('Offline', off.map((m) => memberRow(m, false))),
+  ];
 }
 
 function groupActions(g) {
@@ -299,8 +352,20 @@ function groupForms() {
 function renderGroupsView() {
   const one = groups.find((g) => g.id === panelGroup);
   if (one) {
+    if (panelDetailFor !== one.id) {
+      panelNow = null;
+      panelDetail = null;
+      panelDetailFor = one.id;
+      refreshOpenGroup();
+    }
     const rooms = one.salas.filter((r) => matches(r.nome));
-    $('panel-body').replaceChildren(groupActions(one), ...group('Salas', rooms.map(roomRow)));
+    const columns = el('div', 'panel-group-cols');
+    const left = el('div', 'panel-group-rooms');
+    left.append(...group('Salas', rooms.map(roomRow)));
+    const right = el('div', 'panel-group-members');
+    right.append(...membersColumn());
+    columns.append(left, right);
+    $('panel-body').replaceChildren(groupActions(one), columns);
     return;
   }
   const body = [];

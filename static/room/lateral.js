@@ -20,6 +20,27 @@ function inCall() {
   return voice.joined || !!localTrack || !!cam.track;
 }
 
+// Another room of the same group is like another voice channel in Discord:
+// no question (unless you share your screen, which would stop), and you come
+// back into the voice there by yourself.
+function okToSwitchRoom() {
+  if (localTrack && !window.confirm('Você está compartilhando a tela. Trocar de sala vai parar a transmissão. Trocar mesmo assim?')) return false;
+  leavingOnPurpose = true;
+  try {
+    if (voice.joined) sessionStorage.setItem('voz-continua', '1');
+  } catch { /* storage blocked: you join the voice again by hand */ }
+  return true;
+}
+
+function carryVoiceIn() {
+  let carry = false;
+  try {
+    carry = sessionStorage.getItem('voz-continua') === '1';
+    sessionStorage.removeItem('voz-continua');
+  } catch { /* nothing to carry */ }
+  if (carry && !voice.joined) joinVoice();
+}
+
 function okToLeave() {
   if (inCall()) {
     const why = localTrack ? 'Você está compartilhando a tela.' : 'Você está na call.';
@@ -69,9 +90,17 @@ function renderHud() {
   renderSideRooms();
 }
 
+// Who is in the other rooms of this group (#198), from the server.
+let groupNow = null;
+
 async function updateHudCounts() {
   if (document.hidden) return;
-  const fresh = await fetchRoomCounts(orderedRooms().map((r) => r.id));
+  const here = groupOfRoom(roomId);
+  const [fresh, now] = await Promise.all([
+    fetchRoomCounts(orderedRooms().map((r) => r.id)),
+    here ? fetchGroupNow(here.group.id) : null,
+  ]);
+  if (now) groupNow = now;
   if (!fresh) return; // offline: keep the last numbers
   hudCounts = fresh;
   renderHud();
@@ -100,7 +129,7 @@ window.addEventListener('groups-changed', () => {
   renderHud();
   updateHudCounts();
 });
-setInterval(updateHudCounts, 15_000);
+setInterval(updateHudCounts, 8_000); // the group's rooms show who is in them (#198)
 
 // ---------- amigos em call (barra lateral) ----------
 

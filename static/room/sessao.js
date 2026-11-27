@@ -118,7 +118,7 @@ let reconnectAt = 0; // when the next attempt starts (for the countdown)
 
 async function join() {
   hwH264 = await hwH264Ready; // needed before any peer (ICE servers come in the welcome)
-  const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/${roomId}?dono=${ownerKey()}&aparelho=${deviceKey()}`);
+  const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/${roomId}?dono=${ownerKey()}&aparelho=${deviceKey()}&nick=${encodeURIComponent(myNick || '')}`);
   ws = socket;
   ws.onmessage = onMessage;
   ws.onclose = () => {
@@ -223,6 +223,7 @@ function onMessage(ev) {
     case 'welcome': {
       lastWelcomeAt = Date.now(); // shares already running are announced now: no sound
       myId = msg.id;
+      carryVoiceIn(); // came from another room of the group while in voice (#198)
       roomOwner = msg.owner ?? null;
       roomLocked = !!msg.locked;
       useIceServers(msg.ice); // before any peer below is created
