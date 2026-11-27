@@ -76,6 +76,19 @@ memória** enquanto a pessoa está lá. Com isso:
   esteja transmitindo) e entra na voz da sala nova sozinho;
 - `PUT /api/grupos/{id}/icone` (só o dono) guarda o ícone do grupo: só imagem
   embutida (`data:image/jpeg|png|webp`), nunca um link.
+- **Chat do grupo (#geral, #223, `src/contas/conversa.rs`):** guardado 30 dias
+  como as mensagens diretas. `GET /api/grupos/{id}/mensagens` (as últimas 50,
+  `?antes=<id>` para as anteriores, `?depois=<id>` para as novas),
+  `POST` com `{"texto"}` e `DELETE .../mensagens/{msg}` (quem mandou ou o
+  dono). Nada é empurrado: a página pergunta o que há de novo a cada 4 s
+  enquanto o chat está na tela (`groupChat` em `static/grupos.js`, usado no
+  Início e na sala). Fica no limite de pedidos das mensagens, não no da conta.
+- **Ver outro grupo sem sair da call (#223):** na sala larga (≥ 1200 px),
+  clicar noutro grupo na coluna da esquerda não troca de página: o meio mostra
+  o #geral dele, a direita os membros, e a call continua (o quadro "Voz
+  conectada · sala / grupo" e o botão "Ver call" voltam a ela). Entrar numa
+  sala de voz desse grupo troca de sala levando a voz junto. "Online" é quem
+  está numa call em qualquer sala de grupo (`Rooms::present_keys`).
 
 ## Protocolo
 

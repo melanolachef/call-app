@@ -26,6 +26,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 pub mod amizades;
+pub mod conversa;
 pub mod grupos;
 pub mod mensagens;
 pub mod perfil;
@@ -130,6 +131,18 @@ const MIGRATIONS: &[&str] = &[
 ",
     "
     ALTER TABLE groups ADD COLUMN icon TEXT NOT NULL DEFAULT '';
+",
+    "
+    CREATE TABLE group_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        member INTEGER NOT NULL,
+        nick TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX group_messages_group ON group_messages(group_id, id);
+    CREATE INDEX group_messages_age ON group_messages(created_at);
 ",
 ];
 
@@ -313,6 +326,11 @@ impl Contas {
         let tx = db.transaction()?;
         // Groups name members by text ("u:<id>"), so no foreign key does this.
         tx.execute("DELETE FROM groups WHERE owner = 'u:' || ?1", params![id])?;
+        tx.execute(
+            "DELETE FROM group_messages WHERE member IN
+                 (SELECT rowid FROM group_members WHERE member = 'u:' || ?1)",
+            params![id],
+        )?;
         tx.execute(
             "DELETE FROM group_members WHERE member = 'u:' || ?1",
             params![id],

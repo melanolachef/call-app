@@ -47,26 +47,90 @@ function viewersOfMine() {
 function renderWideSide(people) {
   renderSideRooms();
   const here = groupOfRoom(roomId);
-  $('heading-name').textContent = here ? here.group.nome : displayRoomName(roomId);
-  $('heading-group').hidden = !here;
+  const shown = shownGroup();
+  $('heading-name').textContent = shown ? shown.nome : displayRoomName(roomId);
+  $('heading-group').hidden = !shown;
   $('heading-meta').textContent = myId === null ? '' : `${people.length}/${maxPeers}`;
   const inVoice = people.filter((p) => p.voiceIn).length;
   $('vp-title').textContent = voice.joined ? 'Voz conectada' : 'Voz';
   $('vp-title').classList.toggle('online', voice.joined);
-  $('vp-sub').textContent = inVoice ? `${inVoice} na voz` : 'ninguém na voz';
+  // Looking at another group: where the call is, and a way back to it.
+  $('vp-sub').textContent = browsing && here ? `${here.room.nome} / ${here.group.nome}` : inVoice ? `${inVoice} na voz` : 'ninguém na voz';
+  $('vp-back').hidden = !browsing;
   $('vp-join').hidden = voice.joined || myId === null;
   $('vp-leave').hidden = !voice.joined;
   if (!$('vp-leave').innerHTML) $('vp-leave').innerHTML = ICONS.hangup; // fixed markup
   $('more-chat').textContent = chatVisible() ? 'Esconder chat' : 'Mostrar chat';
 }
 
-// ---------- salas do grupo (#189) ----------
+// ---------- ver um grupo sem sair da call (#223) ----------
 
-// Under the group's name, its rooms like Discord's voice channels: each of
-// the other rooms with who is in it (from the server every few seconds,
-// lateral.js). This room's people are the detailed list right below.
+// Like switching servers in Discord: the middle shows the group's text
+// channel, its members on the right, and the call goes on (the voice box
+// takes you back to it). Only on wide screens, where the group rail is.
+// (browsing, browseNow, browseDetail: estado.js, since lateral.js draws first)
+
+function shownGroup() {
+  if (browsing) return groups.find((g) => g.id === browsing) ?? null;
+  return groupOfRoom(roomId)?.group ?? null;
+}
+
+function browse(id) {
+  const g = groups.find((x) => x.id === id);
+  if (!g) return;
+  if (browsing !== id) {
+    browseNow = null;
+    browseDetail = null;
+    $('group-members').replaceChildren();
+  }
+  browsing = id;
+  document.body.classList.add('browsing');
+  document.body.classList.toggle('browsing-other', groupOfRoom(roomId)?.group.id !== id);
+  groupChat.mount($('group-view'));
+  groupChat.open(g);
+  refreshBrowse();
+  renderHud();
+  refresh();
+}
+
+function backToCall() {
+  if (!browsing) return;
+  browsing = null;
+  browseNow = null;
+  browseDetail = null;
+  document.body.classList.remove('browsing', 'browsing-other');
+  groupChat.close();
+  renderHud();
+  refresh();
+}
+
+async function refreshBrowse() {
+  const id = browsing;
+  if (!id || document.hidden) return;
+  const [now, detail] = await Promise.all([
+    fetchGroupNow(id),
+    browseDetail?.id === id ? browseDetail : groupRequest('GET', `/api/grupos/${id}`).then((r) => (r.ok ? r.data : null)),
+  ]);
+  if (browsing !== id) return; // switched meanwhile
+  browseNow = now;
+  browseDetail = detail;
+  $('group-members').replaceChildren(...groupMemberNodes(detail, now));
+  renderSideRooms();
+}
+setInterval(refreshBrowse, 8_000);
+window.addEventListener('groups-changed', () => {
+  if (browsing && !groups.some((g) => g.id === browsing)) backToCall(); // left or deleted
+  else if (browsing) groupChat.open(groups.find((g) => g.id === browsing)); // renamed
+});
+
+// ---------- canais do grupo (#189, #223) ----------
+
+// Under the group's name, like Discord: its text channel, then its rooms as
+// voice channels with who is in each (from the server every few seconds).
+// This room's people are the detailed list right below.
 function roomPeople(id) {
-  return (groupNow?.salas?.[id] ?? []).map((p) => p.nick || 'Alguém');
+  const now = browsing ? browseNow : groupNow;
+  return (now?.salas?.[id] ?? []).map((p) => p.nick || 'Alguém');
 }
 
 function sideRoomPerson(nick) {
@@ -78,61 +142,91 @@ function sideRoomPerson(nick) {
   return li;
 }
 
+function sideTextChannel(group) {
+  const on = browsing === group.id;
+  const row = el('button', `side-room${on ? ' current' : ''}`);
+  row.type = 'button';
+  row.title = 'Chat do grupo';
+  if (on) row.setAttribute('aria-current', 'page');
+  row.append(el('span', 'side-room-hash', '#'), el('span', 'ellipsis', 'geral'));
+  row.onclick = () => browse(group.id);
+  const li = el('li');
+  li.append(row);
+  return li;
+}
+
+function sideVoiceRoom(room) {
+  const here = room.id === roomId;
+  const onStage = here && !browsing;
+  // The room you are in goes back to the call; another one moves you there.
+  const link = el(onStage ? 'span' : here ? 'button' : 'a', `side-room${onStage ? ' current' : ''}${here ? ' here' : ''}`);
+  if (onStage) {
+    link.setAttribute('aria-current', 'page');
+  } else if (here) {
+    link.type = 'button';
+    link.title = 'Voltar para a call';
+    link.onclick = backToCall;
+  } else {
+    link.href = `/room/${room.id}`;
+    link.title = 'Entrar nesta sala';
+    link.onclick = (e) => {
+      if (!okToSwitchRoom()) e.preventDefault();
+    };
+  }
+  const icon = el('span', 'side-room-hash side-room-voice');
+  icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>'; // fixed markup
+  const people = here ? [] : roomPeople(room.id);
+  const n = here ? peers.size + (myId === null ? 0 : 1) : hudCounts[room.id];
+  link.append(icon, el('span', 'ellipsis', room.nome));
+  if (n > 0) link.append(el('span', 'side-room-count', String(n)));
+  const li = el('li');
+  li.append(link);
+  if (people.length) {
+    const list = el('ul', 'side-room-people');
+    list.append(...people.map(sideRoomPerson));
+    li.append(list);
+  }
+  return li;
+}
+
 function renderSideRooms() {
-  const here = groupOfRoom(roomId);
-  $('side-rooms').replaceChildren(...(here ? here.group.salas : []).map((room) => {
-    const current = room.id === roomId;
-    const link = el(current ? 'span' : 'a', `side-room${current ? ' current' : ''}`);
-    if (current) {
-      link.setAttribute('aria-current', 'page');
-    } else {
-      link.href = `/room/${room.id}`;
-      link.title = 'Entrar nesta sala';
-      link.onclick = (e) => {
-        if (!okToSwitchRoom()) e.preventDefault();
-      };
-    }
-    const people = current ? [] : roomPeople(room.id);
-    const n = current ? peers.size + (myId === null ? 0 : 1) : hudCounts[room.id];
-    link.append(el('span', 'side-room-hash', '#'), el('span', 'ellipsis', room.nome));
-    if (n > 0) link.append(el('span', 'side-room-count', String(n)));
-    const li = el('li');
-    li.append(link);
-    if (people.length) {
-      const list = el('ul', 'side-room-people');
-      list.append(...people.map(sideRoomPerson));
-      li.append(list);
-    }
-    return li;
-  }));
+  const shown = shownGroup();
+  if (!shown) return $('side-rooms').replaceChildren();
+  $('side-rooms').replaceChildren(
+    el('li', 'side-cat', 'Texto'),
+    sideTextChannel(shown),
+    el('li', 'side-cat', 'Salas de voz'),
+    ...shown.salas.map(sideVoiceRoom),
+  );
 }
 $('heading-group').onclick = () => {
-  const here = groupOfRoom(roomId);
-  if (here) openGroup(here.group.id);
+  const shown = shownGroup();
+  if (shown) openGroup(shown.id);
 };
+$('vp-back').onclick = backToCall;
 
 // ---------- coluna de grupos ----------
 
-// One button per group (#189); another group opens its first room.
+// One button per group (#189). Another group opens on screen without
+// leaving the call (#223); the call's group gets a green dot meanwhile.
 function renderRoomRail() {
-  const current = groupOfRoom(roomId)?.group.id;
+  const callGroup = groupOfRoom(roomId)?.group.id;
+  const shown = shownGroup()?.id;
   $('rail-rooms').replaceChildren(...groups.map((g) => {
-    const here = g.id === current;
-    const link = el(here ? 'span' : 'a', `rail-room${here ? ' current' : ''}`);
-    paintGroupIcon(link, g);
+    const here = g.id === shown;
+    const button = el('button', `rail-room${here ? ' current' : ''}${g.id === callGroup && browsing ? ' voice-here' : ''}`);
+    button.type = 'button';
+    paintGroupIcon(button, g);
     const count = g.salas.reduce((n, s) => n + (hudCounts[s.id] || 0), 0);
-    link.title = count ? `${g.nome} · ${count} agora` : g.nome;
-    link.setAttribute('aria-label', link.title);
-    if (here) {
-      link.setAttribute('aria-current', 'page');
-    } else {
-      link.href = `/room/${g.salas[0]?.id}`;
-      link.onclick = (e) => {
-        if (!okToLeave()) e.preventDefault();
-      };
-    }
-    if (count > 0) link.append(el('span', 'rail-badge', String(count)));
-    return link;
+    button.title = count ? `${g.nome} · ${count} agora` : g.nome;
+    button.setAttribute('aria-label', button.title);
+    if (here) button.setAttribute('aria-current', 'page');
+    button.onclick = () => {
+      if (g.id === callGroup) backToCall();
+      else browse(g.id);
+    };
+    if (count > 0) button.append(el('span', 'rail-badge', String(count)));
+    return button;
   }));
 }
 
@@ -144,13 +238,16 @@ $('rail-new').onclick = async () => {
   const name = window.prompt('Nome do grupo novo:', '');
   if (!name?.trim()) return;
   const group = await createGroup(name);
-  if (group) openGroup(group.id); // the invite is there, ready to send
+  if (group) {
+    browse(group.id);
+    openGroup(group.id); // the invite is there, ready to send
+  }
 };
 $('rail-paste').onclick = async () => {
   const code = parseInvite(window.prompt('Cole o link do convite do grupo:', '') || '');
   if (!code) return;
   const group = await acceptInvite(code);
-  if (group?.salas?.[0] && okToLeave()) location.assign(`/room/${group.salas[0].id}`);
+  if (group) browse(group.id);
 };
 $('rail-settings').onclick = () => openSettings('voz');
 $('vp-join').onclick = joinVoice;

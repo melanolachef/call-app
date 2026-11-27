@@ -293,26 +293,6 @@ async function refreshOpenGroup() {
 }
 setInterval(refreshOpenGroup, 8000);
 
-function memberRow(member, online) {
-  const row = el('li', `panel-member${online ? '' : ' offline'}`);
-  const who = face({ name: member.nick || '?', key: String(member.id) });
-  row.append(who, el('span', 'ellipsis', member.nick || 'Sem nick'));
-  if (member.dono) row.append(el('span', 'tag', 'dono'));
-  if (member.voce) row.append(el('span', 'muted', 'você'));
-  return row;
-}
-
-function membersColumn() {
-  if (!panelDetail?.membros) return [];
-  const online = new Set(panelNow?.online ?? []);
-  const on = panelDetail.membros.filter((m) => online.has(m.id));
-  const off = panelDetail.membros.filter((m) => !online.has(m.id));
-  return [
-    ...group('Online', on.map((m) => memberRow(m, true))),
-    ...group('Offline', off.map((m) => memberRow(m, false))),
-  ];
-}
-
 function groupActions(g) {
   const bar = el('div', 'panel-group-actions');
   const invite = el('button', 'btn small primary', 'Convidar');
@@ -358,14 +338,17 @@ function renderGroupsView() {
       panelDetailFor = one.id;
       refreshOpenGroup();
     }
+    // Like a Discord server: its #geral in the middle (#223), the rooms
+    // with who is in them and the members beside it.
     const rooms = one.salas.filter((r) => matches(r.nome));
     const columns = el('div', 'panel-group-cols');
-    const left = el('div', 'panel-group-rooms');
-    left.append(...group('Salas', rooms.map(roomRow)));
-    const right = el('div', 'panel-group-members');
-    right.append(...membersColumn());
-    columns.append(left, right);
+    const chat = el('div', 'panel-group-chat card');
+    const side = el('div', 'panel-group-members');
+    side.append(...group('Salas', rooms.map(roomRow)), ...groupMemberNodes(panelDetail, panelNow));
+    columns.append(chat, side);
     $('panel-body').replaceChildren(groupActions(one), columns);
+    groupChat.mount(chat);
+    groupChat.open(one);
     return;
   }
   const body = [];
@@ -435,6 +418,7 @@ function renderPanel() {
   renderSide(people, calls);
   const picked = panelView === 'salas' && groups.find((g) => g.id === panelGroup);
   if (panelView === 'salas' && !picked) panelGroup = null; // left or deleted
+  if (!picked) groupChat.close();
   $('panel-title').textContent = panelView === 'amigos' ? 'Amigos' : picked ? picked.nome : 'Grupos';
   $('panel-title-icon').innerHTML = panelView === 'amigos' ? PANEL_ICONS.friends : PANEL_ICONS.rooms; // fixed markup
   $('panel-tabs').hidden = panelView !== 'amigos';

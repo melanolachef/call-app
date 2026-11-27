@@ -36,7 +36,7 @@ pub struct Dm {
     pub at: i64,
 }
 
-fn clean_text(text: &str) -> Option<String> {
+pub(super) fn clean_text(text: &str) -> Option<String> {
     let text: String = text
         .trim()
         .chars()

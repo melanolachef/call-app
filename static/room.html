@@ -500,6 +500,32 @@
       .controls { gap: 6px; }
     }
 
+
+    /* ---------- outro grupo na tela, a call continua (sala-larga.js, #223) ---------- */
+    .group-view, .group-members { display: none; }
+    .side-cat { display: none; }
+    @media (min-width: 1200px) {
+      body.browsing .app, body.browsing.chat-collapsed .app { grid-template-columns: 72px 248px minmax(0, 1fr) 240px; grid-template-areas: "rail top view members" "rail side view members" "rail side view members"; }
+      body.browsing .stage, body.browsing .dock, body.browsing .chat, body.browsing .chat-unfold { display: none !important; }
+      body.browsing .group-view { grid-area: view; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+      body.browsing .group-view .gchat { flex: 1; }
+      body.browsing .group-members { grid-area: members; display: block; min-height: 0; overflow-y: auto; padding: 12px 8px; border-left: 1px solid var(--line); background: var(--frame); }
+      body.browsing .room-link, body.browsing .top-end, body.browsing #lock-btn, body.browsing #heading-meta, body.browsing #heading-timer { display: none !important; }
+      body.browsing-other .side-block:has(#people) { display: none; }
+      .side-cat { display: block; padding: 12px 8px 4px; font-size: 11px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .02em; }
+      .side-cat:first-child { padding-top: 0; }
+      button.side-room { width: 100%; border: 0; background: none; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+      button.side-room:hover { background: var(--raised); color: var(--text); }
+      button.side-room.current { background: var(--raised); color: var(--text); font-weight: 600; }
+      .side-room-voice { display: inline-flex; }
+      .side-room-voice svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .side-room.here:not(.current) { color: var(--online); }
+      .room-rail button.rail-room { border: 0; padding: 0; font-family: inherit; cursor: pointer; }
+      .room-rail .rail-room.voice-here::after { content: ''; position: absolute; left: -3px; bottom: -3px; width: 10px; height: 10px; border: 2px solid var(--bg); border-radius: 50%; background: var(--online); }
+      #vp-back { flex: none; }
+      .vp-text .mono { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    }
+
     /* ---------- celular (docs/design/cpx-call-mobile.html) ----------
        Phones get tabs (Palco, Chat, Sons), a voice bar over the tab bar and,
        lying down, a rail of buttons over the picture. The pieces below are
@@ -825,6 +851,7 @@
 
       <div class="voice-panel" id="voice-panel">
         <span class="vp-text"><strong id="vp-title"></strong><span class="mono" id="vp-sub"></span></span>
+        <button type="button" class="btn small ghost" id="vp-back" title="Voltar para as telas e câmeras da call" hidden>Ver call</button>
         <button type="button" class="btn small primary" id="vp-join">Entrar na voz</button>
         <button type="button" class="icon-btn" id="vp-leave" title="Sair da voz" aria-label="Sair da voz" hidden></button>
       </div>
@@ -891,6 +918,10 @@
         <button id="chat-send" disabled>Enviar</button>
       </form>
     </aside>
+
+    <!-- Another group on screen, the call going on (sala-larga.js, #223). -->
+    <section class="group-view" id="group-view" aria-label="Chat do grupo"></section>
+    <aside class="group-members" id="group-members" aria-label="Membros do grupo"></aside>
 
     <footer class="dock">
       <div class="controls" id="controls">

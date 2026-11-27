@@ -44,23 +44,6 @@ function updateUnread() {
   document.title = unread ? `(${unread}) CPX Call` : 'CPX Call';
 }
 
-// Builds text with http(s) links as anchors, never as HTML.
-function linkify(text) {
-  const frag = document.createDocumentFragment();
-  let last = 0;
-  for (const match of text.matchAll(/https?:\/\/[^\s<>"]+/g)) {
-    frag.append(text.slice(last, match.index));
-    const a = el('a', null, match[0]);
-    a.href = match[0];
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    frag.append(a);
-    last = match.index + match[0].length;
-  }
-  frag.append(text.slice(last));
-  return frag;
-}
-
 // Long sessions: only the last messages stay on the page (nothing is saved
 // anyway), so the chat never grows without limit.
 const MAX_CHAT_ITEMS = 300;
