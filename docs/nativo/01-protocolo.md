@@ -323,7 +323,7 @@ Ou seja: o estado é sempre "empurrado" para quem chega; ninguém pede.
 | Campo | Envio | Validação no receptor |
 |---|---|---|
 | `nick` | string, já limpa (trim, até 32 code points) | `cleanNick`: `String(v).trim()`, 32 code points (`static/common.js:35-37`). Vazio → mostrado como "Participante N" (`static/room/sessao.js:34-36`) |
-| `photo` | `''`, data URL ou URL de GIF | `validPhoto` (`static/common.js:59-64`): `data:image/(jpeg\|png\|webp);base64,…` com até **40 000** chars, ou GIF da KLIPY (`profileGif`: `https://<host klipy>/[A-Za-z0-9._~/-]+\.gif`, até 300 chars, host `klipy.com`/`klipy.co` ou subdomínio; `static/common.js:40-56`). Senão `''` |
+| `photo` | `''`, data URL ou URL de GIF | `validPhoto` (`static/common.js:59-64`): `data:image/(jpeg\|png\|webp);base64,…` com até **40 000** chars, ou GIF da KLIPY (`profileGif`: `https://<host klipy>/[A-Za-z0-9._~/-]+\.gif`, até 300 chars, host `klipy.com`/`klipy.co` ou subdomínio; `static/common.js:40-56`), ou GIF próprio (`ownGif`: `data:image/gif;base64,…` até 60 000 chars, GIF bem formado até 640×640 e 300 quadros). Senão `''` |
 | `hwH264` | boolean | só `=== true` conta (`static/room/webrtc.js:255`) |
 | `banner` | `''` ou cor | `validBannerColor`: `#rrggbb` (`static/common.js:90-92`) |
 
