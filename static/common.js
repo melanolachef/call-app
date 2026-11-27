@@ -1082,6 +1082,17 @@ function isGroupRoom(id) {
 }
 
 // { group, room } for a room of one of your groups, else null.
+// Like a Discord voice channel: clicking a group room puts you in its voice
+// too (carryVoiceIn, in room/lateral.js). Only a click counts: being sent to
+// a room by the page (e.g. the one you were in last) never opens the mic.
+document.addEventListener('click', (e) => {
+  const link = e.target.closest?.('a[href^="/room/"]');
+  if (!link || e.defaultPrevented || e.button) return;
+  try {
+    sessionStorage.setItem('entrar-voz', decodeURIComponent(new URL(link.href).pathname.slice('/room/'.length)));
+  } catch { /* storage blocked: the voice button still works */ }
+});
+
 function groupOfRoom(id) {
   for (const group of groups) {
     const room = group.salas.find((s) => s.id === id);
