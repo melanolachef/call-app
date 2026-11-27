@@ -216,3 +216,269 @@ $('gd-add-room').onsubmit = async (e) => {
   const name = $('gd-room-name').value;
   if (await groupChange('POST', `/api/grupos/${gdGroup.id}/salas`, { nome: name }, 'Sala criada.')) $('gd-room-name').value = '';
 };
+
+// ---------- canal de texto do grupo (#223) ----------
+
+// The group's #geral, like a Discord text channel: kept 30 days on the
+// server, readable from anywhere (the home, or a call in another group).
+// While it is on screen it asks for what is new every few seconds.
+const GC_POLL_MS = 4000;
+const GC_GROUP_GAP = 5 * 60; // same author within 5 min: no new header
+
+function gcTime(seconds) {
+  const at = new Date(seconds * 1000);
+  const time = at.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (at.toDateString() === new Date().toDateString()) return `hoje às ${time}`;
+  return `${at.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${time}`;
+}
+
+// One per page; `mount(node)` puts it where it should show.
+const groupChat = (() => {
+  const root = el('section', 'gchat');
+  root.setAttribute('aria-label', 'Chat do grupo');
+  const head = el('header', 'gchat-head');
+  const title = el('strong', 'ellipsis', 'geral');
+  const where = el('span', 'gchat-group ellipsis');
+  head.append(el('span', 'gchat-hash', '#'), title, where, el('span', 'gchat-note', 'fica guardado por 30 dias'));
+  const list = el('ol', 'gchat-list');
+  list.setAttribute('aria-live', 'polite');
+  const form = el('form', 'gchat-form');
+  const input = el('input', 'gchat-input');
+  input.maxLength = 2000;
+  input.autocomplete = 'off';
+  input.setAttribute('aria-label', 'Mensagem para o grupo');
+  const send = el('button', 'btn small primary', 'Enviar');
+  form.append(input, send);
+  root.append(head, list, form);
+
+  let group = null; // { id, nome, dono }
+  let firstId = null;
+  let lastId = 0;
+  let olderDone = false;
+  let loadingOlder = false;
+  let polling = null;
+  let generation = 0; // a reply for a group we already left is ignored
+
+  function shown() {
+    return root.isConnected && root.offsetParent !== null && !document.hidden;
+  }
+
+  function face(m) {
+    const node = el('span', 'avatar');
+    node.setAttribute('aria-hidden', 'true');
+    node.textContent = initials(m.nick || '?');
+    node.style.background = colorFor(`m${m.membro}`);
+    return node;
+  }
+
+  function item(m, prev) {
+    const li = el('li', 'gchat-msg');
+    li.msg = m;
+    li.dataset.id = String(m.id);
+    li.dataset.membro = String(m.membro);
+    li.dataset.em = String(m.em);
+    const together = prev && Number(prev.dataset.membro) === m.membro && m.em - Number(prev.dataset.em) < GC_GROUP_GAP;
+    if (together) {
+      li.classList.add('cont');
+    } else {
+      const top = el('span', 'gchat-msg-head');
+      top.append(el('strong', 'ellipsis', m.nick || 'Alguém'), el('span', 'gchat-time', gcTime(m.em)));
+      li.append(face(m), top);
+    }
+    const text = el('p', 'gchat-text');
+    text.append(linkify(m.texto));
+    li.append(text);
+    if (m.voce || group?.dono) {
+      const drop = el('button', 'gchat-delete', 'Apagar');
+      drop.type = 'button';
+      drop.title = m.voce ? 'Apagar sua mensagem' : 'Apagar mensagem (você é o dono)';
+      drop.onclick = () => remove(m, li);
+      li.append(drop);
+    }
+    return li;
+  }
+
+  function empty(text) {
+    list.replaceChildren(el('li', 'gchat-empty muted', text));
+  }
+
+  function nearBottom() {
+    return list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  }
+
+  function append(messages) {
+    const fresh = messages.filter((m) => !list.querySelector(`[data-id="${m.id}"]`));
+    if (!fresh.length) return;
+    const stick = nearBottom();
+    list.querySelector('.gchat-empty')?.remove();
+    for (const m of fresh) {
+      // Usually at the end; a sent message whose answer came after a newer
+      // poll goes back to its place.
+      const after = m.id < lastId ? [...list.children].find((n) => n.msg && n.msg.id > m.id) : null;
+      const prev = after ? after.previousElementSibling : list.lastElementChild;
+      const node = item(m, prev?.msg ? prev : null);
+      if (after) {
+        after.before(node);
+        after.replaceWith(item(after.msg, node));
+      } else {
+        list.append(node);
+      }
+      lastId = Math.max(lastId, m.id);
+      firstId = firstId === null ? m.id : Math.min(firstId, m.id);
+    }
+    if (stick) list.scrollTop = list.scrollHeight;
+  }
+
+  async function poll() {
+    if (!group || !shown()) return;
+    const asked = generation;
+    const res = await groupRequest('GET', `/api/grupos/${group.id}/mensagens?depois=${lastId}`);
+    if (asked !== generation || !res.ok) return;
+    append(res.data.mensagens ?? []);
+  }
+
+  async function older() {
+    if (!group || olderDone || loadingOlder || firstId === null) return;
+    loadingOlder = true;
+    const asked = generation;
+    const res = await groupRequest('GET', `/api/grupos/${group.id}/mensagens?antes=${firstId}`);
+    loadingOlder = false;
+    if (asked !== generation || !res.ok) return;
+    const page = res.data.mensagens ?? [];
+    if (page.length < 50) olderDone = true;
+    if (!page.length) return;
+    const before = list.scrollHeight;
+    const nodes = [];
+    for (const m of page) nodes.push(item(m, nodes[nodes.length - 1] ?? null));
+    // The first message already here may now continue the last old one.
+    const next = list.firstElementChild;
+    list.prepend(...nodes);
+    if (next?.msg) next.replaceWith(item(next.msg, nodes[nodes.length - 1]));
+    firstId = page[0].id;
+    list.scrollTop += list.scrollHeight - before;
+  }
+
+  async function remove(m, li) {
+    if (!window.confirm('Apagar esta mensagem para todo mundo?')) return;
+    const res = await groupRequest('DELETE', `/api/grupos/${group.id}/mensagens/${m.id}`);
+    if (!res.ok) return toast(res.data.error || 'Não deu para apagar.', 4000);
+    // The next one may need its own name again (or now join the one before).
+    const next = li.nextElementSibling;
+    const prev = li.previousElementSibling;
+    li.remove();
+    if (next?.msg) next.replaceWith(item(next.msg, prev?.msg ? prev : null));
+    if (!list.querySelector('.gchat-msg')) empty('Nenhuma mensagem ainda. Comece a conversa!');
+  }
+
+  // Pages that redraw (the home) move this node around, which resets the
+  // scroll: remember where it was.
+  let kept = { top: 0, bottom: true };
+  list.addEventListener('scroll', () => {
+    if (!list.isConnected) return;
+    kept = { top: list.scrollTop, bottom: nearBottom() };
+    if (list.scrollTop < 60) older();
+  });
+
+  // Sent in order, one after the other; the field is free right away, and a
+  // message that didn't go comes back to it.
+  let sending = Promise.resolve();
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    const to = group;
+    if (!text || !to) return;
+    input.value = '';
+    sending = sending.then(async () => {
+      const res = await groupRequest('POST', `/api/grupos/${to.id}/mensagens`, { texto: text });
+      if (!res.ok) {
+        toast(res.data.error || 'Não deu para mandar. Tente de novo.', 4000);
+        if (!input.value) input.value = text;
+        return;
+      }
+      if (group?.id !== to.id) return; // switched groups meanwhile
+      list.scrollTop = list.scrollHeight;
+      append([res.data]);
+      list.scrollTop = list.scrollHeight;
+    });
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) poll();
+  });
+
+  return {
+    root,
+    mount(node) {
+      if (root.parentNode === node) return;
+      node.append(root);
+      list.scrollTop = kept.bottom ? list.scrollHeight : kept.top;
+    },
+    // Shows group `g`'s channel (same group: just catches up).
+    async open(g) {
+      where.textContent = g.nome;
+      input.placeholder = `Conversar em ${g.nome}`;
+      if (group?.id === g.id) {
+        group = g;
+        poll();
+        return;
+      }
+      group = g;
+      generation += 1;
+      firstId = null;
+      lastId = 0;
+      olderDone = false;
+      empty('Carregando…');
+      clearInterval(polling);
+      polling = setInterval(poll, GC_POLL_MS);
+      const asked = generation;
+      const res = await groupRequest('GET', `/api/grupos/${g.id}/mensagens`);
+      if (asked !== generation) return;
+      if (!res.ok) return empty(res.data.error || 'Não deu para carregar agora.');
+      const page = res.data.mensagens ?? [];
+      olderDone = page.length < 50;
+      if (!page.length) return empty('Nenhuma mensagem ainda. Comece a conversa!');
+      list.replaceChildren();
+      append(page);
+      list.scrollTop = list.scrollHeight;
+    },
+    close() {
+      group = null;
+      generation += 1;
+      clearInterval(polling);
+      polling = null;
+    },
+    get groupId() {
+      return group?.id ?? null;
+    },
+  };
+})();
+
+// ---------- membros do grupo (#198, #223) ----------
+
+// Online (in one of the group's rooms) and offline, like Discord's member
+// list. `detail` is GET /api/grupos/{id}, `now` its /agora.
+function groupMemberNodes(detail, now) {
+  if (!detail?.membros) return [];
+  const online = new Set(now?.online ?? []);
+  const row = (m, on) => {
+    const li = el('li', `gm-row${on ? '' : ' offline'}`);
+    const face = el('span', 'avatar');
+    face.setAttribute('aria-hidden', 'true');
+    face.textContent = initials(m.nick || '?');
+    face.style.background = colorFor(`m${m.id}`);
+    li.append(face, el('span', 'ellipsis', m.nick || 'Sem nome'));
+    if (m.dono) li.append(el('span', 'tag', 'dono'));
+    if (m.voce) li.append(el('span', 'gm-you muted', 'você'));
+    return li;
+  };
+  const part = (title, people, on) => {
+    if (!people.length) return [];
+    const list = el('ul', 'gm-list');
+    list.append(...people.map((m) => row(m, on)));
+    return [el('h3', 'gm-title', `${title} — ${people.length}`), list];
+  };
+  return [
+    ...part('Online', detail.membros.filter((m) => online.has(m.id)), true),
+    ...part('Offline', detail.membros.filter((m) => !online.has(m.id)), false),
+  ];
+}

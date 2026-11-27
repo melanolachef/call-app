@@ -62,7 +62,11 @@ impl Kind {
     }
 
     fn for_path(path: &str) -> Option<Self> {
-        if path.starts_with("/api/mensagens") {
+        // A group's channel (#223) is polled while on screen: with the
+        // direct messages, not the account's budget.
+        if path.starts_with("/api/mensagens")
+            || (path.starts_with("/api/grupos/") && path.contains("/mensagens"))
+        {
             return Some(Kind::Mensagem);
         }
         // Invites are guessable only by trying: as slow as looking up names.

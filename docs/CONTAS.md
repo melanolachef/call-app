@@ -15,6 +15,7 @@ do Fly):
 | `sessions` | hash SHA-256 do token de sessão, a quem pertence, criação, último uso | o token em si |
 | `friendships` | par de contas, quem pediu, quando pediu e quando aceitou | histórico de salas |
 | `messages` | mensagens diretas entre amigos: texto, remetente, destinatário, quando, quando foi lida; **apagadas depois de 30 dias** | fotos, mensagens do chat das salas |
+| `group_messages` | chat de texto do grupo (#geral, #223): grupo, membro que mandou (número no grupo), nick naquela hora, texto, quando; **apagadas depois de 30 dias**, ao sair ou ser tirado do grupo (as suas), ao apagar a conta, ou com o grupo | fotos, chat das salas, IP |
 
 Continua sem guardar: mensagens, salas, quem esteve em qual sala, vídeo, voz.
 "Apagar conta" apaga a linha do usuário e, em cascata, sessões (e, na fase 2,
