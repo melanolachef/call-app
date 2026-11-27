@@ -89,11 +89,15 @@ function addMessage({ authorId, name, photo, text = '', gif = null, image = null
   head.append(el('span', 'ellipsis', name), el('span', 'msg-time', time));
   li.append(avatar, head);
   if (image) {
-    // A photo or GIF sent from someone's device (fotos.js): click to open it big.
+    // A photo or GIF sent from someone's device (fotos.js): click to see it
+    // big over the room. Never a new page: in the app that would end the call.
     const link = el('a', 'msg-photo-link');
     link.href = image.url;
-    link.target = '_blank';
-    link.rel = 'noopener';
+    link.onclick = (e) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.button) return; // browser: new tab on purpose
+      e.preventDefault();
+      viewPhoto(image.url, img.alt);
+    };
     const img = el('img', 'msg-gif msg-photo');
     img.src = image.url;
     img.alt = image.gif ? 'GIF' : 'Foto';
@@ -231,3 +235,26 @@ chatHandle.onkeydown = (e) => {
 };
 $('chat-fold').onclick = () => setChatShown(false);
 $('chat-unfold').onclick = () => setChatShown(true);
+
+// ---------- foto do chat ampliada ----------
+
+// Opens over the room (Esc, a click or the X closes it), so seeing a photo
+// never leaves the call.
+const PHOTO_VIEW_MIN = 360; // px: small photos and GIFs are shown at least this big
+
+function viewPhoto(url, alt) {
+  const img = $('photo-view-img');
+  img.onload = () => {
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const scale = Math.min((innerWidth - 96) / w, (innerHeight - 96) / h, Math.max(1, PHOTO_VIEW_MIN / Math.max(w, h)));
+    img.style.width = `${Math.round(w * scale)}px`;
+    img.style.height = `${Math.round(h * scale)}px`;
+  };
+  img.removeAttribute('style');
+  img.src = url;
+  img.alt = alt;
+  $('photo-view').showModal();
+}
+$('photo-view').onclick = () => $('photo-view').close();
+$('photo-view').onclose = () => $('photo-view-img').removeAttribute('src');
