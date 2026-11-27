@@ -31,6 +31,26 @@ const BELONG_MAX: i64 = 50;
 const MEMBERS_MAX: i64 = 200;
 const ROOMS_MAX: i64 = 20;
 const FIRST_ROOM: &str = "geral";
+/// A group's icon (#199): a small picture inline, cut in the browser.
+const ICON_MAX: usize = 60_000;
+
+/// Only inline JPEG/PNG/WebP pictures: a link would let the icon's server see
+/// every member who opens the group.
+fn valid_icon(icon: &str) -> bool {
+    let prefixes = [
+        "data:image/jpeg;base64,",
+        "data:image/png;base64,",
+        "data:image/webp;base64,",
+    ];
+    let Some(rest) = prefixes.iter().find_map(|prefix| icon.strip_prefix(prefix)) else {
+        return false;
+    };
+    icon.len() <= ICON_MAX
+        && !rest.is_empty()
+        && rest
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
+}
 
 /// Who is asking: an account, or else a browser key.
 #[derive(Debug, Clone, PartialEq)]
@@ -208,19 +228,27 @@ impl Contas {
 
     /// Every group of `member`, with its rooms.
     pub fn groups(&self, member: &Member) -> Result<Vec<Value>, Problem> {
-        let list: Vec<(i64, String, String, String, i64)> = {
+        type Row = (i64, String, String, String, i64, String);
+        let list: Vec<Row> = {
             let db = self.db();
             let mut stmt = db
                 .prepare(
                     "SELECT g.id, g.name, g.owner, g.invite,
-                            (SELECT COUNT(*) FROM group_members WHERE group_id = g.id)
+                            (SELECT COUNT(*) FROM group_members WHERE group_id = g.id), g.icon
                      FROM groups g JOIN group_members m ON m.group_id = g.id
                      WHERE m.member = ?1 ORDER BY m.joined_at, g.id",
                 )
                 .map_err(db_err)?;
             let rows = stmt
                 .query_map(params![member.key], |r| {
-                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
                 })
                 .map_err(db_err)?
                 .collect::<Result<_, _>>()
@@ -228,10 +256,11 @@ impl Contas {
             rows
         };
         list.into_iter()
-            .map(|(id, name, owner, invite, members)| {
+            .map(|(id, name, owner, invite, members, icon)| {
                 Ok(json!({
                     "id": id,
                     "nome": name,
+                    "icone": icon,
                     "dono": owner == member.key,
                     "convite": invite,
                     "membros": members,
@@ -273,22 +302,102 @@ impl Contas {
                 .map_err(db_err)?;
             rows
         };
-        let invite: String = self
+        let (invite, icon): (String, String) = self
             .db()
             .query_row(
-                "SELECT invite FROM groups WHERE id = ?1",
+                "SELECT invite, icon FROM groups WHERE id = ?1",
                 params![group],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .map_err(db_err)?;
         Ok(json!({
             "id": group,
             "nome": name,
+            "icone": icon,
             "dono": owner == member.key,
             "convite": invite,
             "salas": self.rooms_json(group)?,
             "membros": members,
         }))
+    }
+
+    /// The group's icon (#199): only its owner changes it; "" removes it.
+    pub fn set_icon(&self, member: &Member, group: i64, icon: &str) -> Result<(), Problem> {
+        self.owned(member, group)?;
+        if !icon.is_empty() && !valid_icon(icon) {
+            return Err(Problem::BadImage);
+        }
+        self.db()
+            .execute(
+                "UPDATE groups SET icon = ?1 WHERE id = ?2",
+                params![icon, group],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    /// Who is in each room of the group right now, and which members are
+    /// online (in any of its rooms), like Discord's channel list (#198).
+    /// From the rooms in memory; only members may ask.
+    pub fn now_in_group(
+        &self,
+        member: &Member,
+        group: i64,
+        rooms: &crate::rooms::Rooms,
+    ) -> Result<Value, Problem> {
+        self.group_of(member, group)?;
+        let members: std::collections::HashMap<String, (i64, String)> = {
+            let db = self.db();
+            let mut stmt = db
+                .prepare(
+                    "SELECT m.rowid, m.member, m.nick, u.nick
+                     FROM group_members m LEFT JOIN users u ON m.member = 'u:' || u.id
+                     WHERE m.group_id = ?1",
+                )
+                .map_err(db_err)?;
+            let rows = stmt
+                .query_map(params![group], |r| {
+                    let account_nick: Option<String> = r.get(3)?;
+                    let nick: String = r.get(2)?;
+                    let shown = account_nick.filter(|n| !n.is_empty()).unwrap_or(nick);
+                    // Rooms keep each member's key hashed (room_key), never raw.
+                    Ok((
+                        room_key(&r.get::<_, String>(1)?),
+                        (r.get::<_, i64>(0)?, shown),
+                    ))
+                })
+                .map_err(db_err)?
+                .collect::<Result<_, _>>()
+                .map_err(db_err)?;
+            rows
+        };
+        let mut online = Vec::new();
+        let mut by_room = serde_json::Map::new();
+        for room in self.rooms_json(group)? {
+            let Some(id) = room["id"].as_str() else {
+                continue;
+            };
+            let people: Vec<Value> = rooms
+                .occupants(id)
+                .into_iter()
+                .map(|(key, nick)| {
+                    let known = key.as_ref().and_then(|k| members.get(k));
+                    if let Some((row, _)) = known {
+                        online.push(*row);
+                    }
+                    let nick = if nick.is_empty() {
+                        known.map(|(_, n)| n.clone()).unwrap_or_default()
+                    } else {
+                        nick
+                    };
+                    json!({ "nick": nick, "membro": known.map(|(row, _)| *row) })
+                })
+                .collect();
+            by_room.insert(id.to_owned(), Value::Array(people));
+        }
+        online.sort_unstable();
+        online.dedup();
+        Ok(json!({ "salas": by_room, "online": online }))
     }
 
     /// What an invite leads to: (group id, name, members).
@@ -550,6 +659,8 @@ where
         .route("/api/grupos/{id}/convite", post(reinvite))
         .route("/api/grupos/{id}/membros/{membro}", delete(kick))
         .route("/api/grupos/{id}/salas", post(add_room))
+        .route("/api/grupos/{id}/agora", get(agora))
+        .route("/api/grupos/{id}/icone", put(icon))
         .route(
             "/api/grupos/{id}/salas/{sala}",
             put(rename_room).delete(remove_room),
@@ -594,6 +705,37 @@ async fn list(State(contas): State<ContasState>, headers: HeaderMap) -> Response
     with_member(contas, &headers, |contas, member| {
         contas.claim_device(member)?;
         Ok(json!({ "grupos": contas.groups(member)? }))
+    })
+}
+
+/// `GET /api/grupos/{id}/agora` -> `{"salas": {room: [{nick, membro}]},
+/// "online": [membro]}` (#198).
+async fn agora(
+    State(contas): State<ContasState>,
+    State(rooms): State<crate::rooms::Rooms>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    with_member(contas, &headers, |contas, member| {
+        contas.now_in_group(member, id, &rooms)
+    })
+}
+
+#[derive(Deserialize)]
+struct Icon {
+    icone: String,
+}
+
+/// `PUT /api/grupos/{id}/icone {"icone": "data:image/..." | ""}` -> the group.
+async fn icon(
+    State(contas): State<ContasState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(body): Json<Icon>,
+) -> Response {
+    with_member(contas, &headers, |contas, member| {
+        contas.set_icon(member, id, &body.icone)?;
+        contas.group(member, id)
     })
 }
 
@@ -897,5 +1039,83 @@ mod tests {
         let a = device_key(&"AB".repeat(16)).unwrap();
         assert_eq!(a, device_key(&"ab".repeat(16)).unwrap());
         assert!(a.starts_with("d:"));
+    }
+
+    #[test]
+    fn only_the_owner_sets_an_inline_icon() {
+        let contas = memory("http://nada");
+        let (lucas, rafa) = (device(1), device(2));
+        let id = contas.create_group(&lucas, "Os Cria", "Lucas").unwrap();
+        let code = contas.group(&lucas, id).unwrap()["convite"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        contas.accept_invite(&rafa, &code, "Rafa").unwrap();
+        let icon = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+        assert_eq!(contas.set_icon(&rafa, id, icon), Err(Problem::NotOwner));
+        for bad in [
+            "https://exemplo.com/icone.png",
+            "data:image/svg+xml;base64,PHN2Zz4=",
+            "data:image/png;base64,",
+            "data:image/png;base64,abc\"><script>",
+        ] {
+            assert_eq!(
+                contas.set_icon(&lucas, id, bad),
+                Err(Problem::BadImage),
+                "{bad}"
+            );
+        }
+        let huge = format!("data:image/png;base64,{}", "A".repeat(ICON_MAX));
+        assert_eq!(contas.set_icon(&lucas, id, &huge), Err(Problem::BadImage));
+        assert_eq!(contas.set_icon(&lucas, id, icon), Ok(()));
+        assert_eq!(contas.group(&rafa, id).unwrap()["icone"], icon);
+        assert_eq!(contas.groups(&rafa).unwrap()[0]["icone"], icon);
+        assert_eq!(contas.set_icon(&lucas, id, ""), Ok(()));
+        assert_eq!(contas.group(&rafa, id).unwrap()["icone"], "");
+    }
+
+    #[test]
+    fn shows_who_is_in_each_room_and_who_is_online() {
+        let contas = memory("http://nada");
+        let (lucas, rafa, bia) = (device(1), device(2), device(3));
+        let id = contas.create_group(&lucas, "Os Cria", "Lucas").unwrap();
+        let group = contas.group(&lucas, id).unwrap();
+        let code = group["convite"].as_str().unwrap().to_owned();
+        let room = group["salas"][0]["id"].as_str().unwrap().to_owned();
+        contas.accept_invite(&rafa, &code, "Rafa").unwrap();
+        let rooms = crate::rooms::Rooms::default();
+        let owner = || room_key(&lucas.key);
+
+        let empty = contas.now_in_group(&lucas, id, &rooms).unwrap();
+        assert_eq!(empty["salas"][&room], json!([]));
+        assert_eq!(empty["online"], json!([]));
+
+        // Rafa enters with a nick; Lucas without one (the group nick is used).
+        let (tx, _rx) = crate::rooms::queue();
+        // As signaling does: the keys the room gets come from access().
+        let Access::Member { key: rafa_key, .. } = contas.access(&room, Some(&rafa)) else {
+            panic!("Rafa is a member");
+        };
+        rooms.join_group(&room, tx, rafa_key, owner(), Some("Rafinha".into()));
+        let (tx, _rx2) = crate::rooms::queue();
+        rooms.join_group(&room, tx, room_key(&lucas.key), owner(), None);
+        let now = contas.now_in_group(&rafa, id, &rooms).unwrap();
+        let people = now["salas"][&room].as_array().unwrap();
+        assert_eq!(people.len(), 2);
+        assert_eq!(people[0]["nick"], "Rafinha");
+        assert_eq!(people[1]["nick"], "Lucas");
+        assert_eq!(now["online"].as_array().unwrap().len(), 2);
+        let members = contas.group(&lucas, id).unwrap()["membros"].clone();
+        let rafa_row = members
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["nick"] == "Rafa")
+            .unwrap()["id"]
+            .clone();
+        assert_eq!(people[0]["membro"], rafa_row);
+
+        // Outsiders can't look.
+        assert_eq!(contas.now_in_group(&bia, id, &rooms), Err(Problem::NoGroup));
     }
 }

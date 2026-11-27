@@ -997,6 +997,28 @@ function inviteUrl(code) {
   return `${location.origin}/?convite=${code}`;
 }
 
+// A group's face on the rails (#199): its icon, or its initials. Only inline
+// pictures (the server checks them too), so nothing loads from elsewhere.
+function validGroupIcon(icon) {
+  return typeof icon === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(icon) ? icon : '';
+}
+
+function paintGroupIcon(node, group) {
+  const icon = validGroupIcon(group.icone);
+  node.classList.toggle('has-icon', !!icon);
+  // Safe inside url(""): validGroupIcon() only lets base64 characters through.
+  node.style.backgroundImage = icon ? `url("${icon}")` : '';
+  if (icon) node.replaceChildren(...[...node.children]); // drop the initials, keep badges
+  else if (!node.firstChild || node.firstChild.nodeType !== Node.TEXT_NODE) node.prepend(shortName(group.nome));
+}
+
+// Who is in each room of a group now, and who is online (#198):
+// { salas: { roomId: [{ nick, membro }] }, online: [membro] }, or null.
+async function fetchGroupNow(id) {
+  const res = await groupRequest('GET', `/api/grupos/${id}/agora`);
+  return res.ok ? res.data : null;
+}
+
 // "Os Cria" -> "oc" (rail buttons).
 function shortName(name) {
   return Array.from(name.replace(/[^\p{L}\p{N}]/gu, '')).slice(0, 2).join('').toLowerCase() || '#';

@@ -61,6 +61,22 @@ O script da sala fica dividido em `static/room/`: `estado`, `sessao`
 ordem de `ROOM_JS` em `src/main.rs` e entrega um único `/room.js`; eles
 compartilham o mesmo escopo. **Arquivo novo precisa entrar nessa lista.**
 
+## Grupos (como servidores do Discord)
+
+Salas ficam dentro de grupos (`src/contas/grupos.rs`, banco SQLite). Quem é
+membro é uma conta (`u:<id>`) ou um navegador (hash da chave que ele guarda,
+`X-Cpx-Aparelho`). Ao abrir a WebSocket de uma sala de grupo, o navegador
+manda também o nick (`/ws/<sala>?aparelho=…&nick=…`), que fica **só na
+memória** enquanto a pessoa está lá. Com isso:
+
+- `GET /api/grupos/{id}/agora` (só para membros) diz quem está em cada sala e
+  quais membros estão online — as salas aparecem como canais de voz, com quem
+  está em cada uma, e os membros em Online/Offline;
+- trocar de sala dentro do mesmo grupo não pergunta nada (a não ser que você
+  esteja transmitindo) e entra na voz da sala nova sozinho;
+- `PUT /api/grupos/{id}/icone` (só o dono) guarda o ícone do grupo: só imagem
+  embutida (`data:image/jpeg|png|webp`), nunca um link.
+
 ## Protocolo
 
 O cliente só manda uma coisa ao servidor: `{ "to": <id>, "data": <qualquer JSON> }`,

@@ -128,6 +128,9 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX group_rooms_group ON group_rooms(group_id, position);
 ",
+    "
+    ALTER TABLE groups ADD COLUMN icon TEXT NOT NULL DEFAULT '';
+",
 ];
 
 pub struct Google {

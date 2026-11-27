@@ -350,6 +350,9 @@ html.app-titlebar { --titlebar-h: 32px; }
 .gd-head { display: flex; align-items: center; gap: 12px; }
 .gd-head h2 { flex: 1; min-width: 0; }
 .gd-head .icon-btn { background: none; color: var(--muted); }
+.gd-icon { flex: none; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--raised-2) center / cover no-repeat; color: var(--text); font-weight: 700; }
+.gd-icon.has-icon { color: transparent; }
+.gd-icon-actions { display: flex; gap: 8px; margin-top: -4px; }
 .gd-invite { display: flex; gap: 8px; }
 .gd-invite .input { flex: 1; min-width: 0; height: 34px; font-size: 12px; color: var(--muted); }
 .gd-section { margin: 6px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
