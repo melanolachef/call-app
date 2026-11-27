@@ -9,6 +9,7 @@ description = "CPX Call para Windows: a sala do navegador numa janela própria, 
 # Dockerfile never compile this.
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

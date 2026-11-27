@@ -1383,3 +1383,43 @@ loadAccount();
     return null;
   };
 })();
+
+// ---------- atualização do app para Windows (#186) ----------
+
+// The app looks for a new version when it opens (desktop/src/update.rs) and
+// tells the page; the page offers to restart into it. Restarting ends the
+// call, so inside a call it asks first. Older apps have no such command.
+(() => {
+  const app = window.__TAURI__?.core;
+  if (!app) return;
+
+  function showUpdate(version) {
+    if (!version || document.getElementById('app-update')) return;
+    const bar = el('div', 'app-update');
+    bar.id = 'app-update';
+    bar.setAttribute('role', 'status');
+    bar.append(el('span', null, `Nova versão do app: ${version}`));
+    const go = el('button', 'btn small primary', 'Reiniciar e atualizar');
+    go.type = 'button';
+    go.onclick = async () => {
+      if (typeof okToLeave === 'function' && !okToLeave()) return;
+      go.disabled = true;
+      go.textContent = 'Atualizando…';
+      try {
+        await app.invoke('install_update'); // the app restarts when it's done
+      } catch (err) {
+        go.disabled = false;
+        go.textContent = 'Tentar de novo';
+        toast(String(err || 'Não deu para atualizar.'), 5000);
+      }
+    };
+    const later = el('button', 'btn small ghost', 'Depois');
+    later.type = 'button';
+    later.onclick = () => bar.remove();
+    bar.append(go, later);
+    document.body.append(bar);
+  }
+
+  window.cpxDesktop = Object.assign(window.cpxDesktop || {}, { updateReady: showUpdate });
+  app.invoke('update_status').then(showUpdate).catch(() => {});
+})();

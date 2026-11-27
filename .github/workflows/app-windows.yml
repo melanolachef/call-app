@@ -15,6 +15,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -29,6 +31,9 @@ jobs:
 
       - name: Compilar o instalador
         working-directory: desktop
+        env:
+          # The updater's public key (#186): builds without it don't look for updates.
+          CPX_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
         run: cargo tauri build
 
       # A fixed name, so .../releases/latest/download/CPX-Call-Windows.exe
@@ -63,6 +68,33 @@ jobs:
         shell: bash
         run: cp signed/CPX-Call-Windows.exe CPX-Call-Windows.exe
 
+      # Automatic updates (#186): sign the final installer (after SignPath, if
+      # any) bound to its version, and describe it in latest.json, which the
+      # app reads from releases/latest. Skipped until the key exists.
+      - name: Assinar para a atualização automática
+        if: env.HAS_UPDATER_KEY == 'true'
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          version=$(node -p "require('./desktop/tauri.conf.json').version")
+          if [[ "$GITHUB_REF_NAME" == app-v* && "${GITHUB_REF_NAME#app-v}" != "$version" ]]; then
+            echo "A tag $GITHUB_REF_NAME não bate com a versão $version do tauri.conf.json"; exit 1
+          fi
+          cargo tauri signer sign --app-version "$version" CPX-Call-Windows.exe
+          VERSION="$version" TAG="$GITHUB_REF_NAME" node -e '
+            const fs = require("fs");
+            const url = `https://github.com/melanolachef/call-app/releases/download/${process.env.TAG}/CPX-Call-Windows.exe`;
+            fs.writeFileSync("latest.json", JSON.stringify({
+              version: process.env.VERSION,
+              notes: "Nova versão do CPX Call para Windows.",
+              pub_date: new Date().toISOString(),
+              platforms: { "windows-x86_64": { signature: fs.readFileSync("CPX-Call-Windows.exe.sig", "utf8"), url } },
+            }, null, 2));
+          '
+          cat latest.json
+
       - name: Publicar no GitHub Releases
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
@@ -76,4 +108,6 @@ jobs:
           else
             notes="$notes O Windows pode avisar que o app não é reconhecido (ainda não é assinado): clique em Mais informações e Executar assim mesmo."
           fi
-          gh release create "$GITHUB_REF_NAME" CPX-Call-Windows.exe             --title "CPX Call para Windows ${GITHUB_REF_NAME#app-v}"             --notes "$notes"
+          files=(CPX-Call-Windows.exe)
+          [ -f latest.json ] && files+=(latest.json CPX-Call-Windows.exe.sig)
+          gh release create "$GITHUB_REF_NAME" "${files[@]}"             --title "CPX Call para Windows ${GITHUB_REF_NAME#app-v}"             --notes "$notes"
