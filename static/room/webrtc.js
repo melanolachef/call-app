@@ -267,19 +267,22 @@ function handleProfile(peer, data) {
 
 // Video only flows to peers that clicked "Assistir": everyone else gets a null
 // track, so we don't encode for them and they don't decode anything.
+// Resolves once the tracks are in place (switching screens waits for it).
 function sendScreenTo(peer) {
-  if (!peer.transceiver) return; // attached later, once that peer's offer arrives
+  if (!peer.transceiver) return Promise.resolve(); // attached later, once that peer's offer arrives
+  const jobs = [];
   const watching = !!localTrack && peer.watchesMe;
   const video = watching ? localTrack : null;
   if (peer.transceiver.sender.track !== video) {
-    peer.transceiver.sender.replaceTrack(video)
+    jobs.push(peer.transceiver.sender.replaceTrack(video)
       .then(() => video && tuneSender(peer))
-      .catch((err) => console.warn(err));
+      .catch((err) => console.warn(err)));
   }
   const audio = watching ? localAudio : null;
   const audioSender = peer.audioTransceiver?.sender;
   if (audioSender && audioSender.track !== audio) {
-    audioSender.replaceTrack(audio).catch((err) => console.warn(err));
+    jobs.push(audioSender.replaceTrack(audio).catch((err) => console.warn(err)));
   }
+  return Promise.all(jobs);
 }
 
