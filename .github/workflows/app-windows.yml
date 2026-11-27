@@ -102,11 +102,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SIGNED: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
         run: |
-          notes="Instale e abra: é a mesma sala do navegador, com a tecla de falar e o Ctrl+Shift+M funcionando com o jogo em foco."
+          install="Instale e abra: é a mesma sala do navegador, com a tecla de falar e o Ctrl+Shift+M funcionando com o jogo em foco."
           if [ "$SIGNED" = true ]; then
-            notes="$notes O instalador é assinado pela SignPath Foundation. Nas primeiras versões, o Windows ainda pode avisar enquanto o certificado ganha reputação: Mais informações › Executar assim mesmo."
+            install="$install O instalador é assinado pela SignPath Foundation. Nas primeiras versões, o Windows ainda pode avisar enquanto o certificado ganha reputação: Mais informações › Executar assim mesmo."
           else
-            notes="$notes O Windows pode avisar que o app não é reconhecido (ainda não é assinado): clique em Mais informações e Executar assim mesmo."
+            install="$install O Windows pode avisar que o app não é reconhecido (ainda não é assinado): clique em Mais informações e Executar assim mesmo."
+          fi
+          # What's new: this version's "## X.Y.Z" section of desktop/NOVIDADES.md.
+          version="${GITHUB_REF_NAME#app-v}"
+          news=$(awk -v head="## $version" '$0 == head { on = 1; next } /^## / { on = 0 } on' desktop/NOVIDADES.md | sed -e '/./,$!d')
+          if [ -n "$news" ]; then
+            notes=$(printf '## Novidades\n\n%s\n\n%s' "$news" "$install")
+          else
+            echo "::warning::desktop/NOVIDADES.md não tem a seção ## $version: o release sai sem as novidades."
+            notes="$install"
           fi
           files=(CPX-Call-Windows.exe)
           [ -f latest.json ] && files+=(latest.json CPX-Call-Windows.exe.sig)

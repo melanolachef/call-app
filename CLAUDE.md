@@ -63,7 +63,9 @@ novo ou teste no Pop!_OS. O CI compila e testa o app.
 
 - Site: production at https://cpx-call.fly.dev, deployed by hand with `fly deploy` from `main`.
 - Windows app: bump the version in `desktop/tauri.conf.json` and
-  `desktop/Cargo.toml`, merge to `main`, then the maintainer pushes a tag
+  `desktop/Cargo.toml`, add a `## X.Y.Z` section on top of
+  `desktop/NOVIDADES.md` (it becomes the release text, for users, in
+  Portuguese), merge to `main`, then the maintainer pushes a tag
   `app-vX.Y.Z`; `.github/workflows/app-windows.yml` builds and publishes
   `CPX-Call-Windows.exe` (the lobby's download link always points to the latest).
 - Code signing: free via SignPath Foundation, wired in the workflow but skipped
