@@ -367,3 +367,6 @@ a.gd-name:hover { text-decoration: underline; }
 .gd-add .input { flex: 1; height: 34px; }
 .gd-foot { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
 .btn.ghost.danger { background: none; color: var(--danger); }
+
+/* "Nova versão do app" (#186): only inside the Windows app. */
+.app-update { position: fixed; z-index: 40; left: 50%; bottom: 96px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; border-radius: 999px; background: var(--raised, #2C2C2E); color: var(--text); font-size: 14px; box-shadow: 0 10px 30px rgb(0 0 0 / .5); }
