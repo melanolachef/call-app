@@ -154,9 +154,9 @@ function receiveFile(peer, data) {
 
 // ---------- jeitos de mandar: botão, colar, arrastar ----------
 
-$('photo-btn').onclick = () => $('photo-input').click();
-$('photo-input').onchange = () => {
-  const input = $('photo-input');
+$('photo-btn').onclick = () => $('chat-photo-input').click();
+$('chat-photo-input').onchange = () => {
+  const input = $('chat-photo-input');
   const file = input.files[0];
   input.value = '';
   sendPhoto(file);
