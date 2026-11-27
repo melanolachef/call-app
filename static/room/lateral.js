@@ -32,11 +32,15 @@ function okToSwitchRoom() {
   return true;
 }
 
+// Into the voice on arrival: you were in voice in another room of the group,
+// or you clicked this group room (common.js), as with a Discord voice channel.
 function carryVoiceIn() {
   let carry = false;
   try {
-    carry = sessionStorage.getItem('voz-continua') === '1';
+    carry = sessionStorage.getItem('voz-continua') === '1' ||
+      (sessionStorage.getItem('entrar-voz') === roomId && !!groupOfRoom(roomId));
     sessionStorage.removeItem('voz-continua');
+    sessionStorage.removeItem('entrar-voz');
   } catch { /* nothing to carry */ }
   if (carry && !voice.joined) joinVoice();
 }
