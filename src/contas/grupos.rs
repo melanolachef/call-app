@@ -98,7 +98,7 @@ fn room_key(member: &str) -> String {
     hash_token(&format!("membro:{member}"))
 }
 
-fn db_err(_: rusqlite::Error) -> Problem {
+pub(super) fn db_err(_: rusqlite::Error) -> Problem {
     Problem::Database
 }
 
@@ -133,6 +133,16 @@ impl Contas {
             params![member.key, device],
         )
         .map_err(db_err)?;
+        // Where the account already was a member, the browser's messages in
+        // the group's channel (#223) become the account's.
+        db.execute(
+            "UPDATE group_messages SET member = (
+                 SELECT a.rowid FROM group_members a
+                 WHERE a.group_id = group_messages.group_id AND a.member = ?1)
+             WHERE member IN (SELECT rowid FROM group_members WHERE member = ?2)",
+            params![member.key, device],
+        )
+        .map_err(db_err)?;
         db.execute(
             "DELETE FROM group_members WHERE member = ?1",
             params![device],
@@ -153,7 +163,11 @@ impl Contas {
     }
 
     /// Group `group` if `member` belongs to it: (name, owner key).
-    fn group_of(&self, member: &Member, group: i64) -> Result<(String, String), Problem> {
+    pub(super) fn group_of(
+        &self,
+        member: &Member,
+        group: i64,
+    ) -> Result<(String, String), Problem> {
         self.db()
             .query_row(
                 "SELECT g.name, g.owner FROM groups g JOIN group_members m ON m.group_id = g.id
@@ -337,7 +351,7 @@ impl Contas {
     }
 
     /// Who is in each room of the group right now, and which members are
-    /// online (in any of its rooms), like Discord's channel list (#198).
+    /// online (in a call anywhere), like Discord's channel list (#198).
     /// From the rooms in memory; only members may ask.
     pub fn now_in_group(
         &self,
@@ -395,6 +409,15 @@ impl Contas {
                 .collect();
             by_room.insert(id.to_owned(), Value::Array(people));
         }
+        // In a call in another group counts as online too, like Discord
+        // (which call stays hidden).
+        let present = rooms.present_keys();
+        online.extend(
+            members
+                .iter()
+                .filter(|(key, _)| present.contains(*key))
+                .map(|(_, (row, _))| *row),
+        );
         online.sort_unstable();
         online.dedup();
         Ok(json!({ "salas": by_room, "online": online }))
@@ -446,12 +469,19 @@ impl Contas {
         if owner == member.key {
             return Err(Problem::Limit("Você é o dono: para sair, apague o grupo."));
         }
-        self.db()
-            .execute(
-                "DELETE FROM group_members WHERE group_id = ?1 AND member = ?2",
-                params![group, member.key],
-            )
-            .map_err(db_err)?;
+        let db = self.db();
+        // Your messages in its channel go with you (#223).
+        db.execute(
+            "DELETE FROM group_messages WHERE member IN
+                 (SELECT rowid FROM group_members WHERE group_id = ?1 AND member = ?2)",
+            params![group, member.key],
+        )
+        .map_err(db_err)?;
+        db.execute(
+            "DELETE FROM group_members WHERE group_id = ?1 AND member = ?2",
+            params![group, member.key],
+        )
+        .map_err(db_err)?;
         Ok(())
     }
 
@@ -525,12 +555,18 @@ impl Contas {
         if key == member.key {
             return Err(Problem::Limit("Você é o dono do grupo."));
         }
-        self.db()
-            .execute(
-                "DELETE FROM group_members WHERE group_id = ?1 AND rowid = ?2",
-                params![group, target],
-            )
-            .map_err(db_err)?;
+        let db = self.db();
+        db.execute(
+            "DELETE FROM group_messages WHERE group_id = ?1 AND member = ?2",
+            params![group, target],
+        )
+        .map_err(db_err)?;
+        db.execute(
+            "DELETE FROM group_members WHERE group_id = ?1 AND rowid = ?2",
+            params![group, target],
+        )
+        .map_err(db_err)?;
+        drop(db);
         Ok((room_key(&key), self.room_ids(group)?))
     }
 
@@ -668,7 +704,7 @@ where
         .route("/api/convites/{codigo}", get(preview).post(accept))
 }
 
-fn no_member() -> Response {
+pub(super) fn no_member() -> Response {
     (
         axum::http::StatusCode::UNAUTHORIZED,
         Json(json!({ "error": "Recarregue a página e tente de novo." })),
@@ -677,7 +713,7 @@ fn no_member() -> Response {
 }
 
 /// Runs `then` with the asking member, or answers why it can't.
-fn with_member(
+pub(super) fn with_member(
     contas: ContasState,
     headers: &HeaderMap,
     then: impl FnOnce(&Contas, &Member) -> Result<Value, Problem>,
@@ -1117,5 +1153,25 @@ mod tests {
 
         // Outsiders can't look.
         assert_eq!(contas.now_in_group(&bia, id, &rooms), Err(Problem::NoGroup));
+
+        // Bia joins, but is in a call of another group of hers: online here
+        // too (#223), without showing in this group's rooms.
+        contas.accept_invite(&bia, &code, "Bia").unwrap();
+        let other = contas.create_group(&bia, "Firma", "Bia").unwrap();
+        let other_room = contas.group(&bia, other).unwrap()["salas"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let (tx, _rx3) = crate::rooms::queue();
+        rooms.join_group(
+            &other_room,
+            tx,
+            room_key(&bia.key),
+            room_key(&bia.key),
+            None,
+        );
+        let now = contas.now_in_group(&lucas, id, &rooms).unwrap();
+        assert_eq!(now["salas"][&room].as_array().unwrap().len(), 2);
+        assert_eq!(now["online"].as_array().unwrap().len(), 3);
     }
 }

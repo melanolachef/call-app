@@ -370,3 +370,37 @@ a.gd-name:hover { text-decoration: underline; }
 
 /* "Nova versão do app" (#186): only inside the Windows app. */
 .app-update { position: fixed; z-index: 40; left: 50%; bottom: 96px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; border-radius: 999px; background: var(--raised, #2C2C2E); color: var(--text); font-size: 14px; box-shadow: 0 10px 30px rgb(0 0 0 / .5); }
+
+/* ---------- canal de texto do grupo e membros (grupos.js, #223) ---------- */
+.gchat { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.gchat-head { flex: none; display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--line, var(--border)); font-size: 15px; min-width: 0; }
+.gchat-hash { flex: none; color: var(--faint); font-size: 20px; font-weight: 400; }
+.gchat-head strong { flex: none; }
+.gchat-group { min-width: 0; padding-left: 10px; border-left: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+.gchat-note { margin-left: auto; flex: none; font-size: 11px; color: var(--faint); }
+.gchat-list { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 16px 0 8px; display: flex; flex-direction: column; }
+.gchat-list > :first-child { margin-top: auto; }
+.gchat-empty { margin: auto; padding: 24px; font-size: 13px; text-align: center; }
+.gchat-msg { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 12px; padding: 2px 16px; margin-top: 14px; }
+.gchat-msg.cont { margin-top: 0; }
+.gchat-msg:hover { background: var(--raised); }
+.gchat-msg .avatar { grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; font-size: 15px; margin-top: 2px; }
+.gchat-msg-head { grid-column: 2; display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 14px; }
+.gchat-time { flex: none; font-size: 11px; color: var(--faint); }
+.gchat-text { grid-column: 2; margin: 0; font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gchat-text a { color: var(--accent, var(--text)); }
+.gchat-delete { position: absolute; top: -10px; right: 16px; display: none; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--r-sm, 6px); background: var(--card); color: var(--danger); font-size: 12px; }
+.gchat-msg:hover .gchat-delete, .gchat-delete:focus-visible { display: block; }
+.gchat-form { flex: none; display: flex; gap: 8px; padding: 12px 16px 16px; }
+.gchat-input { flex: 1; min-width: 0; height: 40px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--card); color: var(--text); font-size: 14px; }
+.gchat-input:focus { outline: none; border-color: var(--muted); }
+.gchat-form .btn { height: 40px; }
+.gm-title { margin: 16px 8px 4px; font-size: 11px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .02em; }
+.gm-title:first-child { margin-top: 4px; }
+.gm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.gm-row { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border-radius: var(--r-md); font-size: 14px; min-width: 0; }
+.gm-row:hover { background: var(--raised); }
+.gm-row .avatar { flex: none; width: 32px; height: 32px; border-radius: 50%; font-size: 13px; }
+.gm-row.offline { opacity: .45; }
+.gm-you { flex: none; margin-left: auto; font-size: 12px; }
+.gm-row .tag { flex: none; padding: 0 5px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 11px; color: var(--faint); }

@@ -343,6 +343,15 @@ impl Rooms {
             .collect()
     }
 
+    /// The member keys in any room right now: a group shows its members
+    /// online while they are in a call, in it or in another group (#223).
+    pub fn present_keys(&self) -> std::collections::HashSet<String> {
+        self.lock()
+            .values()
+            .flat_map(|room| room.keys.values().cloned())
+            .collect()
+    }
+
     /// How many people are in each room; rooms that don't exist count 0.
     pub fn counts<'a>(&self, ids: &[&'a str]) -> Vec<(&'a str, usize)> {
         let rooms = self.lock();

@@ -86,3 +86,8 @@ async function mediaErrorMessage(err, kind) {
       return `Não deu para usar ${what} (${err?.name || 'erro desconhecido'}). Tente de novo.`;
   }
 }
+
+// Another group on screen while the call goes on (sala-larga.js, #223).
+let browsing = null; // its id, or null for the call itself
+let browseNow = null; // who is in its rooms (/agora)
+let browseDetail = null; // its members
