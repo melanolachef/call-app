@@ -454,7 +454,8 @@ async function getDisplay(options) {
 
 async function captureScreen() {
   try {
-    return await getDisplay({ video: captureConstraints(), audio: SHARE_AUDIO, systemAudio: 'include' });
+    // surfaceSwitching: Chrome/Edge offer "share this tab instead" in their own bar.
+    return await getDisplay({ video: captureConstraints(), audio: SHARE_AUDIO, systemAudio: 'include', surfaceSwitching: 'include' });
   } catch (err) {
     if (err.name === 'NotAllowedError' || err.name === 'AbortError') throw err; // picker cancelled
     // A browser that rejects audio capture outright: share without sound.
@@ -462,13 +463,8 @@ async function captureScreen() {
   }
 }
 
-async function startShare() {
-  let stream;
-  try {
-    stream = await captureScreen();
-  } catch {
-    return; // usuário cancelou a escolha
-  }
+// A fresh capture's tracks become what we share (first share or a switch).
+function adoptShareTracks(stream) {
   localTrack = stream.getVideoTracks()[0];
   localAudio = stream.getAudioTracks()[0] ?? null;
   if (localAudio) {
@@ -481,18 +477,62 @@ async function startShare() {
       });
       refresh();
     };
-  } else {
-    toast('Compartilhando sem som. Para incluir o som, escolha "Tela inteira" e marque "Compartilhar áudio do sistema", ou uma aba do Chrome com "Compartilhar áudio da guia".', 9000);
   }
   // "motion" keeps the frame rate (games); "text" keeps sharpness (code).
   localTrack.contentHint = PRIORITY[quality.priority].hint;
   localTrack.onended = stopShare; // the browser's own "stop sharing" bar
+}
+
+const NO_SOUND_TIP = 'Compartilhando sem som. Para incluir o som, escolha "Tela inteira" e marque "Compartilhar áudio do sistema", ou uma aba do Chrome com "Compartilhar áudio da guia".';
+
+async function startShare() {
+  let stream;
+  try {
+    stream = await captureScreen();
+  } catch {
+    return; // usuário cancelou a escolha
+  }
+  adoptShareTracks(stream);
+  if (!localAudio) toast(NO_SOUND_TIP, 9000);
   setPreview(previewOn);
   retuneCamera(); // the camera steps down while you share
   lastShareInfo = JSON.stringify(shareInfo());
   peers.forEach((peer) => send(peer.id, shareInfo())); // media only once they ask
   refresh();
 }
+
+// "Trocar tela" (#187): another window or screen without stopping. The same
+// senders get the new tracks (replaceTrack, no renegotiation), so whoever is
+// watching keeps watching; the old capture only stops once the new one is out
+// there (no black frame). Cancelling the picker keeps the current screen.
+let switchingShare = false;
+async function switchShare() {
+  if (!localTrack || switchingShare) return;
+  switchingShare = true;
+  let stream;
+  try {
+    stream = await captureScreen();
+  } catch {
+    return; // cancelled: the current screen goes on
+  } finally {
+    switchingShare = false;
+  }
+  if (!localTrack) { // stopped while the picker was open
+    stream.getTracks().forEach((t) => t.stop());
+    return;
+  }
+  const old = [localTrack, localAudio].filter(Boolean);
+  for (const track of old) track.onended = null; // stopping them must not end the share
+  const hadSound = !!localAudio;
+  adoptShareTracks(stream);
+  await Promise.all([...peers.values()].map(sendScreenTo));
+  old.forEach((track) => track.stop());
+  setPreview(previewOn);
+  broadcastShareInfo(); // the sound may have come or gone
+  toast(hadSound && !localAudio ? `Tela trocada. ${NO_SOUND_TIP}` : 'Tela trocada.', hadSound && !localAudio ? 9000 : 2500);
+  refresh();
+}
+$('share-switch').onclick = switchShare;
 
 // Our own preview is one more video to decode and paint, so it starts hidden.
 let previewOn = load('preview') === 'on';
