@@ -221,6 +221,7 @@ function onMessage(ev) {
   const msg = JSON.parse(ev.data);
   switch (msg.type) {
     case 'welcome': {
+      lastWelcomeAt = Date.now(); // shares already running are announced now: no sound
       myId = msg.id;
       roomOwner = msg.owner ?? null;
       roomLocked = !!msg.locked;

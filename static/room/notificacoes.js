@@ -50,3 +50,39 @@ function notify(title, body, tag) {
 
 $('notify-btn').onclick = toggleNotify;
 renderNotify();
+
+// ---------- som de quem começa a transmitir ----------
+
+// A short sound when someone starts sharing their screen (rising) or stops
+// (falling), so whoever is gaming notices without looking. Not while you
+// silenced everyone (Fone), and not for the shares already running when you
+// arrive or reconnect. Can be turned off in Configurações › Notificações.
+let shareSoundOn = load('shareSound') !== 'off';
+let lastWelcomeAt = 0; // set on every (re)join: the shares announced then are not news
+let alertCtx = null;
+
+function setShareSound(on) {
+  shareSoundOn = on;
+  save('shareSound', on ? '' : 'off');
+}
+
+function shareSound(started) {
+  if (!shareSoundOn || voice.deafened || Date.now() - lastWelcomeAt < 4000) return;
+  const ctx = voice.ctx ?? (alertCtx ??= new AudioContext());
+  ctx.resume().catch(() => {});
+  const t = ctx.currentTime;
+  const notes = started ? [[587, 0], [740, 0.09], [988, 0.18]] : [[740, 0], [494, 0.1]];
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.08, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + notes.at(-1)[1] + 0.25);
+  for (const [freq, at] of notes) {
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    osc.start(t + at);
+    osc.stop(t + at + 0.16);
+  }
+}

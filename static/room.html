@@ -414,7 +414,7 @@
     .more-item:hover { background: var(--raised); }
     .more-item.danger { color: var(--danger); }
     @media (min-width: 1200px) {
-      .app, body.chat-collapsed .app { grid-template-columns: 72px 248px minmax(0, 1fr) 300px; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "rail top stage chat" "rail side stage chat" "rail side dock chat"; }
+      .app, body.chat-collapsed .app { grid-template-columns: 72px 248px minmax(0, 1fr) var(--chat-w, 300px); grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "rail top stage chat" "rail side stage chat" "rail side dock chat"; }
       body.chat-collapsed .app { grid-template-columns: 72px 248px minmax(0, 1fr); grid-template-areas: "rail top stage" "rail side stage" "rail side dock"; }
       .room-rail { grid-area: rail; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0; overflow-y: auto; background: var(--bg); }
       .room-rail .rail-logo { position: relative; display: flex; width: 46px; height: 46px; border-radius: 12px; }
@@ -571,7 +571,7 @@
       .tile.has-cam .cam-video, .tile.has-cam .cam-video.mirror { position: static; flex: none; width: 60px; height: 60px; border-radius: 10px; }
       .tile.has-cam .tile-text { padding: 0; background: none; color: inherit; align-items: center; align-self: auto; }
       .tile.has-cam .tile-text .status { color: inherit; }
-      #tiles .tile.away { grid-column: 1 / -1; order: 1; flex-direction: row; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card) !important; }
+      #tiles .tile.away, .content.has-screens #tiles .tile.away { grid-column: 1 / -1; order: 1; flex-direction: row; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--card) !important; }
       .tile.away .avatar, .tile.away.has-cam .cam-video { width: 36px; height: 36px; border-radius: var(--r-md); font-size: 14px; }
       .tile.away .tile-text { flex: 1; align-items: flex-start; text-align: left; }
       .tile.away strong { font-size: 15px; font-weight: 500; }
@@ -708,6 +708,49 @@
       #rail-input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: rgb(11 11 12 / .9); color: var(--text); font-size: 16px; }
       #rail-form .btn { height: 40px; }
     }
+    /* Cards of who is in the call, like Discord's voice tiles (computer only;
+       phones keep their own design). */
+    .tile-label, .live-badge { display: none; }
+    @media (min-width: 761px) {
+      .content:not(.has-screens) #tiles { display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 12px; overflow: hidden; }
+      .content:not(.has-screens) #tiles .tile { flex: none; width: var(--tile-w, 320px); }
+      .tile { aspect-ratio: 16 / 9; min-height: 0; gap: 0; border-radius: 10px; cursor: pointer; transition: filter .15s; }
+      .tile:hover { filter: brightness(1.08); }
+      .tile .avatar { width: clamp(56px, 24%, 104px); height: auto; aspect-ratio: 1; border-radius: 50%; font-size: clamp(20px, 3vw, 36px); box-shadow: 0 6px 20px rgb(0 0 0 / .35); transition: box-shadow .12s; }
+      .tile.speaking .avatar { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--online); }
+      .tile .tile-text, .tile .mute-badge { display: none; }
+      .tile.away { opacity: .55; }
+      .tile.away:hover { opacity: .8; }
+      .tile-label { display: flex; position: absolute; left: 8px; bottom: 8px; max-width: calc(100% - 16px); align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; background: rgb(0 0 0 / .6); color: #fff; font-size: 13px; font-weight: 600; line-height: 1.2; }
+      .tile-label .tl-icon { display: inline-flex; flex: none; color: var(--danger); }
+      .tile-label .tl-icon svg { width: 14px; height: 14px; }
+      .tile-label .tl-away { flex: none; font-weight: 400; color: rgb(255 255 255 / .7); }
+      .live-badge { display: block; position: absolute; top: 8px; right: 8px; padding: 2px 7px; border-radius: 4px; background: var(--live); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+      .tile.is-live { border-color: transparent; }
+      .tile.has-cam .tile-label { bottom: 8px; }
+      .content.has-screens #tiles .tile { width: 200px; height: auto; }
+    }
+    /* Chat width (wide screens): drag the left edge, fold it away, bring it back. */
+    .chat-resize, .chat-fold, .chat-unfold { display: none; }
+    @media (min-width: 1200px) {
+      .chat { position: relative; }
+      .chat-resize { display: block; position: absolute; z-index: 3; left: -6px; top: 0; bottom: 0; width: 10px; cursor: col-resize; touch-action: none; }
+      .chat-resize::after { content: ''; position: absolute; left: 4px; top: 0; bottom: 0; width: 2px; background: transparent; transition: background .15s; }
+      .chat-resize:hover::after, .chat-resize:focus-visible::after, body.chat-resizing .chat-resize::after { background: var(--accent); }
+      body.chat-resizing { cursor: col-resize; user-select: none; }
+      .chat-fold { display: inline-flex; position: absolute; z-index: 3; top: 8px; right: 8px; width: 28px; height: 28px; padding: 0; align-items: center; justify-content: center; border-radius: var(--r-sm, 8px); background: var(--raised); color: var(--soft); opacity: 0; transition: opacity .15s; }
+      .chat:hover .chat-fold, .chat-fold:focus-visible { opacity: 1; }
+      .chat-fold svg, .chat-unfold svg { width: 16px; height: 16px; }
+      body.chat-collapsed .chat-unfold { display: inline-flex; position: fixed; z-index: 6; right: 0; top: 50%; transform: translateY(-50%); align-items: center; gap: 4px; padding: 10px 8px 10px 6px; border-radius: 10px 0 0 10px; background: var(--raised); color: var(--text); font-size: 13px; writing-mode: horizontal-tb; box-shadow: 0 8px 24px rgb(0 0 0 / .4); }
+      .chat-unfold .badge { position: static; }
+    }
+    .settings-shortcuts { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+    .settings-shortcuts h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+    .shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+    .shortcut-row kbd { padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border-strong, #38383A); background: var(--raised, #2C2C2E); font: 12px ui-monospace, monospace; white-space: nowrap; }
+    .settings-shortcuts p { margin: 4px 0 0; font-size: 12px; }
+    /* Shown only if the browser refused to start the voices: one tap fixes it. */
+    .voice-unlock { position: fixed; left: 50%; top: 16px; transform: translateX(-50%); z-index: 30; padding: 10px 18px; border-radius: 999px; background: var(--online, #30D158); color: #000; font-weight: 600; box-shadow: 0 10px 30px rgb(0 0 0 / .5); }
   </style>
 </head>
 <body data-tab="palco">
@@ -814,6 +857,8 @@
     </main>
 
     <aside class="chat card" aria-labelledby="chat-title">
+      <div class="chat-resize" id="chat-resize" role="separator" aria-orientation="vertical" aria-label="Largura do chat: arraste ou use as setas; duplo clique volta ao normal" tabindex="0"></div>
+      <button type="button" class="chat-fold" id="chat-fold" title="Recolher o chat" aria-label="Recolher o chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
       <div class="chat-head">
         <h2 id="chat-title">Chat</h2>
         <p class="chat-note">não fica salvo</p>
@@ -915,6 +960,7 @@
     <input type="file" id="sound-file" accept="audio/*,video/mp4,video/webm,video/quicktime,.mp3,.m4a,.mp4,.ogg,.opus,.wav,.webm,.aac,.flac" hidden>
   </div>
   <div id="react-layer" aria-hidden="true"></div>
+  <button type="button" class="chat-unfold" id="chat-unfold" title="Mostrar o chat" aria-label="Mostrar o chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span>Chat</span><span class="badge" id="unfold-badge" hidden></span></button>
   <div class="person-card card" id="person-card" role="dialog" aria-labelledby="pc-name" hidden>
     <button class="icon-btn" id="pc-close" aria-label="Fechar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     <div class="banner" id="pc-banner"></div>

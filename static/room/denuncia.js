@@ -60,7 +60,9 @@ $('report-reasons').onchange = (e) => {
 $('report-form').onsubmit = (e) => {
   e.preventDefault();
   const subject = `Denúncia no CPX Call: ${reportTarget.name}`;
-  location.href = `mailto:${REPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(reportBody())}`;
+  // A new window, never this one: with a web mail (Gmail) set to handle
+  // mailto links, changing this page's address would leave the call.
+  window.open(`mailto:${REPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(reportBody())}`, '_blank', 'noopener');
   toast('Abrimos o seu e-mail com a denúncia. Se não abriu, use "Copiar texto".', 6000);
 };
 $('report-copy').onclick = async () => {

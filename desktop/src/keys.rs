@@ -2,7 +2,7 @@
 //!
 //! A low-level keyboard hook sees every key press system-wide, so it is kept
 //! as narrow as possible: it compares the key with the push-to-talk key the
-//! page asked for and with Ctrl+Shift+M, and drops everything else on the
+//! page asked for and with Ctrl+Shift+M / Ctrl+Shift+D, and drops everything else on the
 //! spot. It never blocks a key (the game still receives it). While the app's
 //! own window is in front, the page handles its keys itself, so the hook stays
 //! quiet to avoid doing everything twice.
@@ -17,6 +17,7 @@ use tauri::WebviewWindow;
 enum Event {
     Ptt(bool),
     ToggleMute,
+    ToggleDeafen,
 }
 
 /// Virtual-key code of the push-to-talk key; 0 = not watching.
@@ -50,6 +51,7 @@ pub fn start(window: WebviewWindow) {
             let call = match event {
                 Event::Ptt(down) => format!("ptt({down})"),
                 Event::ToggleMute => "toggleMute()".to_owned(),
+                Event::ToggleDeafen => "toggleDeafen()".to_owned(),
             };
             let _ = window.eval(format!("window.cpxDesktop && window.cpxDesktop.{call}"));
         }
@@ -130,7 +132,9 @@ mod hook {
 
     static OUR_WINDOW: AtomicIsize = AtomicIsize::new(0);
     static M_HELD: AtomicBool = AtomicBool::new(false);
+    static D_HELD: AtomicBool = AtomicBool::new(false);
     const VK_M: u32 = b'M' as u32;
+    const VK_D: u32 = b'D' as u32;
 
     pub fn start(window: &tauri::WebviewWindow) {
         if let Ok(hwnd) = window.hwnd() {
@@ -170,16 +174,23 @@ mod hook {
                     send(Event::Ptt(false)); // even if the app came to the front meanwhile
                 }
             }
-            if key.vkCode == VK_M {
+            // Ctrl+Shift+M (mic) and Ctrl+Shift+D (headphones), once per press.
+            for (vk, flag, event) in [
+                (VK_M, &M_HELD, Event::ToggleMute),
+                (VK_D, &D_HELD, Event::ToggleDeafen),
+            ] {
+                if key.vkCode != vk {
+                    continue;
+                }
                 if down
-                    && !M_HELD.swap(true, SeqCst)
+                    && !flag.swap(true, SeqCst)
                     && !app_in_front
                     && held(VK_CONTROL)
                     && held(VK_SHIFT)
                 {
-                    send(Event::ToggleMute);
+                    send(event);
                 } else if up {
-                    M_HELD.store(false, SeqCst);
+                    flag.store(false, SeqCst);
                 }
             }
         }

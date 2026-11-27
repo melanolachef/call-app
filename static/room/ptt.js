@@ -103,7 +103,7 @@ document.addEventListener('keydown', (e) => {
 
 // Inside the CPX Call app (desktop/), the page tells the app which key to
 // watch, and the app reports it even while a game has the focus: push-to-talk
-// and Ctrl+Shift+M then work without switching to the call.
+// Ctrl+Shift+M and Ctrl+Shift+D then work without switching to the call.
 const desktopApp = window.__TAURI__?.core ?? null;
 let desktopPttKey = null;
 
@@ -120,6 +120,7 @@ if (desktopApp) {
     // Hidden windows run timers late: release at once instead of after the tail.
     ptt: (down) => (down ? pttDown() : pttUp(document.hidden)),
     toggleMute: () => { if (voice.joined) toggleMic(); },
+    toggleDeafen: () => { if (voice.joined) setDeafened(!voice.deafened); },
   };
   $('ptt-note').textContent = 'No app, funciona mesmo com o jogo em primeiro plano.';
 }

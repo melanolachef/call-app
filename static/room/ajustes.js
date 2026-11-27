@@ -4,6 +4,24 @@
 // fields (with the input meter), the sharing quality box, the soundpad and
 // the notification switch. They are borrowed while the section is open.
 
+// The voice shortcuts, written out (they also show in the buttons' tooltips).
+function voiceShortcutsList() {
+  const list = el('div', 'settings-shortcuts');
+  list.append(el('h3', null, 'Atalhos'));
+  const rows = [
+    ['Microfone (mutar e desmutar)', 'Ctrl+Shift+M'],
+    ['Fone (silenciar todo mundo)', 'Ctrl+Shift+D'],
+  ];
+  if (voice.ptt) rows.push(['Falar (apertar para falar)', pttKeyName()]);
+  for (const [what, keys] of rows) {
+    const row = el('div', 'shortcut-row');
+    row.append(el('span', null, what), el('kbd', null, keys));
+    list.append(row);
+  }
+  list.append(el('p', 'muted', window.__TAURI__ ? 'No app, funcionam mesmo com o jogo em primeiro plano.' : 'Funcionam com esta aba em foco. No app para Windows, também com o jogo em primeiro plano.'));
+  return list;
+}
+
 registerSettings('voz', {
   title: 'Voz',
   render(box) {
@@ -13,6 +31,7 @@ registerSettings('voz', {
     const holder = el('div', 'settings-borrowed');
     box.append(holder);
     const putBack = borrowNodes(fields, holder);
+    box.append(voiceShortcutsList());
     startVoicePreview();
     return () => {
       stopVoicePreview();
@@ -50,6 +69,8 @@ registerSettings('notificacoes', {
   title: 'Notificações',
   render(box) {
     box.append(settingsHead('Notificações', 'Avisos do sistema quando esta aba não está na frente.'));
+    const sound = settingsSwitch(shareSoundOn, 'Som de transmissão', setShareSound);
+    box.append(settingsRow('Som quando alguém começa ou para de compartilhar', 'Um toque curto, mesmo com a aba na frente. Fica quieto quando você silencia todo mundo (Fone).', sound));
     if ($('notify-btn').hidden) {
       box.append(el('p', 'settings-note', 'Este navegador não deixa o site mandar avisos.'));
       return null;
