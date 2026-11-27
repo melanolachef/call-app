@@ -280,6 +280,10 @@
     #photo-btn svg { width: 17px; height: 17px; }
     .msg-photo-link { grid-column: 2; display: block; width: fit-content; }
     .msg-photo { width: auto; max-width: min(260px, 100%); max-height: 320px; cursor: zoom-in; }
+    #photo-view { inset: 0; margin: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; border: 0; border-radius: 0; background: transparent; box-shadow: none; cursor: zoom-out; }
+    #photo-view[open] { display: flex; align-items: center; justify-content: center; }
+    #photo-view img { display: block; border-radius: var(--r-md); box-shadow: 0 20px 60px rgb(0 0 0 / .6); }
+    #photo-view .photo-view-close { position: fixed; top: 16px; right: 16px; }
     .chat.dropping { outline: 2px dashed var(--muted); outline-offset: -6px; }
     #chat-send { flex: none; height: 34px; padding: 0 12px; border-radius: var(--r-md); background: var(--raised); color: var(--text); font-size: 13px; font-weight: 600; }
     #chat-send:hover:not(:disabled) { filter: brightness(1.2); }
@@ -1080,6 +1084,11 @@
         <a class="btn small" href="/">Ir para o início</a>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="photo-view" aria-label="Foto do chat">
+    <img id="photo-view-img" alt="">
+    <button type="button" class="icon-btn photo-view-close" aria-label="Fechar" title="Fechar (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </dialog>
 
   <script src="/common.js"></script>

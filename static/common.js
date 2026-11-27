@@ -1470,7 +1470,10 @@ loadAccount();
     } catch {
       return;
     }
-    if (url.origin === location.origin) location.assign(url.href); // this site: same window
+    if (url.protocol === 'blob:' || url.protocol === 'data:') return; // in-page things (photos open in place)
+    // A page of this site: same window, except inside a room, where leaving
+    // the page would end the call; there it opens in the system browser.
+    if (url.origin === location.origin && !location.pathname.startsWith('/room/')) location.assign(url.href);
     else if (url.protocol === 'https:' || url.protocol === 'mailto:') openOutside(url.href);
   }
 
