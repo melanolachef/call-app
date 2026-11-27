@@ -52,11 +52,12 @@ a green test card, so override `getDisplayMedia` to return
 `canvas.captureStream()` when a realistic picture matters.
 
 **Windows: Smart App Control** (ligado no PC principal desde 26/11) bloqueia
-binários recém-compilados sem assinatura: o `cargo-fmt`, DLLs de macros do
-`desktop/` e até o `call-app.exe` do servidor ("Uma política de Controle de
-Aplicativo bloqueou este arquivo"). Enquanto estiver ligado, rode e teste o
-servidor no Pop!_OS (ou WSL com uma distribuição); `rustfmt` chamado direto
-ainda funciona, e o CI compila e testa o app.
+binários recém-compilados sem assinatura, **de forma intermitente**: o
+`cargo-fmt` sempre, DLLs de macros do `desktop/` e às vezes o `call-app.exe`
+do servidor ("Uma política de Controle de Aplicativo bloqueou este arquivo").
+Use `rustfmt --edition 2021 --check src/main.rs` no lugar do `cargo fmt`;
+`cargo clippy`/`cargo test` costumam rodar; se o servidor não abrir, tente de
+novo ou teste no Pop!_OS. O CI compila e testa o app.
 
 ## Releases
 
@@ -78,17 +79,17 @@ _Atualizado em 2026-11-26._
   (#181), foto/GIF no chat por P2P (#179), contas fases 1–4, dono da sala,
   Denunciar + idade 13+, CSP, TURN só na sala, limites, `/privacidade`,
   `/termos`, `/apoiar`. App Windows `app-v0.2.0`.
-- **PRs abertos para a development (26/11), esperando revisão:**
-  #201 só o Sair tira da call sem perguntar (#192) · #202 celular ouve a
-  call mesmo mudo, o mudo vira ganho na mixagem (#193) · #203 Apoiar/Pix e
-  links externos no app, comando `open_url` (#200) · #204 Ctrl+Shift+D para
-  o fone, também no app (#194) · #205 som quando alguém começa/para de
-  compartilhar (#195) · #206 chat com largura ajustável e recolhível (#197)
-  · #207 cards no estilo do Discord (#196). CI verde em todos.
-  #203 e #204 mexem no app: valem para quem instalar a próxima versão.
-- **Issues novas ainda sem código:** #198 grupos com a lógica do Discord
-  (barra de grupos, salas de voz com quem está em cada uma, membros
-  online/offline, trocar de sala sem sair do grupo) e #199 ícone do grupo.
+- **Na development (26/11, falta publicar):** #201 só o Sair tira da call
+  sem perguntar · #202 celular ouve a call mesmo mudo (mudo = ganho na
+  mixagem) · #203 Apoiar/Pix e links externos no app (`open_url`) · #204
+  Ctrl+Shift+D para o fone · #205 som de quem começa/para de compartilhar ·
+  #206 chat com largura ajustável · #207 cards no estilo do Discord.
+  #203 e #204 mexem no app: valem a partir do app 0.3.0.
+- **PR aberto #209 — grupos com a lógica do Discord (#198) e ícone do grupo
+  (#199):** quem está em cada sala (`GET /api/grupos/{id}/agora`, nick vindo
+  por `?nick=` na WebSocket, só em memória), membros online/offline no Início,
+  trocar de sala no grupo leva a voz junto (`sessionStorage voz-continua`),
+  ícone do grupo (`PUT .../icone`, migração `icon`).
 - **Revisão de segurança de 26/11:** 15 problemas; corrigidos #8, #12 e
   #13. A lista completa ficou na memória do agente no outro computador; o
   mais grave é a fila cheia expulsar quem recebe em vez de quem inunda
@@ -108,10 +109,9 @@ _Atualizado em 2026-11-26._
 
 ## Próximos passos
 
-0. **Revisar e publicar:** mergear #201–#207, levar a development para a
-   main e fazer o deploy; gerar o app 0.3.0 (traz `open_url` e Ctrl+Shift+D).
-   Depois: #198 e #199 (grupos com a lógica do Discord, ícone do grupo);
-   corrigir o resto da revisão de segurança (fila/inundação, pong, sala
+0. **Revisar e publicar:** mergear o #209, levar a development para a main
+   e fazer o deploy; gerar o app 0.3.0 (traz `open_url` e Ctrl+Shift+D).
+   Depois: corrigir o resto da revisão de segurança (fila/inundação, pong, sala
    trancada ao reconectar, TURN por conexão, expulsão); GIF próprio no
    perfil (#175); #153 (primeira vez) e #154 (operação).
 1. **Fase 1 do app nativo ("o mais Rust possível"):** ao clicar em
